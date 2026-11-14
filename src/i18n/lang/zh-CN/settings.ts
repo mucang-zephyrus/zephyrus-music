@@ -90,6 +90,10 @@ export default {
     albumBgVivid: '高饱和（贴合封面）'
   },
   playback: {
+    neteaseRequestMode: '网易云 API 请求方式',
+    neteaseRequestModeDesc: '播放或加载异常时可切换请求方式，下次请求生效并保存在本设备。Enhanced 使用在线网关；会员和版权限制仍适用。',
+    neteaseAlger: 'Alger（原有方式）',
+    neteaseEnhanced: 'Enhanced（xeapi）',
     quality: '音质设置',
     qualityDesc: '选择音乐播放音质（不确保有效）',
     qualityOptions: {

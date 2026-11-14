@@ -170,6 +170,7 @@
               :settings-active="immersiveSurfaceMode === 'settings'"
               entrance="rise"
               @show-settings="toggleImmersiveSurface('settings')"
+              @return-cover="closeImmersive()"
             />
           </div>
         </div>
@@ -256,7 +257,8 @@ const {
   onPointerMove: onLyricsSwipePointerMove,
   onPointerUp: onLyricsSwipePointerUp,
   onPointerCancel: onLyricsSwipePointerCancel,
-  animateOpen: openLyricsAnimated
+  animateOpen: openLyricsAnimated,
+  animateClose: closeLyricsAnimated
 } = useLyricSwipeGesture({
   isOpen: () => showFullLyrics.value,
   suppressed: () => playerStore.fullCommentsVisible,
@@ -281,7 +283,7 @@ const {
   resetOnGestureClose
 } = useStyleImmersiveLyrics({
   showFullLyrics,
-  openAnimated: openLyricsAnimated,
+  closeAnimated: closeLyricsAnimated,
   swipePreviewing: () => lyricsSwipePreview.value
 });
 const immersiveHeaderCollapse = useStyleImmersiveHeaderCollapse(closeImmersive);

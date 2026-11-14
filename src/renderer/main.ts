@@ -10,10 +10,20 @@ import { createApp } from 'vue';
 import i18n from '@/../i18n/renderer';
 import router from '@/router';
 import pinia from '@/store';
+import { migrateWordCloudSettings } from '@/utils/wordCloudMigration';
 
 import App from './App.vue';
 import directives from './directive';
-
+// One-time migration runs before player/settings components read their snapshots.
+try {
+  const saved = localStorage.getItem('music-full-config');
+  if (saved) {
+    const migrated = JSON.stringify(migrateWordCloudSettings(JSON.parse(saved)));
+    if (migrated !== saved) localStorage.setItem('music-full-config', migrated);
+  }
+} catch {
+  /* Settings readers keep their existing storage fallback. */
+}
 const app = createApp(App);
 
 Object.keys(directives).forEach((key: string) => {

@@ -2,12 +2,14 @@ export const MOBILE_PLAYER_STYLE_KEYS = [
   'default',
   'stage',
   'starChart',
-  'frenzy',
+  'wordCloud',
+  'dotMatrix',
   'smoke',
   'error'
 ] as const;
 
-export type MobilePlayerStyleKey = (typeof MOBILE_PLAYER_STYLE_KEYS)[number];
+// Legacy key remains typeable for dormant components and stored config migration only.
+export type MobilePlayerStyleKey = (typeof MOBILE_PLAYER_STYLE_KEYS)[number] | 'frenzy';
 export type PlayerStyleMode = 'original' | 'custom';
 export type PlayerStyleBackgroundMode = 'solid' | 'gradient' | 'image';
 export type PlayerStyleColorSource = 'theme' | 'custom';
@@ -24,6 +26,24 @@ export interface PlayerStyleClimaxColors {
 }
 
 export interface PlayerStyleCustomConfig {
+  dotShape?: 'dot' | 'grid';
+  dotClimax?: 'auto' | 'ripple' | 'checker' | 'radial';
+  dotBeat?: boolean;
+  dotSpacing?: number;
+  dotRadius?: number;
+  dotFontCells?: number;
+  dotIntensity?: number;
+  cloudFocus?: boolean;
+  /** Legacy settings ignored by the uniform-size word cloud. */
+  cloudEmphasize?: boolean;
+  cloudEstimate?: boolean;
+  cloudBackground?: 'grid' | 'mesh' | 'cover' | 'liquid' | 'ether';
+  cloudScale?: number;
+  /** Legacy setting ignored by the uniform-size word cloud. */
+  cloudContrast?: number;
+  cloudSpacing?: number;
+  cloudVertical?: number;
+  cloudCameraSpeed?: number;
   mode: PlayerStyleMode;
   useCustomBackground: boolean;
   backgroundMode: PlayerStyleBackgroundMode;
@@ -156,5 +176,5 @@ export interface PlayerStyleEffects {
 }
 
 export function isMobilePlayerStyleKey(value: unknown): value is MobilePlayerStyleKey {
-  return MOBILE_PLAYER_STYLE_KEYS.includes(value as MobilePlayerStyleKey);
+  return MOBILE_PLAYER_STYLE_KEYS.includes(value as (typeof MOBILE_PLAYER_STYLE_KEYS)[number]);
 }

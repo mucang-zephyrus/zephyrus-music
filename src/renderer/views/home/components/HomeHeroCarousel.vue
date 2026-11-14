@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 首页 hero 轮播：歌曲漫游（MoltenMetal 流体 + 心动模式）与 Zephyrus云（黑白抖动 + 云库）
+ * 首页 hero 轮播：歌曲漫游（MoltenMetal 流体 + 心动模式）与 Zephyrus云（深色背景 + 云库）
  * 两张卡横向分页吸附，右缘露出下一张卡；漫游卡随明暗、云卡恒定深色。
  */
 import { useDocumentVisibility, usePreferredReducedMotion } from '@vueuse/core';
@@ -10,7 +10,6 @@ import { useRouter } from 'vue-router';
 
 import { type Announcement, fetchAnnouncements } from '@/api/announcements';
 import { loadServerSongs, type ServerSong, serverSongToSongResult } from '@/api/serverSongs';
-import DitherBackground from '@/components/common/DitherBackground.vue';
 import MoltenMetalBackground from '@/components/common/MoltenMetalBackground.vue';
 import { playMusic } from '@/hooks/MusicHook';
 import { useIntelligenceModeStore } from '@/store/modules/intelligenceMode';
@@ -44,12 +43,10 @@ const bgPaused = computed(
     (pagerActivePath ? pagerActivePath.value !== '/' : false)
 );
 
-// 离开首页即卸载两个 WebGL 背景:pager 页只挂不卸,上下文会带着显存永久存活,
-// 播放器再开一个预设背景就是 3 个 context 并存。停帧(bgPaused)保不住显存,必须真卸载。
+// pager 页常驻，离开首页时卸载漫游卡 WebGL 背景以释放上下文和显存。
 const isHomeTab = computed(() => (pagerActivePath ? pagerActivePath.value === '/' : true));
 
 const moltenFailed = ref(false);
-const ditherFailed = ref(false);
 
 const roamColors = computed(() => ({
   color1: '#0b0b10',
@@ -107,6 +104,10 @@ function isPhoneDevice(): boolean {
 function openAnnouncement() {
   const action = announcement.value?.action;
   if (!action) return;
+  if (action.type === 'netease-settings') {
+    router.push('/set/playback?focus=netease-request-mode');
+    return;
+  }
   const albumId = action.id;
   const webUrl =
     action.type === 'album' && albumId ? `https://music.163.com/#/album?id=${albumId}` : action.url;
@@ -241,22 +242,6 @@ onMounted(async () => {
       </article>
 
       <article class="hero-card cloud">
-        <dither-background
-          v-if="isHomeTab && !ditherFailed"
-          class="hero-bg"
-          :wave-color="[0.92, 0.92, 0.92]"
-          :wave-speed="0.05"
-          :wave-frequency="3"
-          :wave-amplitude="0.4"
-          :color-num="4"
-          :pixel-size="2"
-          :enable-mouse-interaction="false"
-          :max-pixel-ratio="1.5"
-          :max-fps="30"
-          :paused="bgPaused"
-          @fallback="ditherFailed = true"
-        />
-        <div class="hero-bg cloud-fallback" />
         <div class="cloud-darken" />
 
         <div class="hero-copy cloud-copy">
@@ -285,7 +270,7 @@ onMounted(async () => {
         </button>
       </article>
 
-      <!-- 公告卡：内容每次启动从服务器拉取，按钮直达网易云专辑页（不被应用内捕获） -->
+      <!-- 第三张卡：启动时拉取最新公告，支持内部设置及外部专辑链接。 -->
       <article v-if="announcement" class="hero-card announce" @click="openAnnouncement">
         <span class="announce-badge">{{ announcement.title }}</span>
         <span v-if="announcement.date" class="announce-date">{{ announcement.date }}</span>
@@ -376,10 +361,6 @@ onMounted(async () => {
 .hero-card.cloud {
   background: #0a0a0c;
   color: #fff;
-}
-
-.cloud-fallback {
-  background: #0a0a0c;
 }
 
 .cloud-darken {

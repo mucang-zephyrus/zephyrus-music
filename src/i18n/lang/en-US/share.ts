@@ -1,4 +1,32 @@
 export default {
+  import: {
+    title: 'Import share link',
+    hint: 'Paste a song link or sharing text from NetEase Cloud Music, QQ Music or Kugou. Review the song before playing.',
+    placeholder: 'Paste a share link or sharing text',
+    pasteManually: 'Clipboard access unavailable. Paste into the field above.',
+    identify: 'Identify song',
+    unsupported: 'No supported song share link found.',
+    failed: 'The link could not be resolved or the song is unavailable. Please retry.',
+    retry: 'Retry',
+    close: 'Close',
+    loading: 'Identifying…',
+    song: 'Song',
+    album: 'Album',
+    playlist: 'Playlist',
+    foundSong: 'Shared song found',
+    foundAlbum: 'Shared album found',
+    foundPlaylist: 'Shared playlist found',
+    play: 'Play',
+    playAll: 'Play all',
+    unknownSong: 'Unknown song',
+    openCollection: 'View full {kind}',
+    moreTracks: '{count} more tracks; play to view all',
+    platforms: {
+      netease: 'NetEase Cloud Music',
+      qq: 'QQ Music',
+      kugou: 'Kugou Music'
+    }
+  },
   hub: {
     title: 'Share',
     image: 'Image',

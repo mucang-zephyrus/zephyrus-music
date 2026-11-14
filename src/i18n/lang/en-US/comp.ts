@@ -1,4 +1,32 @@
 export default {
+  smartLyricMerge: {
+    legacySnapshot: 'A legacy lyric snapshot is being preserved. Smart processing will resume only when the original lyrics can be retrieved.',
+    notice:
+      'These lyrics use smart translation merging. If something is wrong, tap here to report it.',
+    title: 'Smart lyric merging feedback',
+    explanation:
+      'Translations are inferred from lyric structure. This cannot verify their meaning. Turn merging off for this song if the result is incorrect.',
+    description: 'Description',
+    placeholder: 'Which original or translated lines were merged incorrectly?',
+    contact: 'Contact (optional)',
+    preview: 'Preview attached information',
+    privacy:
+      'Only song, source, algorithm details and up to three short excerpts are attached. Full lyrics are never uploaded. Nothing is sent until you submit.',
+    disable: 'Disable smart merging for this song',
+    disabled: 'Smart merging disabled for this song',
+    restoreHint:
+      'Applies only to this song and lyric source on this device. Restore automatic processing in the player under Data → Lyric source.',
+    cancel: 'Close',
+    submit: 'Submit feedback',
+    submitting: 'Submitting…',
+    sent: 'Feedback submitted. Thank you.',
+    emailOpened: 'Email opened. Confirm sending in your email app.',
+    failed: 'Submission failed. Please try again.',
+    storageError: 'Could not save this preference. Check storage permissions on this device.',
+    setting: 'Smart translation merging',
+    automatic: 'Automatic processing is on',
+    restore: 'Restore automatic processing for this song'
+  },
   more: 'More',
   discover: 'Discover',
   homeListItem: {
@@ -227,6 +255,10 @@ export default {
     searchSongs: 'Search Songs',
     playlistDescription: 'Playlist description',
     albumDescription: 'Album description',
+    albumCover: 'Cover',
+    showAlbumDescription: 'Show album description',
+    backToAlbumCover: 'Back to album cover',
+    noAlbumDescription: 'No album description available',
     noSearchResults: 'No search results',
     toggleLayout: 'Change layout',
     switchToNormal: 'Switch to normal layout',

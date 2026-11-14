@@ -79,31 +79,51 @@ const getImageColor = (img: HTMLImageElement): Promise<string> => {
 
 const getImagePrimaryColor = (imageSrc: string): Promise<string> => {
   return new Promise((resolve, reject) => {
+    if (!imageSrc) {
+      reject(new Error('封面地址为空'));
+      return;
+    }
     const img = new Image();
     img.crossOrigin = 'Anonymous';
-    img.src = imageSrc;
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      img.onload = null;
+      img.onerror = null;
+    };
+    // 跨境图床可能长时间无响应，装饰性取色必须有结束条件。
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      img.removeAttribute('src');
+      reject(new Error('封面取色加载超时'));
+    }, 2500);
 
     img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        reject(new Error('无法获取canvas上下文'));
-        return;
+      cleanup();
+      try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('无法获取canvas上下文'));
+          return;
+        }
+
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const color = getAverageColor(imageData.data);
+        resolve(`rgb(${color.join(',')})`);
+      } catch (error) {
+        reject(error);
       }
-
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const color = getAverageColor(imageData.data);
-      resolve(`rgb(${color.join(',')})`);
     };
 
     img.onerror = () => {
-      console.error('[cover-debug] 图片加载失败, URL前200字符:', imageSrc?.substring(0, 200));
+      cleanup();
       reject(new Error('图片加载失败'));
     };
+    img.src = imageSrc;
   });
 };
 

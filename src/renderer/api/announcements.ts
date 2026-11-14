@@ -8,7 +8,7 @@ const ANNOUNCEMENTS_JSON_URL = `${API_BASE}/server-music/announcements.json`;
 
 export interface AnnouncementAction {
   /**
-   * 跳转行为：
+   * 跳转行为：type='netease-settings' 进入应用内网易云请求设置，其余类型跳转外部。
    * - 手机端先尝试 `appUrl`（如 orpheus 深链唤起网易云 App），失败回退 web 网页；
    * - 桌面端直接新开 `web` 网页（type='album'+id 时按网易云 web 专辑页拼链接）。
    */

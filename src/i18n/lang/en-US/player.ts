@@ -1,4 +1,40 @@
 export default {
+  dotMatrix: {
+    shape: 'Cell shape',
+    dot: 'Dots',
+    grid: 'Square grid',
+    climax: 'Climax animation',
+    auto: 'Cycle effects',
+    ripple: 'Concentric ripples',
+    checker: 'Checkerboard breathing',
+    radial: 'Radial sweep',
+    beat: 'Drum response',
+    wordDrop: 'Word drop',
+    dotSpacing: 'Grid spacing',
+    dotRadius: 'Dot radius',
+    dotFontCells: 'Glyph cells',
+    dotIntensity: 'Effect strength',
+    videoUnsupported: 'Video export is not yet available for the dot matrix style'
+  },
+  wordCloud: {
+    cloudFocus: 'Focus current line',
+    cloudEstimate: 'Estimate plain LRC timing',
+    background: 'Background',
+    cloudScale: 'Text scale',
+    cloudSpacing: 'Line spacing',
+    cloudVertical: 'Vertical line ratio',
+    cloudCameraSpeed: 'Camera speed',
+    interlude: 'Interlude',
+    videoUnsupported: 'Video export is not yet available for the word cloud style',
+    backgrounds: {
+      cover: 'Blurred artwork',
+      grid: 'Geometric grid',
+      mesh: 'AMLL mesh gradient',
+      liquid: 'High-speed fluid',
+      ether: 'Solar flare',
+      ripple: 'Beat ripples'
+    }
+  },
   nowPlaying: 'Now Playing',
   playlist: 'Playlist',
   lyrics: 'Lyrics',
@@ -115,6 +151,8 @@ export default {
   },
   // Player styles
   styles: {
+    dotMatrix: 'Dot Matrix',
+    wordCloud: 'Word cloud',
     default: 'Default',
     stage: 'Stage',
     starChart: 'Star Chart',

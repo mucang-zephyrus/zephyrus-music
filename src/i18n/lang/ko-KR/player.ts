@@ -1,4 +1,40 @@
 export default {
+  dotMatrix: {
+    shape: '셀 모양',
+    dot: '원형 도트',
+    grid: '사각 격자',
+    climax: '클라이맥스 효과',
+    auto: '자동 전환',
+    ripple: '동심원 파동',
+    checker: '체커보드 호흡',
+    radial: '방사형 진행',
+    beat: '드럼 반응',
+    wordDrop: '단어 낙하',
+    dotSpacing: '격자 간격',
+    dotRadius: '도트 반지름',
+    dotFontCells: '글자 셀 수',
+    dotIntensity: '효과 강도',
+    videoUnsupported: '도트 매트릭스 스타일은 아직 동영상 내보내기를 지원하지 않습니다'
+  },
+  wordCloud: {
+    cloudFocus: '현재 가사에 초점',
+    cloudEstimate: '일반 LRC 시간 추정',
+    background: '배경',
+    cloudScale: '글자 크기 배율',
+    cloudSpacing: '행 간격 배율',
+    cloudVertical: '세로 가사 비율',
+    cloudCameraSpeed: '카메라 속도',
+    interlude: '간주',
+    videoUnsupported: '워드 클라우드 스타일은 아직 동영상 내보내기를 지원하지 않습니다',
+    backgrounds: {
+      cover: '흐린 커버',
+      grid: '기하학 격자',
+      mesh: 'AMLL 메시 그라데이션',
+      liquid: '고속 유체',
+      ether: '태양 플레어',
+      ripple: '비트 파동'
+    }
+  },
   nowPlaying: '현재 재생 중',
   playlist: '재생 목록',
   lyrics: '가사',
@@ -115,6 +151,8 @@ export default {
   },
   // 플레이어 스타일
   styles: {
+    dotMatrix: '도트 매트릭스',
+    wordCloud: '워드 클라우드',
     default: '기본',
     stage: '스테이지',
     starChart: '별자리',

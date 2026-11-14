@@ -4,6 +4,7 @@ import type { InstalledPlugin, PluginStoreItem } from '../renderer/types/plugin'
 import type { AppUpdateState } from '../shared/appUpdate';
 
 interface API {
+  readMusicShareClipboard: () => Promise<string>;
   minimize: () => void;
   maximize: () => void;
   close: () => void;
@@ -123,6 +124,68 @@ interface API {
       avatarUrl?: string;
       userId?: string;
     };
+  }>;
+
+  /** 哔哩哔哩：视频信息 / 取流 / 字幕 / 链接解析 */
+  bilibiliVideoInfo: (bvid: string) => Promise<{
+    data?: {
+      bvid: string;
+      aid: number;
+      cid: number;
+      title: string;
+      picUrl: string;
+      durationMs: number;
+      author: string;
+      authorId: number;
+      pages: { cid: number; page: number; part: string; durationMs: number }[];
+    };
+    error?: string;
+  }>;
+  bilibiliStream: (params: { bvid: string; cid: number; kind?: 'audio' | 'video' }) => Promise<{
+    data?: {
+      url: string;
+      kind: 'dash' | 'mp4';
+      quality: number;
+      expireAt: number;
+      videoTracks?: { id: number; url: string; width: number; height: number; bandwidth: number }[];
+    };
+    error?: string;
+  }>;
+  bilibiliSubtitle: (params: { bvid: string; cid: number; lan?: string }) => Promise<{
+    data?: {
+      tracks: { id: string; lan: string; lanDoc: string; url: string }[];
+      picked: { id: string; lan: string; lanDoc: string; url: string } | null;
+      lines: { from: number; to: number; content: string }[];
+    };
+    error?: string;
+  }>;
+  bilibiliResolveBvid: (input: string) => Promise<{ data?: string | null; error?: string }>;
+  bilibiliFavFolders: (bvid: string) => Promise<{
+    data?: { id: number; title: string; favState: number; mediaCount: number }[];
+    error?: string;
+  }>;
+  bilibiliFavDeal: (params: { bvid: string; addIds?: number[]; delIds?: number[] }) => Promise<{
+    data?: boolean;
+    error?: string;
+  }>;
+  bilibiliAccountData: (cookie: string) => Promise<{
+    data?: {
+      userInfo: { userId: string; nickname: string; avatarUrl: string; vip: boolean };
+      playlists: { id: number; name: string; coverImgUrl: string; trackCount: number; userId: string }[];
+    };
+    error?: string;
+  }>;
+  bilibiliPlaylistTracks: (cookie: string, folderId: string, page?: number) => Promise<{
+    data?: {
+      playlist: { id: number; name: string; coverImgUrl: string; trackCount: number };
+      songs: { bvid: string; title: string; picUrl: string; durationMs: number; author: string; url: string }[];
+      page: number;
+    };
+    error?: string;
+  }>;
+  bilibiliComments: (oid: number, pn?: number) => Promise<{
+    data?: { total: number; replies: any[] };
+    error?: string;
   }>;
 }
 

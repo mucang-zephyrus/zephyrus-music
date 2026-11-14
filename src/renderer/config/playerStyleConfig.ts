@@ -21,6 +21,8 @@ const STYLE_LYRIC_COLORS: Record<MobilePlayerStyleKey, string> = {
   default: '#ffffff',
   stage: '#f0ece4',
   starChart: '#ffffff',
+  wordCloud: '#ffffff',
+  dotMatrix: '#181818',
   frenzy: '#171717',
   smoke: '#e9f7f2',
   error: '#ffffff'
@@ -61,6 +63,19 @@ const STYLE_SPECIFIC_DEFAULTS: Record<MobilePlayerStyleKey, Record<string, unkno
     starDiscSize: 100,
     starTextSize: 100,
     starSpinSpeed: 1
+  },
+  wordCloud: {
+    cloudFocus: true,
+    cloudEstimate: true,
+    cloudBackground: 'cover'
+  },
+  dotMatrix: {
+    dotShape: 'dot',
+    dotClimax: 'auto',
+    dotBeat: true,
+    effectWordDrop: true,
+    solidColor: '#ffffff',
+    climaxUseThemeColor: false
   },
   frenzy: {
     giantSize: 80,
@@ -218,7 +233,10 @@ export function resolvePlayerStyleConfig(
   config.staggeredRotation = Math.min(12, Math.max(0, Number(config.staggeredRotation) || 5));
   config.stageLyricScale = Math.min(
     3.5,
-    Math.max(0.7, Number.isFinite(Number(config.stageLyricScale)) ? Number(config.stageLyricScale) : 1)
+    Math.max(
+      0.7,
+      Number.isFinite(Number(config.stageLyricScale)) ? Number(config.stageLyricScale) : 1
+    )
   );
   config.stageClimaxTear = config.stageClimaxTear !== false;
   config.smokeDensity = Math.min(
@@ -377,6 +395,27 @@ export function resolvePlayerStyleConfig(
   } else if (styleKey === 'smoke' && config.effectKeyword && config.effectWordDrop) {
     config.effectWordDrop = false;
   }
+  if (styleKey === 'wordCloud') {
+    config.cloudFocus = config.cloudFocus !== false;
+    delete config.cloudEmphasize;
+    delete config.cloudContrast;
+    config.cloudEstimate = config.cloudEstimate !== false;
+    if (
+      !['grid', 'mesh', 'cover', 'liquid', 'ether', 'ripple'].includes(
+        String(config.cloudBackground)
+      )
+    )
+      config.cloudBackground = 'cover';
+  }
+  if (styleKey === 'dotMatrix') {
+    config.dotShape = config.dotShape === 'grid' ? 'grid' : 'dot';
+    if (!['auto', 'ripple', 'checker', 'radial'].includes(String(config.dotClimax)))
+      config.dotClimax = 'auto';
+    config.dotBeat = config.dotBeat !== false;
+    config.effectWordDrop = config.effectWordDrop !== false;
+    config.useCustomBackground = false;
+    config.climaxUseThemeColor = false;
+  }
   // 统一参数系统：按 schema 钳制新暴露参数（缺省补默认）
   Object.assign(config, resolveStyleParams(styleKey, config as Record<string, unknown>));
   return config;
@@ -397,7 +436,10 @@ export function resolvePlayerStyleEffects(
       (styleKey === 'frenzy' || styleKey === 'stage' || styleKey === 'error') &&
       source.effectLyricColor === true,
     wordDrop:
-      (styleKey === 'frenzy' || styleKey === 'stage' || styleKey === 'smoke') &&
+      (styleKey === 'frenzy' ||
+        styleKey === 'stage' ||
+        styleKey === 'smoke' ||
+        styleKey === 'dotMatrix') &&
       source.effectWordDrop === true,
     keyword: styleKey === 'smoke' && source.effectKeyword === true,
     staggered:

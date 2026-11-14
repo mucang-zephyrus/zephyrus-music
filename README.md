@@ -6,7 +6,7 @@
 
 Zephyrus Player 是一款只为 Android 手机设计的音乐播放器：歌曲、歌词和播放器舞台共享同一条时间轴，常用操作围绕单手触控和可中断动画组织。它同时提供**网页版**——电脑浏览器打开即可使用同一套账号与播放能力。
 
-[![版本](https://img.shields.io/badge/version-v1.4.1-b48b52)](https://github.com/cang-dot/zephyrus-player-android/releases/tag/v1.4.1)
+[![版本](https://img.shields.io/badge/version-v1.4.1-b48b52)](https://mucang.xyz/zephyrus/apks/zephyrus-player-latest.apk)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-3ddc84?logo=android&logoColor=white)](https://developer.android.com/about/versions/oreo)
 [![Web](https://img.shields.io/badge/Web-mucang.xyz%2Fzephyrus%2Fweb-4285f4?logo=googlechrome&logoColor=white)](https://mucang.xyz/zephyrus/web/)
 [![Vue](https://img.shields.io/badge/Vue_3-42b883?logo=vue.js&logoColor=white)](https://vuejs.org/)
@@ -14,7 +14,6 @@ Zephyrus Player 是一款只为 Android 手机设计的音乐播放器：歌曲�
 
 ## 下载
 
-- [GitHub Release v1.4.1](https://github.com/cang-dot/zephyrus-player-android/releases/tag/v1.4.1)
 - [服务器直链](https://mucang.xyz/zephyrus/apks/zephyrus-player-latest.apk)
 - [Android 产品介绍](https://mucang.xyz/zephyrus/)
 - [使用文档](https://mucang.xyz/zephyrus/docs/)
@@ -101,23 +100,17 @@ npm install
 npm run dev:web
 ```
 
-常用检查：
+构建与发布已迁到本地执行，服务器负责下载与更新信息，不再依赖 GitHub Actions 或 GitHub Release。
 
 ```bash
-npm run test:lyrics
-npm run test:ai-gateway
-npm run typecheck
-npm run build
-npx cap sync android
-cd android
-./gradlew.bat assembleRelease --no-daemon
+npm run ci:local
+npm run workflow -- web --deploy
+npm run workflow -- doctor
+npm run release:android -- --version-code 12
+npm run release:publish -- dist/releases/1.4.2-12
 ```
 
-APK 输出在 `android/app/build/outputs/apk/release/app-release.apk`。连接已授权设备后可以覆盖安装：
-
-```bash
-adb install -r android/app/build/outputs/apk/release/app-release.apk
-```
+最后两条以新版本 `1.4.2` 为例：先修改 `package.json` / 锁文件版本并写好发布说明，再选择高于线上 APK 的 `versionCode`。构建后会验证签名并生成独立发布目录；上传会再次校验线上签名、版本号与文件摘要。工具安装、签名配置、服务器迁移和回滚步骤见 [本地构建与发布](./docs/local-workflow.md)。
 
 ## 项目结构
 

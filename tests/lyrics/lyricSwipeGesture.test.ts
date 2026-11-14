@@ -28,12 +28,10 @@ describe('lyric swipe gesture settle robustness', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     rafQueue = [];
-    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(
-      (cb: FrameRequestCallback) => {
-        rafQueue.push(cb);
-        return rafQueue.length;
-      }
-    );
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+      rafQueue.push(cb);
+      return rafQueue.length;
+    });
     vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
   });
 
@@ -43,7 +41,10 @@ describe('lyric swipe gesture settle robustness', () => {
     document.body.innerHTML = '';
   });
 
-  function mountGesture(handlers: { onOpen: () => void; onClose: () => void }) {
+  function mountGesture(
+    handlers: { onOpen: () => void; onClose: () => void },
+    variant: 'scale' | 'resize' = 'scale'
+  ) {
     const opened = ref(false);
     let api: ReturnType<typeof useLyricSwipeGesture> | null = null;
     const host = defineComponent({
@@ -58,7 +59,7 @@ describe('lyric swipe gesture settle robustness', () => {
             opened.value = false;
             handlers.onClose();
           },
-          variant: () => 'scale',
+          variant: () => variant,
           scaleGeometry: () => null
         });
         return () => h('div');
@@ -106,6 +107,37 @@ describe('lyric swipe gesture settle robustness', () => {
       cb(t);
     }
   }
+
+  it('resizes through host progress without adding a scale or slide transform', () => {
+    const onOpen = vi.fn();
+    const onClose = vi.fn();
+    const h = mountGesture({ onOpen, onClose }, 'resize');
+    try {
+      const travel = window.innerWidth * 0.25;
+      h.api.onPointerDown(pointerEvent({ clientX: 0, timeStamp: 1000 }));
+      h.api.onPointerMove(pointerEvent({ clientX: -travel, timeStamp: 1160 }));
+      expect(h.api.progress.value).toBeCloseTo(0.25);
+      expect(h.api.overlayStyle.value).toEqual({});
+      expect(Number(h.api.underlayStyle.value.opacity)).toBeCloseTo(0.75);
+
+      h.api.onPointerCancel(pointerEvent({ clientX: -travel, timeStamp: 1180 }));
+      flushSettle();
+      expect(h.opened.value).toBe(false);
+      expect(h.api.previewing.value).toBe(false);
+      expect(onOpen).not.toHaveBeenCalled();
+
+      h.api.animateOpen();
+      flushSettle();
+      expect(h.opened.value).toBe(true);
+      expect(onOpen).toHaveBeenCalledTimes(1);
+      h.api.animateClose();
+      flushSettle();
+      expect(h.opened.value).toBe(false);
+      expect(onClose).toHaveBeenCalledTimes(1);
+    } finally {
+      h.unmount();
+    }
+  });
 
   it('commit settle 被新触摸打断时按弹道收尾（onClose 落地、状态解环）', () => {
     const onClose = vi.fn();

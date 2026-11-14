@@ -183,10 +183,7 @@ watch(
 
 /** 真卡片飞回：飞行期间卡片 fixed 化（脱离滚动容器的 overflow 裁剪）——
  *  瞬移到 hero 处（原槽位留空）→ 飞回落定 → 清除 inline 无缝归位 */
-const flyCoverHome = (
-  el: HTMLElement,
-  src: { x: number; y: number; w: number; h: number }
-) => {
+const flyCoverHome = (el: HTMLElement, src: { x: number; y: number; w: number; h: number }) => {
   // 目标卡片若在视口外，先滚到可见，否则飞回根本看不到
   const initial = el.getBoundingClientRect();
   if (initial.bottom <= 0 || initial.top >= window.innerHeight) {
@@ -741,8 +738,8 @@ onMounted(() => {
 <style lang="scss" scoped>
 .mobile-search-result {
   @apply fixed inset-0;
-  @apply bg-light dark:bg-black;
   @apply flex flex-col;
+  background: var(--m-bg, var(--bg-color));
   min-height: 100dvh;
   padding-top: 0;
 }

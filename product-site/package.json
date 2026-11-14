@@ -1,0 +1,26 @@
+{
+  "name": "zephyrus-product-site",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "description": "Zephyrus Player Android 产品官网（Vite + Vue + Tailwind v4 + Inspira UI 组件）",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@phosphor-icons/vue": "^2.2.1",
+    "@vueuse/core": "^11.3.0",
+    "clsx": "^2.1.1",
+    "gsap": "^3.15.0",
+    "vue": "^3.5.25"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.11",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.8.3",
+    "vite": "^6.4.1"
+  }
+}

@@ -239,6 +239,17 @@ export function usePlaylistOpenTransition() {
   };
 }
 
+/** Hand off the visual layer to a child-page transition while retaining the parent's return origin. */
+export function interruptPlaylistOpenTransition() {
+  generation += 1;
+  resetLayer();
+  try {
+    sessionStorage.removeItem('playlistOpenViaTransition');
+  } catch {
+    /* ignore */
+  }
+}
+
 /** 开始去程过渡。返回 false 表示降级（调用方直接路由跳转即可）。 */
 export function beginPlaylistOpen(source: PlaylistOpenSource): boolean {
   if (typeof window === 'undefined' || prefersReducedMotion()) return false;

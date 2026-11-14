@@ -80,6 +80,8 @@
       </div>
     </div>
 
+    <shared-cover-transition />
+
     <!-- 歌单跳转过渡覆盖层：底色块从卡片矩形扩展并变色到全屏、封面克隆放大，
          歌单页挂载后由 MusicListPage 对齐 hero 并淡出（见 usePlaylistOpenTransition） -->
     <div
@@ -247,11 +249,13 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
 import MobileSongActionSheet from '@/components/common/MobileSongActionSheet.vue';
+import SharedCoverTransition from '@/components/common/SharedCoverTransition.vue';
 import { useDockMergeGesture } from '@/composables/useDockMergeGesture';
 import { useHomeBackground } from '@/composables/useHomeBackground';
 import { useMobilePlayerTransition } from '@/composables/useMobilePlayerTransition';
 import { useMobileSongActionSurface } from '@/composables/useMobileSongActionSurface';
 import { usePlaylistOpenTransition } from '@/composables/usePlaylistOpenTransition';
+import { useSharedCoverTransition } from '@/composables/useSharedCoverTransition';
 import { MOBILE_DOCK } from '@/config/mobileGeometry';
 import homeRouter from '@/router/home';
 import otherRouter from '@/router/other';
@@ -819,6 +823,12 @@ const onSecondaryLeave = () => {
 };
 
 const playlistOpen = usePlaylistOpenTransition();
+const sharedCover = useSharedCoverTransition();
+const removeSharedCoverRouteHook = router.afterEach((to, _from, failure) => {
+  if (failure) sharedCover.navigationFailed(to.fullPath);
+  else sharedCover.routeChanged(to.fullPath);
+});
+onBeforeUnmount(removeSharedCoverRouteHook);
 
 /** 色块过渡的页面元素渐显：色块扩展期（未铺满）宿主内容保持透明——
  *  色块铺满全屏后（contentReveal）内容随覆盖层淡出同步渐显 */
@@ -828,6 +838,7 @@ const secondaryHostContentStyle = computed(() => {
 });
 
 const pageTransitionName = computed(() => {
+  if (sharedCover.active.value) return 'page-cover';
   // 歌单跳转过渡：覆盖层负责视觉衔接，二级页自身不做位移与底色过渡（避免双底色闪烁）
   if (playlistOpen.isActive()) return 'page-none';
   if (route.path.startsWith('/artist/detail/')) return 'artist-detail';
@@ -1914,7 +1925,7 @@ onBeforeUnmount(() => {
 :global(body.mobile-player-surface-active .stage-mobile-player),
 :global(body.mobile-player-surface-active .rain-mobile-player),
 :global(body.mobile-player-surface-active .star-chart-player),
-:global(body.mobile-player-surface-active .frenzy-mobile-player),
+:global(body.mobile-player-surface-active .word-cloud-mobile-player),
 :global(body.mobile-player-surface-active .eerie-mobile-player),
 :global(body.mobile-player-surface-active .neon-mobile-player),
 :global(body.mobile-player-surface-active .smoke-mobile-player) {
@@ -2192,6 +2203,18 @@ $spring-smooth: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 /* 歌单跳转过渡期间：二级页自身不做过渡（底色与封面衔接全由覆盖层负责） */
+.secondary-page-host :deep(.page-cover-enter-active),
+.secondary-page-host :deep(.page-cover-leave-active) {
+  position: absolute;
+  inset: 0;
+  transition: opacity 160ms ease;
+}
+
+.page-cover-enter-from,
+.page-cover-leave-to {
+  opacity: 0;
+}
+
 .page-none-enter-active,
 .page-none-leave-active {
   transition: none;
@@ -2228,7 +2251,7 @@ $spring-smooth: cubic-bezier(0.32, 0.72, 0, 1);
 :global(body.mobile-player-surface-morphing .stage-mobile-player),
 :global(body.mobile-player-surface-morphing .rain-mobile-player),
 :global(body.mobile-player-surface-morphing .star-chart-player),
-:global(body.mobile-player-surface-morphing .frenzy-mobile-player),
+:global(body.mobile-player-surface-morphing .word-cloud-mobile-player),
 :global(body.mobile-player-surface-morphing .eerie-mobile-player),
 :global(body.mobile-player-surface-morphing .neon-mobile-player),
 :global(body.mobile-player-surface-morphing .smoke-mobile-player) {
@@ -2239,7 +2262,7 @@ $spring-smooth: cubic-bezier(0.32, 0.72, 0, 1);
 :global(body.mobile-player-surface-morphing .stage-mobile-player),
 :global(body.mobile-player-surface-morphing .rain-mobile-player),
 :global(body.mobile-player-surface-morphing .star-chart-player),
-:global(body.mobile-player-surface-morphing .frenzy-mobile-player),
+:global(body.mobile-player-surface-morphing .word-cloud-mobile-player),
 :global(body.mobile-player-surface-morphing .eerie-mobile-player),
 :global(body.mobile-player-surface-morphing .neon-mobile-player),
 :global(body.mobile-player-surface-morphing .smoke-mobile-player) {

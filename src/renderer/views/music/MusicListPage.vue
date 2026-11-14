@@ -15,7 +15,21 @@
           <!-- Apple Music 风格 hero：歌单信息在导航前已预填，进入即渲染——
                封面飞入动画无需等待接口，只有下方歌曲列表区域走骨架 -->
           <section v-if="heroReady" class="list-hero">
+            <album-cover-flip
+              v-if="listDescription"
+              :key="route.fullPath"
+              class="hero-cover"
+              :src="getImgUrl(getCoverImgUrl, '500y500')"
+              :title="name"
+              :description="listDescription"
+              :description-label="
+                isAlbum
+                  ? t('comp.musicList.albumDescription')
+                  : t('comp.musicList.playlistDescription')
+              "
+            />
             <img
+              v-else
               :src="getImgUrl(getCoverImgUrl, '500y500')"
               class="hero-cover"
               alt=""
@@ -82,7 +96,7 @@
                     : t('comp.musicList.playlistDescription')
                 }}
               </p>
-              <p class="description-popover-text">{{ listInfo?.description }}</p>
+              <p class="description-popover-text">{{ listDescription }}</p>
             </div>
           </Transition>
         </Teleport>
@@ -189,7 +203,7 @@ import { useMessage } from 'naive-ui';
 import PinyinMatch from 'pinyin-match';
 import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute } from 'vue-router';
+import { onBeforeRouteLeave, useRoute } from 'vue-router';
 
 import { getAlbum, getListDetail } from '@/api/list';
 import {
@@ -202,6 +216,7 @@ import { fetchPlatformPlaylistTracks, fetchQqAlbumDetail } from '@/api/platformQ
 import { getUserPlaylist } from '@/api/user';
 import playlistPlaceholder from '@/assets/icon_512.png';
 import { ICON_PATH_CHECK_LINE, ICON_PATH_LOADER_4_LINE } from '@/assets/icons/remixPaths';
+import AlbumCoverFlip from '@/components/common/AlbumCoverFlip.vue';
 import MorphIcon from '@/components/common/MorphIcon.vue';
 import PageLoadingPlaceholder from '@/components/common/PageLoadingPlaceholder.vue';
 import PlayBottom from '@/components/common/PlayBottom.vue';
@@ -219,6 +234,10 @@ import {
   usePlaylistOpenTransition
 } from '@/composables/usePlaylistOpenTransition';
 import { usePosterShare } from '@/composables/usePosterShare';
+import {
+  beginSharedCoverReturn,
+  resolveSharedCoverTarget
+} from '@/composables/useSharedCoverTransition';
 import { useDownload } from '@/hooks/useDownload';
 import { useOverlayNavigate } from '@/hooks/useOverlayNavigate';
 import { usePlaylistConfirm } from '@/hooks/usePlaylistConfirm';
@@ -544,7 +563,11 @@ const listDescription = computed(() => {
     briefDesc?: string;
     introduction?: string;
   } | null;
-  return (info?.description || info?.desc || info?.briefDesc || info?.introduction || '').trim();
+  return (
+    [info?.description, info?.desc, info?.briefDesc, info?.introduction]
+      .find((value) => typeof value === 'string' && value.trim())
+      ?.trim() || ''
+  );
 });
 
 const canRemove = computed(() => {
@@ -900,6 +923,7 @@ const albumBgStrategy = computed(() =>
 );
 
 const applyPageChrome = async () => {
+  const path = route.fullPath;
   // 先同步铺一层兜底底色（进入即无闪烁），真实封面取色到达后由 CSS transition 渐变
   if (pageRootRef.value && !pageRootRef.value.style.getPropertyValue('--page-chrome-bg')) {
     const fallbackVars = pageChromeVariables(fallbackPageChrome(albumBgStrategy.value));
@@ -908,6 +932,7 @@ const applyPageChrome = async () => {
     }
   }
   const chrome = await getPageChromeForCover(getCoverImgUrl.value, albumBgStrategy.value);
+  if (route.fullPath !== path || route.name !== 'musicList') return;
   const vars = pageChromeVariables(chrome);
   const apply = (el: HTMLElement | null) => {
     if (!el) return;
@@ -1519,6 +1544,13 @@ const notifyEnterFlightEnd = () => {
 let enteredViaOpenTransition = false;
 
 const playCoverEnterTransition = () => {
+  if (
+    resolveSharedCoverTarget(
+      route.fullPath,
+      pageRootRef.value?.querySelector<HTMLElement>('.hero-cover')
+    )
+  )
+    return;
   // 歌单跳转过渡（首页/发现页卡片）：覆盖层已完成底色与封面衔接，
   // 这里只需把封面克隆对齐到真实 hero 位置后收尾；该流程不写 sessionStorage.musicListCoverRect
   const openTransition = usePlaylistOpenTransition();
@@ -1585,6 +1617,27 @@ onMounted(() => {
   void nextTick(playCoverEnterTransition);
 });
 
+watch(
+  [heroReady, listDescription, getCoverImgUrl],
+  () => {
+    void nextTick(() => {
+      resolveSharedCoverTarget(
+        route.fullPath,
+        pageRootRef.value?.querySelector<HTMLElement>('.hero-cover')
+      );
+    });
+  },
+  { flush: 'post' }
+);
+
+onBeforeRouteLeave((to, from) => {
+  beginSharedCoverReturn(
+    from.fullPath,
+    to.fullPath,
+    pageRootRef.value?.querySelector<HTMLElement>('.hero-cover') ?? null
+  );
+});
+
 // 菜单动作含动态 label/icon/二级值（收藏态、视图、排序、用户歌单），变化后重注册
 watch(
   [isCollected, isCompactLayout, sortBy, userPlaylistOptions, currentPlayingIndex, listDescription],
@@ -1629,17 +1682,17 @@ onBeforeUnmount(() => {
     }
   }
   const layout = document.getElementById('layout-main');
-  if (layout) {
+  if (layout?.getAttribute('data-page-chrome') === 'music-list') {
     layout.style.removeProperty('--page-chrome-bg');
     layout.style.removeProperty('--page-chrome-ink');
     layout.style.removeProperty('--page-chrome-ink-rgb');
     layout.removeAttribute('data-page-chrome');
+    // A new route may already own these variables while the old page finishes fading out.
+    const rootStyle = document.documentElement.style;
+    rootStyle.removeProperty('--page-chrome-bg');
+    rootStyle.removeProperty('--page-chrome-ink');
+    rootStyle.removeProperty('--page-chrome-ink-rgb');
   }
-  // :root 上的 chrome 变量同步移除，避免其他页面的弹窗残留歌单配色
-  const rootStyle = document.documentElement.style;
-  rootStyle.removeProperty('--page-chrome-bg');
-  rootStyle.removeProperty('--page-chrome-ink');
-  rootStyle.removeProperty('--page-chrome-ink-rgb');
 });
 
 // keep-alive 重新激活时重置状态
@@ -2215,7 +2268,10 @@ $spring: cubic-bezier(0.34, 1.56, 0.64, 1);
     aspect-ratio: 1;
     border-radius: 10px;
     object-fit: cover;
-    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.35);
+
+    &:not(.album-cover-flip) {
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.35);
+    }
   }
 
   .hero-title {

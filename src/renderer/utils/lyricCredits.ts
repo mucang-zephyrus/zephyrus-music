@@ -4,10 +4,10 @@ import type { TtmlLyric } from '@/services/ttmlParser';
 import type { ILyricText } from '@/types/music';
 
 export const DEFAULT_LYRIC_CREDIT_KEYWORDS = [
-  ...'作词 填词 词 作曲 曲 编曲 原词 原曲 原唱 演唱 歌手 制作人 制作 监制 出品人 出品 出品公司 发行 发行公司 发行人 录音 录音师 录音室 混音 混音师 混音室 母带 母带处理 母带工程师 和声 和声编写 和声设计 吉他 贝斯 鼓 钢琴 键盘 弦乐 弦乐编写 管弦乐 配器 音乐总监 版权 版权提供 制作统筹'.split(
+  ...'作词 填词 词 作曲 曲 编曲 原词 原曲 原唱 演唱 歌手 制作人 制作 监制 出品人 出品 出品公司 发行 发行公司 发行人 录音 录音师 录音室 录音棚 器乐录音 乐器录音 人声录音 音频编辑 混音 混音师 混音室 母带 母带处理 母带工程师 和声 和声编写 和声设计 吉他 贝斯 鼓 鼓手 钢琴 键盘 弦乐 弦乐编写 管弦乐 配器 音乐总监 版权 版权提供 制作统筹'.split(
     ' '
   ),
-  ...'Lyrics|Original Lyrics|Lyricist|Composer|Composition|Music|Arranger|Arrangement|Producer|Executive Producer|Vocals|Original Singer|Recording|Recorded by|Mixing|Mixed by|Mastering|Mastered by|Backing Vocals|Guitar|Bass|Drums|Piano|Keyboard|Strings|Publisher|Label'.split(
+  ...'Lyrics|Original Lyrics|Lyricist|Composer|Composition|Music|Arranger|Arrangement|Producer|Executive Producer|Vocals|Original Singer|Recording|Recorded by|Instrument Recording|Instrumental Recording|Vocal Recording|Recording Studio|Studio|Track Editing|Audio Editing|Mixing|Mixed by|Mastering|Mastered by|Backing Vocals|Guitar|Bass|Drums|Drummer|Piano|Keyboard|Strings|Publisher|Label'.split(
     '|'
   )
 ];
@@ -19,7 +19,36 @@ export interface LyricCreditConfig {
 
 const toSimplified = Converter({ from: 'tw', to: 'cn' });
 export const normalizeCreditKeyword = (text: string): string =>
-  toSimplified(text.trim()).toLowerCase();
+  toSimplified(text.trim()).toLowerCase().replace(/\s+/gu, ' ');
+
+/** Match complete role fields, never arbitrary prose containing a credit keyword. */
+export function isLyricCredit(
+  text: string,
+  keywords: ReadonlySet<string> = defaultCreditKeywords
+): boolean {
+  const colon = text.search(/[:：]/u);
+  return (
+    colon >= 0 &&
+    text
+      .slice(0, colon)
+      .split(/[/／&＆、+＋]/u)
+      .every((field) => {
+        const normalized = normalizeCreditKeyword(field);
+        if (keywords.has(normalized)) return true;
+        // A bilingual role still consists of two complete known labels.
+        const bilingual =
+          /^([\u3400-\u9fff]+)\s*([a-z][a-z ]*)$|^([a-z][a-z ]*?)\s*([\u3400-\u9fff]+)$/u.exec(
+            normalized
+          );
+        return (
+          !!bilingual &&
+          keywords.has((bilingual[1] ?? bilingual[3]).trim()) &&
+          keywords.has((bilingual[2] ?? bilingual[4]).trim())
+        );
+      })
+  );
+}
+const defaultCreditKeywords = new Set(DEFAULT_LYRIC_CREDIT_KEYWORDS.map(normalizeCreditKeyword));
 
 export function cleanCreditKeywords(words: readonly string[]): string[] {
   const seen = new Set<string>();
@@ -47,14 +76,6 @@ export function findCreditLines(lines: readonly { text: string }[], config: Lyri
   const hiddenIndices = new Set<number>();
   if (config.hideIntroOutroCredits && config.lyricCreditKeywords.length) {
     const keywords = new Set(config.lyricCreditKeywords.map(normalizeCreditKeyword));
-    const matches = (text: string) => {
-      const colon = text.search(/[:：]/u);
-      if (colon < 0) return false;
-      return text
-        .slice(0, colon)
-        .split(/[/／&＆、+＋]/u)
-        .every((field) => keywords.has(normalizeCreditKeyword(field)));
-    };
     for (const direction of [1, -1]) {
       for (
         let index = direction === 1 ? 0 : lines.length - 1;
@@ -63,7 +84,7 @@ export function findCreditLines(lines: readonly { text: string }[], config: Lyri
       ) {
         const text = lines[index].text.trim();
         if (!text) continue;
-        if (!matches(text)) break;
+        if (!isLyricCredit(text, keywords)) break;
         hiddenIndices.add(index);
       }
     }

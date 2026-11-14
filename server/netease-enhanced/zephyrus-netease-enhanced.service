@@ -1,0 +1,26 @@
+[Unit]
+Description=Zephyrus alternate NetEase API gateway
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=4
+
+[Service]
+Type=simple
+DynamicUser=yes
+WorkingDirectory=/opt/zephyrus-netease-enhanced
+StateDirectory=zephyrus-netease-enhanced
+Environment=NCM_STATE_DIR=/var/lib/zephyrus-netease-enhanced
+Environment=PORT=3051
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /opt/zephyrus-netease-enhanced/server.cjs
+Restart=on-failure
+RestartSec=30
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

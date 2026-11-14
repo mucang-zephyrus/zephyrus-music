@@ -47,6 +47,7 @@ export function parseTimedLyrics(payload: string, options: TimedLyricOptions = {
 
   return {
     lrcArray,
+    rawSchemaVersion: 2,
     lrcTimeArray: lrcArray.map((line) => Number(line.startTime || 0) / 1000),
     hasWordByWord,
     format: detectFormat(content, options.format),

@@ -1,4 +1,6 @@
-<template><div ref="host" class="smoke-background" aria-hidden="true" /></template>
+<template>
+  <div ref="host" class="smoke-background" aria-hidden="true" />
+</template>
 
 <script setup lang="ts">
 import { Mesh, Program, Renderer, Triangle } from 'ogl';
@@ -143,6 +145,9 @@ onMounted(() => {
         uChaos: { value: props.chaos },
         uLoudness: { value: props.loudness },
         uOpacity: { value: props.opacity },
+        uFlowSpeed: { value: props.flowSpeed },
+        uFlowAmplitude: { value: props.flowAmplitude },
+        uDrift: { value: props.drift },
         uColor: { value: smokeColor }
       }
     });

@@ -16,11 +16,13 @@
 import Store from 'electron-store';
 import fetch from 'node-fetch';
 
+import { searchBilibili as searchBilibiliVideos } from './modules/bilibili';
+
 const store = new Store();
 
 // ==================== 类型定义 ====================
 
-export type SearchPlatform = 'qq' | 'migu' | 'kugou' | 'kuwo' | 'joox' | 'spotify';
+export type SearchPlatform = 'qq' | 'migu' | 'kugou' | 'kuwo' | 'joox' | 'spotify' | 'bilibili';
 
 export interface PlatformSong {
   /** 平台歌曲 ID（用于播放时匹配） */
@@ -78,6 +80,10 @@ export function loadPlatformCookies(): void {
   if (cookies.joox?.cookie) {
     process.env.JOOX_COOKIE = cookies.joox.cookie;
   }
+  // B 站：Cookie 供 wbi 接口与字幕接口使用（SESSDATA + bili_jct）
+  if (cookies.bilibili?.cookie) {
+    process.env.BILIBILI_COOKIE = cookies.bilibili.cookie;
+  }
 }
 
 /**
@@ -88,7 +94,8 @@ export function setPlatformCookie(platform: SearchPlatform, cookie: string): voi
   const envMap: Record<string, string> = {
     qq: 'QQ_COOKIE',
     migu: 'MIGU_COOKIE',
-    joox: 'JOOX_COOKIE'
+    joox: 'JOOX_COOKIE',
+    bilibili: 'BILIBILI_COOKIE'
   };
   const envKey = envMap[platform];
   if (envKey) {
@@ -139,7 +146,8 @@ export function getPlatformLoginStatus(): Record<SearchPlatform, boolean> {
     kugou: true, // 酷狗无需登录
     kuwo: true, // 酷我无需登录
     joox: Boolean(cookies.joox?.cookie),
-    spotify: false
+    spotify: false,
+    bilibili: Boolean(cookies.bilibili?.cookie)
   };
 }
 
@@ -390,6 +398,28 @@ async function searchSpotify(keyword: string, limit: number): Promise<PlatformSo
   }));
 }
 
+// ==================== B 站（视频型结果）====================
+
+/**
+ * B 站搜索：返回的是「视频」，这里统一映射成 PlatformSong 以便进入聚合搜索列表。
+ * 视频/音频的播放方式由渲染层按用户偏好决定，此处只负责搜索结果本身。
+ * 注意 platformId 用 bvid —— cid 需要额外一次 view 请求，留到真正播放时再补齐。
+ */
+async function searchBilibili(keyword: string, limit: number): Promise<PlatformSong[]> {
+  const items = await searchBilibiliVideos(keyword, limit);
+  return items.map((item) => ({
+    id: item.bvid,
+    name: item.title,
+    artists: [item.author].filter(Boolean),
+    album: '哔哩哔哩',
+    duration: item.durationMs,
+    picUrl: item.picUrl,
+    platform: 'bilibili' as const,
+    platformId: item.bvid,
+    externalUrl: item.url
+  }));
+}
+
 // ==================== 搜索调度 ====================
 
 const SEARCH_FUNCTIONS: Record<SearchPlatform, (keyword: string, limit: number) => Promise<PlatformSong[]>> = {
@@ -398,7 +428,8 @@ const SEARCH_FUNCTIONS: Record<SearchPlatform, (keyword: string, limit: number) 
   kugou: searchKugou,
   kuwo: searchKuwo,
   joox: searchJoox,
-  spotify: searchSpotify
+  spotify: searchSpotify,
+  bilibili: searchBilibili
 };
 
 /**

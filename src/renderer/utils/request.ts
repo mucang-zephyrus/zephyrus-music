@@ -1,8 +1,14 @@
-import axios, { InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
+import { gatewayBaseURL } from '@/api/gatewayBase';
 import { useUserStore } from '@/store/modules/user';
 
 import { getSetData, isElectron, isMobile } from '.';
+import {
+  type NeteaseRequestMode,
+  normalizeNeteaseRequestMode,
+  resolveNeteaseRequestBase
+} from './neteaseRequestMode';
 
 let setData: any = null;
 
@@ -10,6 +16,7 @@ let setData: any = null;
 interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
   retryCount?: number;
   noRetry?: boolean;
+  neteaseRequestMode?: NeteaseRequestMode;
 }
 
 /**
@@ -67,7 +74,13 @@ request.interceptors.request.use(
       // 在 Pinia 未激活时（如 Axios 拦截器早期调用），使用空对象
       setData = setData || {};
     }
-    config.baseURL = computeBaseURL();
+    // Pin retries to their original backend even if the user switches while a request is pending.
+    config.neteaseRequestMode ??= normalizeNeteaseRequestMode(setData?.neteaseRequestMode);
+    config.baseURL = resolveNeteaseRequestBase(
+      computeBaseURL(),
+      gatewayBaseURL,
+      config.neteaseRequestMode
+    );
     // 只在retryCount未定义时初始化为0
     if (config.retryCount === undefined) {
       config.retryCount = 0;
@@ -80,6 +93,9 @@ request.interceptors.request.use(
       timestamp: Date.now(),
       device: isElectron ? 'pc' : isMobile.value ? 'mobile' : isCapacitor() ? 'capacitor' : 'web'
     };
+    if (config.neteaseRequestMode === 'enhanced' && config.url?.split('?')[0] === '/song/url/v1') {
+      config.params.randomCNIP = true;
+    }
     const token = localStorage.getItem('token');
     const skipCookie = config.params.noCookie === true;
     if (token && !skipCookie && config.method !== 'post') {
@@ -90,7 +106,7 @@ request.interceptors.request.use(
         cookie: token
       };
     }
-    if (isElectron) {
+    if (isElectron && config.neteaseRequestMode === 'alger') {
       const proxyConfig = setData?.proxyConfig;
       if (proxyConfig?.enable && ['http', 'https'].includes(proxyConfig?.protocol)) {
         config.params.proxy = `${proxyConfig.protocol}://${proxyConfig.host}:${proxyConfig.port}`;
@@ -111,47 +127,59 @@ request.interceptors.request.use(
 const NO_RETRY_URLS = ['暂时没有'];
 
 // 响应拦截器
-request.interceptors.response.use(
-  (response) => {
-    return response;
-  },
-  async (error) => {
-    console.error('error', error);
-    const config = error.config as CustomAxiosRequestConfig;
+request.interceptors.response.use((response) => {
+  // Some gateways return API failures inside an HTTP 200 envelope.
+  if (response.data?.code === -460) {
+    return handleRequestError(
+      new AxiosError(
+        'Network environment risk',
+        'ERR_BAD_RESPONSE',
+        response.config,
+        response.request,
+        response
+      )
+    );
+  }
+  return response;
+}, handleRequestError);
 
-    // 如果没有配置，直接返回错误
-    if (!config) {
-      return Promise.reject(error);
-    }
+async function handleRequestError(error: AxiosError) {
+  console.error('error', error);
+  const config = error.config as CustomAxiosRequestConfig;
 
-    // 处理 301 状态码
-    if (error.response?.status === 301 && config.params.noLogin !== true) {
-      // 使用 store mutation 清除用户信息
-      const userStore = useUserStore();
-      userStore.handleLogout();
-      config.retryCount = 3;
-    }
-
-    // 检查是否还可以重试
-    if (
-      config.retryCount !== undefined &&
-      config.retryCount < MAX_RETRIES &&
-      !NO_RETRY_URLS.includes(config.url as string) &&
-      !config.noRetry
-    ) {
-      config.retryCount++;
-      console.error(`请求重试第 ${config.retryCount} 次`);
-
-      // 延迟重试
-      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
-
-      // 重新发起请求
-      return request(config);
-    }
-
-    console.error(`重试${MAX_RETRIES}次后仍然失败`);
+  // 如果没有配置，直接返回错误
+  if (!config) {
     return Promise.reject(error);
   }
-);
+
+  // 处理 301 状态码
+  if (error.response?.status === 301 && config.params.noLogin !== true) {
+    // 使用 store mutation 清除用户信息
+    const userStore = useUserStore();
+    userStore.handleLogout();
+    config.retryCount = 3;
+  }
+
+  // 检查是否还可以重试
+  const canRetry =
+    config.retryCount !== undefined &&
+    config.retryCount < MAX_RETRIES &&
+    !NO_RETRY_URLS.includes(config.url as string) &&
+    !config.noRetry;
+
+  if (canRetry) {
+    config.retryCount = (config.retryCount ?? 0) + 1;
+    console.error(`请求重试第 ${config.retryCount} 次`);
+
+    // 延迟重试
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+
+    // 重新发起请求
+    return request(config);
+  }
+
+  console.error(`重试${MAX_RETRIES}次后仍然失败`);
+  return Promise.reject(error);
+}
 
 export default request;

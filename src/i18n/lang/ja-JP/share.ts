@@ -1,11 +1,38 @@
 export default {
+  import: {
+    title: '共有リンクを読み込む',
+    hint: 'NetEase Cloud Music、QQ Music、Kugouの曲リンクや共有テキストを貼り付けて、再生前に曲を確認できます。',
+    placeholder: '共有リンクまたはテキストを貼り付け',
+    pasteManually: 'クリップボードを読み取れません。上の欄に貼り付けてください。',
+    identify: '曲を識別',
+    unsupported: '対応する曲の共有リンクが見つかりません。',
+    failed: 'リンクを解析できないか、曲を利用できません。再試行してください。',
+    retry: '再試行',
+    close: '閉じる',
+    loading: '識別中…',
+    song: '曲',
+    album: 'アルバム',
+    playlist: 'プレイリスト',
+    foundSong: '共有された曲',
+    foundAlbum: '共有されたアルバム',
+    foundPlaylist: '共有されたプレイリスト',
+    play: '再生',
+    playAll: 'すべて再生',
+    unknownSong: '不明な曲',
+    openCollection: '{kind}をすべて表示',
+    moreTracks: '残り{count}曲。再生後にすべて表示',
+    platforms: {
+      netease: 'NetEase Cloud Music',
+      qq: 'QQ Music',
+      kugou: 'Kugou Music'
+    }
+  },
   hub: {
     title: 'シェア',
     image: '画像シェア',
     video: '動画シェア',
     imageDesc: '歌詞または楽曲情報からポスターを生成します',
-    videoDesc:
-      '選択した区間の再生中スタイルをそのまま動画として書き出します。画面収録は不要です',
+    videoDesc: '選択した区間の再生中スタイルをそのまま動画として書き出します。画面収録は不要です',
     posterLyrics: '歌詞からポスターを生成',
     posterInfo: '楽曲情報からポスターを生成'
   },

@@ -49,9 +49,7 @@ describe('mergeTranslationFeatures — 内联全角括号翻译', () => {
   });
 
   it('keeps lines that already carry a translation', () => {
-    const result = mergeTranslationFeatures([
-      line('Hello（你好）', 1000, { trText: '你好' })
-    ]);
+    const result = mergeTranslationFeatures([line('Hello（你好）', 1000, { trText: '你好' })]);
     expect(result[0].text).toBe('Hello（你好）');
     expect(result[0].trText).toBe('你好');
   });
@@ -127,43 +125,10 @@ describe('mergeTranslationFeatures — 同时间轴双行', () => {
   });
 });
 
-describe('mergeBilingualAlternation — 春晓中英整行交替（真实歌词结构）', () => {
-  it('pairs each Chinese line with the following English line', () => {
-    const result = mergeBilingualAlternation([
-      line('他们是一群无能的猪 安逸时贪图享乐', 34708, { duration: 5203 }),
-      line('They are a bunch of incompetent pigs, indulging in pleasures', 39911, { duration: 5364 }),
-      line('他们是一群勤劳的猪 危难时任人宰割', 45275, { duration: 5120 }),
-      line('They are a bunch of diligent pigs, being slaughtered when needed', 50395, { duration: 5601 })
-    ]);
-    expect(result).toHaveLength(2);
-    expect(result[0].text).toBe('他们是一群无能的猪 安逸时贪图享乐');
-    expect(result[0].trText).toBe(
-      'They are a bunch of incompetent pigs, indulging in pleasures'
-    );
-    expect(result[0].duration).toBe(39911 + 5364 - 34708);
-    expect(result[1].text).toBe('他们是一群勤劳的猪 危难时任人宰割');
-    expect(result[1].trText).toBe(
-      'They are a bunch of diligent pigs, being slaughtered when needed'
-    );
-  });
-
-  it('leaves mixed-script credit lines unpaired', () => {
-    const result = mergeBilingualAlternation([
-      line('编曲：白韶 Arrangement: Bai Shao', 2506),
-      line('音频编辑：韩聪 Track Editing: Han Cong', 3824)
-    ]);
-    expect(result).toHaveLength(2);
-    expect(result[0].trText).toBe('');
-  });
-
-  it('keeps the last english line end as the merged duration', () => {
-    const result = mergeBilingualAlternation([
-      line('他们说的所有语言都是荒诞的（都是荒诞的）', 102637, { duration: 6682 }),
-      line('Everything they say is absurd (absurd)', 109319, { duration: 4066 })
-    ]);
-    // 首行含全角括号但括号内外同为中文/拉丁方向不符 → 仅作为 CJK 主行配对英文行
-    expect(result).toHaveLength(1);
-    expect(result[0].trText).toBe('Everything they say is absurd (absurd)');
-    expect(result[0].duration).toBe(109319 + 4066 - 102637);
+describe('mergeBilingualAlternation — insufficient evidence stays unchanged', () => {
+  it('keeps a short bilingual excerpt instead of forcing an album-specific merge', () => {
+    const rows = [line('清晨的声音慢慢响起', 1000), line('Listen to the morning', 4000)];
+    expect(mergeBilingualAlternation(rows)).toHaveLength(2);
+    expect(rows[0].trText).toBe('');
   });
 });

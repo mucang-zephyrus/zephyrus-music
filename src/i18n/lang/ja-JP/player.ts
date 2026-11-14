@@ -1,4 +1,40 @@
 export default {
+  dotMatrix: {
+    shape: 'セルの形',
+    dot: '丸いドット',
+    grid: '四角いグリッド',
+    climax: 'サビの演出',
+    auto: '自動切り替え',
+    ripple: '同心円の波紋',
+    checker: 'チェッカーの呼吸',
+    radial: '放射状の波',
+    beat: 'ドラムに反応',
+    wordDrop: '単語の落下',
+    dotSpacing: 'グリッド間隔',
+    dotRadius: 'ドットの半径',
+    dotFontCells: '文字のセル数',
+    dotIntensity: 'エフェクトの強さ',
+    videoUnsupported: 'ドットマトリクスは動画の書き出しにまだ対応していません'
+  },
+  wordCloud: {
+    cloudFocus: '現在の行にフォーカス',
+    cloudEstimate: '通常の LRC の時間を推定',
+    background: '背景',
+    cloudScale: '文字サイズ倍率',
+    cloudSpacing: '行間倍率',
+    cloudVertical: '縦向きの行の割合',
+    cloudCameraSpeed: 'カメラ速度',
+    interlude: '間奏',
+    videoUnsupported: 'ワードクラウドスタイルは動画の書き出しに未対応です',
+    backgrounds: {
+      cover: 'ぼかしたカバー',
+      grid: '幾何学グリッド',
+      mesh: 'AMLL メッシュグラデーション',
+      liquid: '高速流体',
+      ether: '太陽フレア',
+      ripple: 'ビートの波紋'
+    }
+  },
   nowPlaying: '再生中',
   playlist: 'プレイリスト',
   lyrics: '歌詞',
@@ -19,7 +55,8 @@ export default {
     '再生エラーが発生しました。ネットワークの問題または無効な音源の可能性があります。プレイリストを切り替えるか、後でもう一度お試しください',
   audioSoftRecoverFailed: '自動復旧に失敗しました。手動で再生してください',
   backgroundDegraded: 'ビジュアルエンジン異常を検出、単色背景へ一時切替',
-  backgroundDegradedStartup: '前回セッションでビジュアルエンジン異常のため、エフェクトを一時無効化しました',
+  backgroundDegradedStartup:
+    '前回セッションでビジュアルエンジン異常のため、エフェクトを一時無効化しました',
   playMode: {
     sequence: '順次再生',
     loop: 'リピート再生',
@@ -116,6 +153,8 @@ export default {
   },
   // プレイヤースタイル
   styles: {
+    dotMatrix: 'ドットマトリクス',
+    wordCloud: 'ワードクラウド',
     default: 'デフォルト',
     stage: 'ステージ',
     starChart: '星図',

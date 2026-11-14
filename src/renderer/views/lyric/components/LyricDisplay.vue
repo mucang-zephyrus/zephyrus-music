@@ -38,6 +38,7 @@
               {{ line.trText }}
             </div>
           </div>
+          <lyric-merge-notice :context="mergeContext ?? null" />
         </template>
         <div v-else class="lyric-empty">无歌词</div>
       </div>
@@ -119,6 +120,9 @@
 </template>
 
 <script setup lang="ts">
+import LyricMergeNotice from '@/components/lyric/LyricMergeNotice.vue';
+import type { LyricMergeContext } from '@/services/lyricMergePolicy';
+
 import type { LyricLine } from '../composables/useLyricState';
 
 interface Word {
@@ -133,6 +137,7 @@ interface GroupLine extends LyricLine {
 }
 
 interface Props {
+  mergeContext?: LyricMergeContext | null;
   lrcArray?: LyricLine[];
   currentIndex: number;
   fontSize?: number;

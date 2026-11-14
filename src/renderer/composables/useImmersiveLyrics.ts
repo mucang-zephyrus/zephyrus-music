@@ -133,8 +133,8 @@ export function readImmersiveSafeTop(): number {
  */
 export function useStyleImmersiveLyrics(options: {
   showFullLyrics: Ref<boolean>;
-  /** 横滑路径的程序化打开（useLyricSwipeGesture.animateOpen） */
-  openAnimated: () => void;
+  /** 横滑打开后，复用手势的关闭动画返回封面。 */
+  closeAnimated: () => void;
   /** 横滑预览进行中（宿主传入歌词横滑手势的 previewing）：
       rise 样式在其期间让位，否则 rise 打开后横滑关闭的位移预览会被压成无动画瞬消 */
   swipePreviewing?: () => boolean;
@@ -149,7 +149,16 @@ export function useStyleImmersiveLyrics(options: {
       !(options.swipePreviewing?.() ?? false)
   );
   const risePreviewing = computed(() => riseStyleAllowed.value);
-  const immersiveProgress = computed(() => immersive.progress.value);
+  // 横滑路径的位移由整个 overlay 承担，此时共享 rise 进度为 0，顶栏仍须可见。
+  const immersiveProgress = computed(() =>
+    immersive.variant.value === 'rise' && !(options.swipePreviewing?.() ?? false)
+      ? immersive.progress.value
+      : options.showFullLyrics.value || options.swipePreviewing?.()
+        ? 1
+        : 0
+  );
+  let cancelImmersiveMotion: (() => void) | null = null;
+  onUnmounted(() => cancelImmersiveMotion?.());
 
   /**
    * rise 变体：歌词覆盖层从中间显现（缩放 + 上浮 + 淡入），下沉关闭复用同一进度。
@@ -175,9 +184,23 @@ export function useStyleImmersiveLyrics(options: {
   });
 
   const openerFn = () => {
+    cancelImmersiveMotion?.();
+    cancelImmersiveMotion = null;
     immersive.variant.value = 'rise';
     options.showFullLyrics.value = true;
     playerStore.setFullLyricsVisible(true);
+    // 队列按钮直接打开时没有信息栏手势推进进度，需要从当前位置展开。
+    if (prefersReducedMotion()) immersive.progress.value = 1;
+    else if (immersive.progress.value < 0.999) {
+      cancelImmersiveMotion = springTo(
+        (value) => {
+          immersive.progress.value = value;
+        },
+        immersive.progress.value,
+        1,
+        0
+      );
+    }
     // 唤起控件栏：顶栏随控件栏显隐（上下滚动/点按再唤起）
     useMobilePlayerTransition().showControls();
   };
@@ -186,6 +209,8 @@ export function useStyleImmersiveLyrics(options: {
 
   /** closer：仅复位状态（进度/变体由手势或弹簧先行落定），信息栏下拖提交时经注册表调达 */
   const closerFn = () => {
+    cancelImmersiveMotion?.();
+    cancelImmersiveMotion = null;
     immersiveSurfaceMode.value = 'lyrics';
     options.showFullLyrics.value = false;
     playerStore.setFullLyricsVisible(false);
@@ -197,15 +222,14 @@ export function useStyleImmersiveLyrics(options: {
 
   /** 关闭分发：rise 路径下沉镜像（进度弹簧回 0，可带速度交接），其余走横滑动画 */
   function closeImmersive(sinkVelocityPxPerSec = 0) {
+    cancelImmersiveMotion?.();
+    cancelImmersiveMotion = null;
     if (immersive.variant.value === 'rise' && immersive.progress.value > 0.001) {
       if (prefersReducedMotion()) {
-        immersive.progress.value = 0;
-        immersiveSurfaceMode.value = 'lyrics';
-        options.showFullLyrics.value = false;
-        playerStore.setFullLyricsVisible(false);
+        closerFn();
         return;
       }
-      springTo(
+      cancelImmersiveMotion = springTo(
         (value) => {
           immersive.progress.value = value;
         },
@@ -213,19 +237,17 @@ export function useStyleImmersiveLyrics(options: {
         0,
         // 下沉速度 px/s（向下为正）→ progress/s（进度减小方向为负）
         -sinkVelocityPxPerSec / 280,
-        () => {
-          immersiveSurfaceMode.value = 'lyrics';
-          options.showFullLyrics.value = false;
-          playerStore.setFullLyricsVisible(false);
-        }
+        closerFn
       );
       return;
     }
-    options.openAnimated();
+    options.closeAnimated();
   }
 
   /** 手势路径（横滑开/关）复位：进度与变体一并回 slide，防 rise 残留 */
   function resetOnGestureClose() {
+    cancelImmersiveMotion?.();
+    cancelImmersiveMotion = null;
     immersive.progress.value = 0;
     immersive.variant.value = 'slide';
   }
@@ -246,9 +268,7 @@ export function useStyleImmersiveLyrics(options: {
  * 下拖时歌词覆盖层跟手下沉（progress 1→0，软边界），松手回弹时进度弹簧回 1，
  * 提交时 closeImmersive 从当前进度带速度落定（拖拽与关闭动画无断档）。
  */
-export function useStyleImmersiveHeaderCollapse(
-  onClose: (sinkVelocityPxPerSec?: number) => void
-) {
+export function useStyleImmersiveHeaderCollapse(onClose: (sinkVelocityPxPerSec?: number) => void) {
   const immersive = useImmersiveLyrics();
   let sinkCancelSpring: (() => void) | null = null;
   onUnmounted(() => {

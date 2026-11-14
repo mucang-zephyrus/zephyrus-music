@@ -10,6 +10,7 @@
     <!-- 歌词显示（三种模式） -->
     <lyric-display
       :lrc-array="staticData.lrcArray"
+      :merge-context="staticData.lyricMergeContext"
       :current-index="currentIndex"
       :font-size="fontSize"
       :scroll-font-size="scrollFontSize"
@@ -180,7 +181,9 @@ const styleHandler = (_: any, config: any) => {
   applyStyle(config);
   try {
     localStorage.setItem('lyricStyleConfig', JSON.stringify(config));
-  } catch {}
+  } catch {
+    /* A storage failure must not interrupt the lyric window. */
+  }
 };
 
 onMounted(() => {
@@ -190,7 +193,9 @@ onMounted(() => {
   if (cached) {
     try {
       applyStyle(JSON.parse(cached));
-    } catch {}
+    } catch {
+      /* Ignore invalid saved style data. */
+    }
   }
 });
 

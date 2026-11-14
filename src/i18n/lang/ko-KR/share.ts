@@ -1,4 +1,32 @@
 export default {
+  import: {
+    title: '공유 링크 가져오기',
+    hint: 'NetEase Cloud Music, QQ Music, Kugou의 곡 링크나 공유 문구를 붙여넣고 재생 전에 확인하세요.',
+    placeholder: '공유 링크 또는 문구 붙여넣기',
+    pasteManually: '클립보드를 읽을 수 없습니다. 위 입력란에 붙여넣어 주세요.',
+    identify: '곡 확인',
+    unsupported: '지원하는 곡 공유 링크를 찾지 못했습니다.',
+    failed: '링크를 분석할 수 없거나 곡을 사용할 수 없습니다. 다시 시도하세요.',
+    retry: '다시 시도',
+    close: '닫기',
+    loading: '확인 중…',
+    song: '곡',
+    album: '앨범',
+    playlist: '재생목록',
+    foundSong: '공유된 곡 발견',
+    foundAlbum: '공유된 앨범 발견',
+    foundPlaylist: '공유된 재생목록 발견',
+    play: '재생',
+    playAll: '모두 재생',
+    unknownSong: '알 수 없는 곡',
+    openCollection: '전체 {kind} 보기',
+    moreTracks: '{count}곡 더 있음. 재생 후 모두 보기',
+    platforms: {
+      netease: 'NetEase Cloud Music',
+      qq: 'QQ Music',
+      kugou: 'Kugou Music'
+    }
+  },
   hub: {
     title: '공유',
     image: '이미지 공유',

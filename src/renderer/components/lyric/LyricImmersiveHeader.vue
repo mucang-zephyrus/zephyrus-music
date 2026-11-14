@@ -1,12 +1,16 @@
 <template>
   <div class="lyric-immersive-header" :style="containerStyle">
-    <img
+    <button
       v-if="showCover && coverUrl"
-      class="lih-cover"
-      :src="coverUrl"
-      alt=""
+      type="button"
+      class="lih-cover-button"
       :style="coverStyle"
-    />
+      aria-label="返回封面页"
+      @pointerdown.stop
+      @click.stop="emit('returnCover')"
+    >
+      <img class="lih-cover" :src="coverUrl" alt="" draggable="false" />
+    </button>
     <div v-if="showInfo" class="lih-copy" :style="copyStyle">
       <strong class="lih-title">{{ title }}</strong>
       <span class="lih-artist">{{ artistText }}</span>
@@ -69,7 +73,7 @@ const props = withDefaults(
   }
 );
 
-const emit = defineEmits<{ showSettings: [] }>();
+const emit = defineEmits<{ showSettings: []; returnCover: [] }>();
 
 const playerStore = usePlayerStore();
 
@@ -95,7 +99,7 @@ function handleFavorite() {
 
 const containerStyle = computed(() => {
   // 注意：本体必须可命中（顶栏是下拖关闭的把手）；按钮的排除由手势侧
-  // closest('button') 承担，拖拽从封面/歌名区发起
+  // closest('button') 承担，拖拽从歌名区发起
   const base = {
     transition: 'none',
     willChange: 'transform, opacity'
@@ -142,13 +146,36 @@ const actionsStyle = computed(() => ({
   touch-action: none;
 }
 
+.lih-cover-button {
+  display: block;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.lih-cover-button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
+.lih-cover-button:active .lih-cover {
+  transform: scale(0.94);
+}
+
 .lih-cover {
+  display: block;
   width: 44px;
   height: 44px;
   border-radius: 10px;
   object-fit: cover;
   flex: none;
   transform: translateZ(0);
+  transition: transform 100ms ease-out;
 }
 
 .lih-copy {

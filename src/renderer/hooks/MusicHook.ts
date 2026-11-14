@@ -1,21 +1,30 @@
 import { cloneDeep } from 'lodash';
 import { createDiscreteApi } from 'naive-ui';
-import { computed, type ComputedRef, nextTick, ref, watch } from 'vue';
+import { computed, type ComputedRef, ref, watch } from 'vue';
 
 import { resolveAmllSource } from '@/api/amllLyrics';
 import useIndexedDB from '@/hooks/IndexDBHook';
 import { type AudioHandle, audioService } from '@/services/audioService';
 import { lyricCreditConfig } from '@/services/lyricCreditConfig';
+import {
+  createLyricMergeContext,
+  currentLyricMergeContext,
+  disabledLyricMerges,
+  isLyricMergeEnabled,
+  lyricSongKey,
+  lyricSourceId
+} from '@/services/lyricMergePolicy';
 import { writePlayerSessionSnapshot } from '@/services/playbackSnapshot';
 import { smartMixService } from '@/services/smartMixService';
 import { ttmlToTimedLines } from '@/services/ttmlParser';
 import type { usePlayerStore } from '@/store';
 import { useAmllStore } from '@/store/modules/amll';
 import { useTransitionStore } from '@/store/modules/transition';
-import type { Artist, ILyricText, SongResult } from '@/types/music';
+import type { Artist, ILyric, ILyricText, SongResult } from '@/types/music';
 import { isElectron } from '@/utils';
 import { getTextColors } from '@/utils/linearColor';
 import { projectCreditLyrics, projectCreditTtml } from '@/utils/lyricCredits';
+import { createLyricDisplayPipeline } from '@/utils/lyricDisplayPipeline';
 import { findStartedTimedLineIndex } from '@/utils/timedLyricProgress';
 import { parseLyrics } from '@/utils/yrcParser';
 
@@ -49,7 +58,9 @@ const getPlayerStore = () => {
   return playerStore;
 };
 export const lrcArray = ref<ILyricText[]>([]); // 歌词数组
-export const displayLrcArray = computed(() => projectCreditLyrics(lrcArray.value, lyricCreditConfig.value));
+export const displayLrcArray = computed(() =>
+  projectCreditLyrics(lrcArray.value, lyricCreditConfig.value)
+);
 export const lrcTimeArray = ref<number[]>([]); // 歌词时间数组
 export const nowTime = ref(0); // 当前播放时间
 export const allTime = ref(0); // 总播放时间
@@ -171,73 +182,59 @@ const parseLyricsString = async (
   }
 };
 
-// 设置音乐相关的监听器
+// Only the latest raw/source/policy projection may publish display data.
 const setupMusicWatchers = () => {
   const store = getPlayerStore();
-
-  // 监听 playerStore.playMusic 的变化以更新歌词数据
+  const pipeline = createLyricDisplayPipeline();
+  let previousSongKey = '';
   watch(
-    () => store.playMusic.id,
-    async (newId, oldId) => {
-      // 如果没有歌曲ID，清空歌词
-      if (!newId) {
+    () => [lyricSongKey(store.playMusic), store.playMusic.lyric, disabledLyricMerges.value],
+    async () => {
+      pipeline.invalidate();
+      const song = store.playMusic as SongResult;
+      const songKey = lyricSongKey(song);
+      const changedSong = songKey !== previousSongKey;
+      previousSongKey = songKey;
+      // Clear old provenance immediately; never offer feedback on the previous source.
+      currentLyricMergeContext.value = null;
+      if (changedSong || !song.id) {
         lrcArray.value = [];
         lrcTimeArray.value = [];
         nowIndex.value = 0;
+      }
+      if (!song.id) return;
+      const data = song.lyric;
+      const projected = await pipeline.project(
+        async (): Promise<ILyric> => {
+          if (typeof data === 'string')
+            return { ...(await parseLyricsString(data)), rawSchemaVersion: 2 };
+          const raw = cloneDeep(data || { lrcArray: [], lrcTimeArray: [] });
+          if (raw.rawSchemaVersion !== 2 && raw.lrcArray.length) raw.legacyProcessed = true;
+          return raw;
+        },
+        (raw) => {
+          const sourceId = lyricSourceId(raw);
+          return { sourceId, enabled: isLyricMergeEnabled(songKey, sourceId) };
+        },
+        async (lines) => {
+          const { translateLyrics } = await import('@/services/lyricTranslation');
+          return translateLyrics(lines);
+        }
+      );
+      if (!projected || lyricSongKey(store.playMusic) !== songKey || store.playMusic.lyric !== data)
         return;
-      }
-
-      // 避免相同ID的重复执行(但允许初始化时执行)
-      if (newId === oldId && lrcArray.value.length > 0) return;
-
-      // 歌曲切换时重置歌词索引
-      if (newId !== oldId) {
-        nowIndex.value = 0;
-      }
-
-      await nextTick(async () => {
-        // 检查是否有原始歌词字符串需要解析
-        const lyricData = playMusic.value.lyric;
-        if (lyricData && typeof lyricData === 'string') {
-          // 如果歌词是字符串格式，使用新的解析器
-          const {
-            lrcArray: parsedLrcArray,
-            lrcTimeArray: parsedTimeArray,
-            hasWordByWord
-          } = await parseLyricsString(lyricData);
-          lrcArray.value = parsedLrcArray;
-          lrcTimeArray.value = parsedTimeArray;
-
-          // 更新歌曲的歌词数据结构
-          if (playMusic.value.lyric && typeof playMusic.value.lyric === 'object') {
-            playMusic.value.lyric.hasWordByWord = hasWordByWord;
-          }
-        } else {
-          // 使用现有的歌词数据结构
-          const rawLrc = lyricData?.lrcArray || [];
-          lrcTimeArray.value = lyricData?.lrcTimeArray || [];
-
-          try {
-            const { translateLyrics } = await import('@/services/lyricTranslation');
-            lrcArray.value = await translateLyrics(rawLrc as any);
-          } catch (e) {
-            console.error('翻译歌词失败，使用原始歌词：', e);
-            lrcArray.value = rawLrc as any;
-          }
-        }
-        // 当歌词数据更新时，如果歌词窗口打开，则发送数据
-        if (isElectron && isLyricWindowOpen.value) {
-          // 不管歌词数组是否为空，都发送最新数据
-          sendLyricToWin();
-
-          // 再次延迟发送，确保歌词窗口已完全加载
-          setTimeout(() => {
-            sendLyricToWin();
-          }, 500);
-        }
-      });
+      lrcArray.value = projected.lyric.lrcArray;
+      lrcTimeArray.value = projected.lyric.lrcTimeArray;
+      currentLyricMergeContext.value = projected.raw.lrcArray.length
+        ? createLyricMergeContext(song, projected.raw, projected.lyric, projected.mergeInfo)
+        : null;
+      nowIndex.value = Math.max(
+        0,
+        findStartedTimedLineIndex(lrcTimeArray.value, nowTime.value + correctionTime.value)
+      );
+      if (isElectron && isLyricWindowOpen.value) sendLyricToWin();
     },
-    { immediate: true }
+    { immediate: true, deep: true }
   );
 };
 
@@ -655,9 +652,9 @@ export const play = async () => {
   // JS 镜像仍是"暂停可恢复",直接 resume 会静默失效——走完整重建(刷新 URL)
   const token = (currentSound as any).token as string | undefined;
   const nativeState = token
-    ? (window.AndroidNative?.nativeAudioGetPlaybackState as
-        | ((t: string) => string)
-        | undefined)?.(token)
+    ? (window.AndroidNative?.nativeAudioGetPlaybackState as ((t: string) => string) | undefined)?.(
+        token
+      )
     : undefined;
   let nativeJson: { state?: string; playing?: boolean } | null = null;
   try {
@@ -934,10 +931,16 @@ const desktopLyricLines = computed(() => {
     return end < next ? [line, { text: '', trText: '', startTime: end, duration: 0 }] : [line];
   });
 });
-const desktopLyricTimes = computed(() => desktopLyricLines.value.map((line, index) =>
-  line.startTime != null ? line.startTime / 1000 : lrcTimeArray.value[index] || 0));
-const desktopLyricIndex = () => findStartedTimedLineIndex(desktopLyricTimes.value, nowTime.value + correctionTime.value);
-watch(desktopLyricLines, () => { if (isElectron && isLyricWindowOpen.value) sendLyricToWin(); });
+const desktopLyricTimes = computed(() =>
+  desktopLyricLines.value.map((line, index) =>
+    line.startTime != null ? line.startTime / 1000 : lrcTimeArray.value[index] || 0
+  )
+);
+const desktopLyricIndex = () =>
+  findStartedTimedLineIndex(desktopLyricTimes.value, nowTime.value + correctionTime.value);
+watch(desktopLyricLines, () => {
+  if (isElectron && isLyricWindowOpen.value) sendLyricToWin();
+});
 
 // 发送歌词更新数据
 export const sendLyricToWin = () => {
@@ -964,6 +967,8 @@ export const sendLyricToWin = () => {
         isPlay: getPlayerStore().play,
         lrcArray: desktopLyricLines.value,
         lrcTimeArray: desktopLyricTimes.value,
+        lyricMergeContext:
+          desktopLyricLines.value === displayLrcArray.value ? currentLyricMergeContext.value : null,
         allTime: allTime.value,
         playMusic: playMusic.value
       };

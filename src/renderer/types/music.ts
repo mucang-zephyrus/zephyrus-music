@@ -38,6 +38,7 @@ export interface ILyricText {
   startTime?: number;
   duration?: number;
   isBG?: boolean;
+  isDuet?: boolean;
 }
 
 export type LyricFormat = 'ttml' | 'yrc' | 'qrc' | 'krc' | 'lrc';
@@ -52,6 +53,11 @@ export type LyricSource =
   | 'fallback';
 
 export interface ILyric {
+  /** Versioned, unmodified parser output. Legacy snapshots must not be normalized again. */
+  rawSchemaVersion?: 2;
+  legacyProcessed?: boolean;
+  sourceId?: string;
+  manualSelection?: { id: string; source: string; keyword?: string };
   lrcTimeArray: number[];
   lrcArray: ILyricText[];
   // 新增字段标识是否包含逐字歌词
@@ -95,7 +101,17 @@ export interface SongResult {
    * - 'bilibili'：哔哩哔哩（视频型条目，播放方式可选视频/音频）
    * 用于标识非网易云的跨平台搜索结果
    */
-  platform?: 'netease' | 'qq' | 'migu' | 'kugou' | 'kuwo' | 'joox' | 'spotify' | 'bilibili' | 'server' | string;
+  platform?:
+    | 'netease'
+    | 'qq'
+    | 'migu'
+    | 'kugou'
+    | 'kuwo'
+    | 'joox'
+    | 'spotify'
+    | 'bilibili'
+    | 'server'
+    | string;
   /**
    * 跨平台歌曲在对应平台的原始 ID
    * 与 platform 配合使用，用于直接获取播放 URL

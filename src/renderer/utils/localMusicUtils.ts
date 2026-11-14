@@ -97,6 +97,7 @@ export function parseTtmlToILyric(xmlString: string): ILyric | null {
       lrcTimeArray,
       lrcArray,
       hasWordByWord: lrcArray.some((line) => line.hasWordByWord),
+      rawSchemaVersion: 2,
       format: 'ttml'
     };
   } catch {
@@ -151,7 +152,13 @@ export function parseLrcToILyric(lrcString: string | null): ILyric | null {
       return null;
     }
 
-    return { lrcTimeArray, lrcArray, hasWordByWord };
+    return {
+      lrcTimeArray,
+      lrcArray,
+      hasWordByWord,
+      rawSchemaVersion: 2,
+      sourceId: 'local:embedded'
+    };
   } catch {
     return null;
   }
@@ -456,7 +463,13 @@ export function parseLyricContent(content: string, filePath?: string): ILyric | 
 
     if (lrcArray.length === 0) return null;
 
-    return { lrcTimeArray, lrcArray, hasWordByWord };
+    return {
+      lrcTimeArray,
+      lrcArray,
+      hasWordByWord,
+      rawSchemaVersion: 2,
+      sourceId: filePath ? `local:${filePath}` : 'local:embedded'
+    };
   } catch {
     return null;
   }

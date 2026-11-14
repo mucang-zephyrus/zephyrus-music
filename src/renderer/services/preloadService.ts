@@ -8,6 +8,7 @@ import {
   isWebAnalysisPlatform,
   probeAnalysisCapability
 } from './audioAnalysisGate';
+import { iosAudioProtection } from './iosAudioProtection';
 
 /**
  * iOS Safari 不做音频预加载:后台常驻的暂停 <audio> 元素会让系统媒体面板
@@ -124,7 +125,7 @@ class PreloadService {
     // 网页端先探测再构造：预载实例会被 consume() 直接交给播放主链路，
     // 必须与 audioService 用同一武装网关，否则复用时无法安全建图
     let armed = false;
-    if (isWebAnalysisPlatform()) {
+    if (isWebAnalysisPlatform() && !iosAudioProtection.enabled) {
       armed = await probeAnalysisCapability(url);
     }
     return new Promise((resolve, reject) => {
@@ -137,7 +138,7 @@ class PreloadService {
         onload: () => resolve(sound),
         onloaderror: (_, err) => reject(err)
       });
-      if (armed) {
+      if (armed && !iosAudioProtection.enabled) {
         armHowlForAnalysis(sound, url);
       } else {
         disarmHowlAudio(sound, url);

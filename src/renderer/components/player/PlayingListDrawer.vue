@@ -24,7 +24,7 @@
       }
     ]"
     :style="panelDragStyle"
-    @animationend="onAnimationEnd"
+    @animationend.self="onAnimationEnd"
   >
     <div
       class="playlist-panel-header"
@@ -47,7 +47,7 @@
         </div>
       </div>
     </div>
-    <div class="playlist-panel-content">
+    <div ref="queueViewport" class="playlist-panel-content">
       <div v-if="playList.length === 0" class="empty-playlist">
         <i class="iconfont ri-music-2-line"></i>
         <p>{{ t('player.playList.empty') }}</p>
@@ -55,7 +55,7 @@
       <n-virtual-list v-else ref="playListRef" :item-size="62" item-resizable :items="playList">
         <template #default="{ item }">
           <div class="music-play-list-content">
-            <div class="flex items-center justify-between">
+            <div class="queue-row-entrance flex items-center justify-between">
               <song-item
                 :key="item.id"
                 class="flex-1"
@@ -110,6 +110,7 @@ import GlassConfirmDialog from '@/components/common/GlassConfirmDialog.vue';
 import MobileSongActionSheet from '@/components/common/MobileSongActionSheet.vue';
 import SongItem from '@/components/common/SongItem.vue';
 import { useMobileSongActionSurface } from '@/composables/useMobileSongActionSurface';
+import { useQueueEntrance } from '@/composables/useQueueEntrance';
 import { usePlayerStore } from '@/store/modules/player';
 import type { SongResult } from '@/types/music';
 import { isMobile } from '@/utils';
@@ -251,23 +252,39 @@ const show = computed({
 });
 
 // 监听外部可见性变化
+const playListRef = ref<any>(null);
+const queueViewport = ref<HTMLElement | null>(null);
+const queueEntrance = useQueueEntrance();
 watch(
   show,
-  (newValue) => {
+  async (newValue, _previous, onCleanup) => {
+    let cancelled = false;
+    onCleanup(() => {
+      cancelled = true;
+      queueEntrance.stop();
+    });
+    if (embeddedCloseTimer) {
+      clearTimeout(embeddedCloseTimer);
+      embeddedCloseTimer = undefined;
+    }
     if (newValue) {
       // 打开面板
       internalVisible.value = true;
       closing.value = false;
       embeddedSettled.value = false;
       // 在下一个渲染周期后滚动到当前歌曲
-      nextTick(() => {
-        scrollToCurrentSong();
-        if (embedded.value) {
-          requestAnimationFrame(() => {
-            embeddedSettled.value = true;
-          });
-        }
-      });
+      await nextTick();
+      if (cancelled) return;
+      scrollToCurrentSong();
+      // 虚拟列表先渲染当前曲附近的行，再按可见顺序入场。
+      await nextTick();
+      if (cancelled) return;
+      queueEntrance.start(queueViewport.value, '.queue-row-entrance');
+      if (embedded.value) {
+        requestAnimationFrame(() => {
+          if (!cancelled) embeddedSettled.value = true;
+        });
+      }
     } else {
       if (songActionSurface.visible.value) songActionSurface.close();
       if (embedded.value) {
@@ -291,9 +308,6 @@ watch(
   },
   { immediate: true }
 );
-
-// 播放列表引用
-const playListRef = ref<any>(null);
 
 // 关闭面板
 const closePanel = () => {
@@ -344,17 +358,11 @@ onUnmounted(() => {
 });
 
 // 滚动到当前播放歌曲
-const scrollToCurrentSong = () => {
-  // 延长等待时间，确保列表已渲染完成
-  setTimeout(() => {
-    if (playListRef.value && playList.value.length > 0) {
-      const index = playerStore.playListIndex;
-      playListRef.value.scrollTo({
-        top: (index > 3 ? index - 3 : 0) * 62
-      });
-    }
-  }, 100);
-};
+function scrollToCurrentSong() {
+  if (playListRef.value && playList.value.length > 0) {
+    playListRef.value.scrollTo({ top: Math.max(0, playerStore.playListIndex - 3) * 62 });
+  }
+}
 
 // 删除歌曲
 const handleDeleteSong = (song: SongResult) => {

@@ -6,6 +6,7 @@ import type { AppUpdateState } from '../shared/appUpdate';
 
 // Custom APIs for renderer
 const api = {
+  readMusicShareClipboard: (): Promise<string> => ipcRenderer.invoke('read-music-share-clipboard'),
   minimize: () => ipcRenderer.send('minimize-window'),
   maximize: () => ipcRenderer.send('maximize-window'),
   close: () => ipcRenderer.send('close-window'),
@@ -115,11 +116,27 @@ const api = {
     });
   },
 
-  // 平台扫码登录（QQ/酷狗）
+  // 平台扫码登录（QQ/酷狗/哔哩哔哩）
   platformQrCreate: (platform: string, provider = 'qq') =>
     ipcRenderer.invoke('platform-qr-create', platform, provider),
   platformQrPoll: (platform: string, key: string, provider = 'qq') =>
     ipcRenderer.invoke('platform-qr-poll', platform, key, provider),
+
+  // 哔哩哔哩（视频信息 / 取流 / 字幕）
+  bilibiliVideoInfo: (bvid: string) => ipcRenderer.invoke('bilibili-video-info', bvid),
+  bilibiliStream: (params: { bvid: string; cid: number; kind?: 'audio' | 'video' }) =>
+    ipcRenderer.invoke('bilibili-stream', params),
+  bilibiliSubtitle: (params: { bvid: string; cid: number; lan?: string }) =>
+    ipcRenderer.invoke('bilibili-subtitle', params),
+  bilibiliResolveBvid: (input: string) => ipcRenderer.invoke('bilibili-resolve-bvid', input),
+  bilibiliFavFolders: (bvid: string) => ipcRenderer.invoke('bilibili-fav-folders', bvid),
+  bilibiliFavDeal: (params: { bvid: string; addIds?: number[]; delIds?: number[] }) =>
+    ipcRenderer.invoke('bilibili-fav-deal', params),
+  bilibiliAccountData: (cookie: string) => ipcRenderer.invoke('bilibili-account-data', cookie),
+  bilibiliPlaylistTracks: (cookie: string, folderId: string, page?: number) =>
+    ipcRenderer.invoke('bilibili-playlist-tracks', cookie, folderId, page),
+  bilibiliComments: (oid: number, pn?: number) =>
+    ipcRenderer.invoke('bilibili-comments', oid, pn),
 
   // 插件商店
   plugin: {

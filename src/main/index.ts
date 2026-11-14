@@ -1,10 +1,11 @@
 import { electronApp, is, optimizer } from '@electron-toolkit/utils';
-import { app, ipcMain, nativeImage, session } from 'electron';
+import { app, BrowserWindow, clipboard, ipcMain, nativeImage, session } from 'electron';
 import { join } from 'path';
 
 import type { Language } from '../i18n/main';
 import i18n from '../i18n/main';
 import { loadLyricWindow } from './lyric';
+import { BILIBILI_UA } from './modules/bilibili/client';
 import { initializeCacheManager } from './modules/cache';
 import { initializeConfig } from './modules/config';
 import { initializeFileManager } from './modules/fileManager';
@@ -38,6 +39,12 @@ const icon = nativeImage.createFromPath(
 );
 
 let mainWindow: Electron.BrowserWindow;
+
+// Only the focused app window may read the clipboard; no background polling.
+ipcMain.handle('read-music-share-clipboard', (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  return window?.isFocused() ? clipboard.readText().slice(0, 65536) : '';
+});
 
 // 初始化应用
 function initialize(configStore: any) {
@@ -162,6 +169,36 @@ if (!isSingleInstance) {
     session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
       return permission === ('media' as any);
     });
+
+    // B 站 CDN 硬校验 Referer/UA，且不返回 CORS 头（Web Audio 需要）。
+    // 桌面端直接用 Electron 的请求钩子补齐，无需像 Web 端那样跑代理。
+    try {
+      const biliHosts = {
+        urls: ['*://*.bilivideo.com/*', '*://*.bilivideo.cn/*', '*://*.hdslb.com/*', '*://*.akamaized.net/*']
+      };
+      session.defaultSession.webRequest.onBeforeSendHeaders(biliHosts, (details, callback) => {
+        callback({
+          requestHeaders: {
+            ...details.requestHeaders,
+            Referer: 'https://www.bilibili.com/',
+            Origin: 'https://www.bilibili.com',
+            'User-Agent': BILIBILI_UA
+          }
+        });
+      });
+      session.defaultSession.webRequest.onHeadersReceived(biliHosts, (details, callback) => {
+        callback({
+          responseHeaders: {
+            ...details.responseHeaders,
+            'Access-Control-Allow-Origin': ['*'],
+            'Access-Control-Allow-Headers': ['*'],
+            'Access-Control-Expose-Headers': ['*']
+          }
+        });
+      });
+    } catch (error) {
+      console.warn('[Main] B 站请求头注入失败（不影响其它功能）:', error);
+    }
 
     // 重新初始化配置管理以获取完整的配置存储
     const store = initializeConfig();

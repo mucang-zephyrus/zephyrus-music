@@ -1,9 +1,19 @@
 import { ipcMain } from 'electron';
 import Store from 'electron-store';
 import fs from 'fs';
+import fetch from 'node-fetch';
 import os from 'os';
 import path from 'path';
 
+import {
+  dealBilibiliFavorite,
+  getBilibiliFavFolders,
+  getBilibiliStream,
+  getBilibiliSubtitle,
+  getBilibiliVideoInfo,
+  resolveBilibiliBvid
+} from './modules/bilibili';
+import { BILIBILI_UA } from './modules/bilibili/client';
 import {
   getPlatformCookie,
   getPlatformLoginStatus,
@@ -63,6 +73,164 @@ ipcMain.handle('set-platform-cookie', (_event, platform: SearchPlatform, cookie:
 ipcMain.handle('get-platform-login-status', () => {
   return getPlatformLoginStatus();
 });
+
+// ==================== B 站 IPC ====================
+
+// 账号数据（收藏夹映射为歌单格式，供 /list TAB 使用）
+ipcMain.handle('bilibili-account-data', async (_event, cookie: string) => {
+  try {
+    const headers = { Cookie: cookie || process.env.BILIBILI_COOKIE || '', 'User-Agent': BILIBILI_UA, Referer: 'https://www.bilibili.com/' };
+    const navRes = await fetch('https://api.bilibili.com/x/web-interface/nav', { headers });
+    const nav = (await navRes.json()) as any;
+    const mid = Number(nav?.data?.mid || 0);
+    if (!mid) return { error: '哔哩哔哩登录已失效' };
+
+    const favRes = await fetch(`https://api.bilibili.com/x/v3/fav/folder/created/list-all?up_mid=${mid}&type=2`, { headers });
+    const fav = (await favRes.json()) as any;
+    const playlists = (fav?.data?.list || []).map((folder: any) => ({
+      id: Number(folder.id),
+      name: String(folder.title || ''),
+      coverImgUrl: String(folder.cover || '').replace(/^\/\//, 'https://'),
+      trackCount: Number(folder.media_count || 0),
+      userId: String(mid)
+    }));
+    return {
+      data: {
+        userInfo: { userId: String(mid), nickname: String(nav?.data?.uname || ''), avatarUrl: '', vip: false },
+        playlists
+      }
+    };
+  } catch (error) {
+    return { error: (error as Error).message || '获取账号数据失败' };
+  }
+});
+
+// 收藏夹内视频列表
+ipcMain.handle('bilibili-playlist-tracks', async (_event, cookie: string, folderId: string, page?: number) => {
+  try {
+    const pn = Math.max(1, page || 1);
+    const headers = { Cookie: cookie || process.env.BILIBILI_COOKIE || '', 'User-Agent': BILIBILI_UA, Referer: 'https://www.bilibili.com/' };
+    const res = await fetch(`https://api.bilibili.com/x/v3/fav/resource/list?media_id=${folderId}&pn=${pn}&ps=20&type=2&order=mtime`, { headers });
+    const data = (await res.json()) as any;
+    const medias = (data?.data?.medias || []).filter((m: any) => m?.bvid);
+    const songs = medias.map((media: any) => ({
+      bvid: String(media.bvid),
+      aid: Number(media.aid || 0),
+      cid: Number(media.cid || 0),
+      title: String(media.title || '').replace(/<[^>]+>/g, ''),
+      picUrl: String(media.cover || '').replace(/^\/\//, 'https://'),
+      durationMs: Number(media.duration || 0) * 1000,
+      author: String(media.upper?.name || ''),
+      url: `https://www.bilibili.com/video/${media.bvid}`
+    }));
+    const folderInfo = data?.data?.info || {};
+    return {
+      data: {
+        playlist: {
+          id: Number(folderInfo.id || folderId),
+          name: String(folderInfo.title || ''),
+          coverImgUrl: String(folderInfo.cover || '').replace(/^\/\//, 'https://'),
+          trackCount: Number(folderInfo.media_count || songs.length)
+        },
+        songs,
+        page: pn
+      }
+    };
+  } catch (error) {
+    return { error: (error as Error).message || '获取收藏夹内容失败' };
+  }
+});
+
+// 评论（旧接口，匿名可读）
+ipcMain.handle('bilibili-comments', async (_event, oid: number, pn?: number) => {
+  try {
+    const pageNum = Math.max(1, pn || 1);
+    const headers = { 'User-Agent': BILIBILI_UA, Referer: 'https://www.bilibili.com/' };
+    const res = await fetch(`https://api.bilibili.com/x/v2/reply?pn=${pageNum}&type=1&oid=${oid}&sort=1`, { headers });
+    const data = (await res.json()) as any;
+    if (data.code !== 0) return { error: data.message || '评论获取失败' };
+    const replies = (data.data?.replies || []).map((reply: any) => ({
+      rpid: Number(reply.rpid),
+      oid: Number(reply.oid),
+      nickname: String(reply.member?.uname || ''),
+      avatarUrl: String(reply.member?.avatar || '').replace(/^\/\//, 'https://'),
+      content: String(reply.content?.message || ''),
+      ctime: Number(reply.ctime || 0) * 1000,
+      likedCount: Number(reply.like || 0),
+      replies: (reply.replies || []).map((sub: any) => ({
+        rpid: Number(sub.rpid),
+        nickname: String(sub.member?.uname || ''),
+        avatarUrl: String(sub.member?.avatar || '').replace(/^\/\//, 'https://'),
+        content: String(sub.content?.message || ''),
+        ctime: Number(sub.ctime || 0) * 1000
+      }))
+    }));
+    return { data: { total: Number(data.data?.page?.count || 0), replies } };
+  } catch (error) {
+    return { error: (error as Error).message || '评论获取失败' };
+  }
+});
+
+// 视频信息（拿 cid / 分P）
+ipcMain.handle('bilibili-video-info', async (_event, bvid: string) => {
+  try {
+    return { data: await getBilibiliVideoInfo(bvid) };
+  } catch (error) {
+    return { error: (error as Error).message || '获取视频信息失败' };
+  }
+});
+
+// 取流（音频轨；视频轨为二期预留）
+ipcMain.handle(
+  'bilibili-stream',
+  async (_event, params: { bvid: string; cid: number; kind?: 'audio' | 'video' }) => {
+    try {
+      return { data: await getBilibiliStream(params) };
+    } catch (error) {
+      return { error: (error as Error).message || '解析播放地址失败' };
+    }
+  }
+);
+
+// 字幕（含候选轨与正文）
+ipcMain.handle('bilibili-subtitle', async (_event, params: { bvid: string; cid: number }) => {
+  try {
+    return { data: await getBilibiliSubtitle(params) };
+  } catch (error) {
+    return { error: (error as Error).message || '获取字幕失败' };
+  }
+});
+
+// 链接/短链 → bvid
+ipcMain.handle('bilibili-resolve-bvid', async (_event, input: string) => {
+  try {
+    return { data: await resolveBilibiliBvid(input) };
+  } catch (error) {
+    return { error: (error as Error).message || '解析链接失败' };
+  }
+});
+
+// 收藏夹列表（含目标视频的收藏状态；需 B 站登录）
+ipcMain.handle('bilibili-fav-folders', async (_event, bvid: string) => {
+  try {
+    return { data: await getBilibiliFavFolders(bvid) };
+  } catch (error) {
+    return { error: (error as Error).message || '获取收藏夹失败' };
+  }
+});
+
+// 收藏/取消收藏（同步到 B 站收藏夹）
+ipcMain.handle(
+  'bilibili-fav-deal',
+  async (_event, params: { bvid: string; addIds?: number[]; delIds?: number[] }) => {
+    try {
+      await dealBilibiliFavorite(params.bvid, params.addIds || [], params.delIds || []);
+      return { data: true };
+    } catch (error) {
+      return { error: (error as Error).message || '收藏操作失败' };
+    }
+  }
+);
 
 /**
  * 检查端口是否可用

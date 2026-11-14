@@ -62,3 +62,9 @@ Screenshot_2026*
 _backup-*/
 promo-assets/promo-v2/
 product-site/credits/vendor/ 
+
+# 下载产物（scripts/fetch-song.mjs 默认输出目录）
+downloads/
+
+# TypeScript incremental compilation cache
+*.tsbuildinfo

@@ -15,7 +15,6 @@ import type { ILyric, ILyricText, LyricFormat, LyricSource, SongResult } from '@
 import { getImgUrl, isElectron } from '@/utils';
 import { normalizeAudioUrl } from '@/utils/audioUrl';
 import { getImageLinearBackground } from '@/utils/linearColor';
-import { mergeTranslationFeatures } from '@/utils/lyricTranslationMerge';
 import { isUsableLyric } from '@/utils/lyricValidation';
 import { mergeAuxiliaryLyrics, parseTimedLyrics } from '@/utils/timedLyrics';
 
@@ -142,9 +141,7 @@ export const getSongUrl = async (
       if (songData.platform === 'qq' || songData.platform === 'kugou') {
         try {
           const { fetchPlatformPlayUrlViaApi } = await import('@/api/platformQrApi');
-          const { usePlatformAccountsStore } = await import(
-            '@/store/modules/platformAccounts'
-          );
+          const { usePlatformAccountsStore } = await import('@/store/modules/platformAccounts');
           const accountStore = usePlatformAccountsStore();
           const cookie = accountStore.accountsForPlatform(songData.platform)[0]?.cookie || '';
           const quality = settingsStore.setData.musicQuality || 'higher';
@@ -318,9 +315,11 @@ async function loadQqProviderLyric(platformId: string): Promise<ILyric | null> {
     const payload = await fetchQqLyric(platformId);
     if (!payload) return cached?.lyric || null;
     const lyric = parseTimedLyrics(payload.lyric, { format: payload.format, source: 'qq' });
+    lyric.sourceId = payload.sourceId || cacheKey;
     mergeAuxiliaryLyrics(lyric, payload.translation, 'trText', payload.format);
     mergeAuxiliaryLyrics(lyric, payload.romanization, 'romaText', payload.format);
     if (!isUsableLyric(lyric)) return cached?.lyric || null;
+    lyric.sourceId ||= cacheKey;
     await writeProviderLyricCache(cacheKey, lyric);
     return lyric;
   } catch (error) {
@@ -337,8 +336,6 @@ function createProviderLyric(
   source: LyricSource
 ): ILyric {
   const result = parseTimedLyrics(lyric, { format, source });
-  // 「原文+翻译」特征合并：内联全角括号 / 同时间轴双行 → text + trText（AMLL 主/翻译结构）
-  mergeTranslationFeatures(result.lrcArray);
   mergeAuxiliaryLyrics(result, translation, 'trText', format);
   mergeAuxiliaryLyrics(result, romanization, 'romaText', format);
   return result;
@@ -357,6 +354,7 @@ async function loadCommunityProviderLyric(song: SongResult): Promise<ILyric | nu
     const entry = await loadCommunityLyricForSong(id);
     if (!entry?.lrc) continue;
     const lyric = createProviderLyric(entry.lrc, entry.trLrc, undefined, 'lrc', 'community');
+    lyric.sourceId = `community:${entry.id}`;
     if (isUsableLyric(lyric)) return lyric;
   }
   return null;
@@ -376,6 +374,7 @@ async function loadMatchedQqProviderLyric(song: SongResult): Promise<ILyric | nu
     'qq'
   );
   if (!isUsableLyric(lyric)) return cached?.lyric || null;
+  lyric.sourceId = payload.sourceId || cacheKey;
   await writeProviderLyricCache(cacheKey, lyric);
   return lyric;
 }
@@ -394,18 +393,46 @@ async function loadKugouProviderLyric(song: SongResult): Promise<ILyric | null> 
     'kugou'
   );
   if (!isUsableLyric(lyric)) return cached?.lyric || null;
+  lyric.sourceId = payload.sourceId || cacheKey;
   await writeProviderLyricCache(cacheKey, lyric);
   return lyric;
 }
 
 /** 手动匹配：用户显式选择的歌词，优先级高于任何自动匹配 */
 async function loadManualLyric(song: SongResult): Promise<ILyric | null> {
+  let preserved: ILyric | null = null;
   try {
     const { manualLyricCacheKey } = await import('@/utils/subtitleParser');
     const cached = await readProviderLyricCache(manualLyricCacheKey(song));
-    return cached && isUsableLyric(cached.lyric) ? cached.lyric : null;
+    if (!cached || !isUsableLyric(cached.lyric)) return null;
+    preserved = cached.lyric;
+    if (cached.fresh) return cached.lyric;
+    const selection = cached.lyric.manualSelection;
+    if (selection?.source === 'netease' && selection.id.startsWith('netease:')) {
+      const fresh = await loadNeteaseProviderLyric(selection.id.slice(8));
+      if (isUsableLyric(fresh)) {
+        fresh.manualSelection = selection;
+        fresh.sourceId = selection.id;
+        await writeProviderLyricCache(manualLyricCacheKey(song), fresh);
+        return fresh;
+      }
+    }
+    if (selection?.source === 'community') {
+      const { queryCommunityLyrics } = await import('@/api/communityLyric');
+      const { entries } = await queryCommunityLyrics(String(song.platformId ?? song.id));
+      const entry = entries.find((entry) => `community:${entry.id}` === selection.id);
+      if (entry) {
+        const fresh = createProviderLyric(entry.lrc, entry.trLrc, undefined, 'lrc', 'community');
+        fresh.manualSelection = selection;
+        fresh.sourceId = selection.id;
+        await writeProviderLyricCache(manualLyricCacheKey(song), fresh);
+        return fresh;
+      }
+    }
+    // No reliable original/selection identity: keep the user's snapshot without stacking heuristics.
+    return cached.lyric;
   } catch {
-    return null;
+    return preserved;
   }
 }
 
@@ -415,7 +442,8 @@ async function loadBilibiliSubtitleLyric(song: SongResult): Promise<ILyric | nul
   const bvid = String(song.platformId);
   try {
     const { getBilibiliSubtitleForSong } = await import('@/api/bilibili');
-    const { subtitleLinesToLyric, bilibiliSubtitleCacheKey } = await import('@/utils/subtitleParser');
+    const { subtitleLinesToLyric, bilibiliSubtitleCacheKey } =
+      await import('@/utils/subtitleParser');
 
     const cacheKey = bilibiliSubtitleCacheKey(bvid);
     const cached = await readProviderLyricCache(cacheKey);
@@ -426,6 +454,7 @@ async function loadBilibiliSubtitleLyric(song: SongResult): Promise<ILyric | nul
 
     const lyric = subtitleLinesToLyric(payload.lines);
     if (!isUsableLyric(lyric)) return cached?.lyric || null;
+    lyric.sourceId = `bilibili:${bvid}:${String(payload.picked?.id || 'default')}`;
     await writeProviderLyricCache(cacheKey, lyric);
     return lyric;
   } catch (error) {
@@ -456,13 +485,15 @@ async function loadNeteaseProviderLyric(id: string | number): Promise<ILyric> {
       }
     }
     const hasYrc = Boolean(lyricData?.yrc?.lyric);
-    return createProviderLyric(
+    const lyric = createProviderLyric(
       hasYrc ? lyricData.yrc.lyric : lyricData?.lrc?.lyric || '',
       lyricData?.ytlrc?.lyric || lyricData?.tlyric?.lyric,
       lyricData?.yromalrc?.lyric || lyricData?.romalrc?.lyric,
       hasYrc ? 'yrc' : 'lrc',
       'netease'
     );
+    lyric.sourceId = `netease:${numericId}`;
+    return lyric;
   } catch (error) {
     console.warn('[lyrics] 网易云歌词加载失败:', error);
     return emptyLyric();
@@ -511,6 +542,7 @@ export const loadCrossPlatformLyric = async (song: SongResult): Promise<ILyric> 
 
   try {
     let lyricData: GDMusicLyricResponse | null = null;
+    let actualSourceId = `fallback:${platform}:${platformId}`;
 
     if (platform === 'qq') {
       const qqLyric = await loadQqProviderLyric(platformId);
@@ -567,6 +599,7 @@ export const loadCrossPlatformLyric = async (song: SongResult): Promise<ILyric> 
 
         if (matched && matched.lyric_id) {
           lyricData = await getLyricByPlatform('joox', String(matched.lyric_id));
+          actualSourceId = `fallback:joox:${matched.lyric_id}`;
         }
       }
     }
@@ -585,6 +618,7 @@ export const loadCrossPlatformLyric = async (song: SongResult): Promise<ILyric> 
       providerFormat,
       'fallback'
     );
+    parsed.sourceId = actualSourceId;
     return isUsableLyric(parsed) ? parsed : empty;
   } catch (error) {
     console.error('[loadCrossPlatformLyric] 加载失败:', error);
@@ -606,7 +640,8 @@ function getLyricSourceLoaders(): Record<string, LyricSourceLoader> {
   return {
     netease: (song) =>
       isCrossPlatformSong(song) ? loadMatchedNeteaseLyric(song) : loadNeteaseProviderLyric(song.id),
-    qq: (song) => (song.platform === 'qq' ? loadCrossPlatformLyric(song) : loadMatchedQqProviderLyric(song)),
+    qq: (song) =>
+      song.platform === 'qq' ? loadCrossPlatformLyric(song) : loadMatchedQqProviderLyric(song),
     kugou: (song) => loadKugouProviderLyric(song),
     community: (song) => loadCommunityProviderLyric(song),
     lrclib: (song) => fetchLrclibLyric(song)
@@ -616,7 +651,8 @@ function getLyricSourceLoaders(): Record<string, LyricSourceLoader> {
 /** 统一歌词源调度：优先级列表（lyricSource store）决定主源与兜底顺序；单曲 override 强制单源。 */
 export const loadBestLyric = async (song: SongResult): Promise<ILyric> => {
   if (!song) return emptyLyric();
-  if (isUsableLyric(song.lyric)) return song.lyric;
+  if (isUsableLyric(song.lyric) && song.lyric.rawSchemaVersion === 2 && !song.lyric.legacyProcessed)
+    return song.lyric;
 
   if (song.playMusicUrl?.startsWith('local://')) {
     const { useLocalMusic } = await import('@/hooks/useLocalMusic');
@@ -665,7 +701,10 @@ export const loadBestLyric = async (song: SongResult): Promise<ILyric> => {
     .filter((key) => loaders[key])
     .map((key) => loaders[key](song).catch(() => null));
   const fallback = pickBestByPriority(await Promise.allSettled(fallbackTasks), fallbackKeys);
-  return fallback || emptyLyric();
+  return (
+    fallback ||
+    (isUsableLyric(song.lyric) ? { ...song.lyric, legacyProcessed: true } : emptyLyric())
+  );
 };
 
 /** 按 lyricSource 优先级顺序挑选兜底结果（原 community > 逐字 > 首个 偏好保留为同级次序） */
@@ -701,7 +740,11 @@ export const useLyrics = () => {
 export const useSongDetail = () => {
   const { getSongUrl } = useSongUrl();
 
-  const getSongDetail = async (playMusic: SongResult, requestId?: string) => {
+  const getSongDetail = async (
+    playMusic: SongResult,
+    requestId?: string,
+    options: { loadCoverColor?: boolean } = {}
+  ) => {
     // 验证请求
     if (requestId && !playbackRequestManager.isRequestValid(requestId)) {
       throw new Error('Request cancelled');
@@ -714,7 +757,7 @@ export const useSongDetail = () => {
       playMusic.expiredAt = playMusic.createdAt + 365 * 24 * 3600 * 1000;
 
       const { backgroundColor, primaryColor } =
-        playMusic.backgroundColor && playMusic.primaryColor
+        options.loadCoverColor === false || (playMusic.backgroundColor && playMusic.primaryColor)
           ? playMusic
           : await getImageLinearBackground(getImgUrl(playMusic?.picUrl, '30y30'));
 
@@ -753,14 +796,14 @@ export const useSongDetail = () => {
       playMusic.expiredAt = playMusic.createdAt + 1800000;
       // 哔哩哔哩封面：hdslb 图床拒绝带外域 Referer（403）且直连会污染画布，
       // 取色改走网关中转（网关注入 Referer 并回 CORS 头）
-      const coverForExtraction =
-        playMusic.platform === 'bilibili' && playMusic.picUrl
-          ? (await import('@/api/bilibili')).toGatewayProxyUrl(playMusic.picUrl)
-          : getImgUrl(playMusic?.picUrl, '30y30');
-      const { backgroundColor, primaryColor } =
-        playMusic.backgroundColor && playMusic.primaryColor
-          ? playMusic
-          : await getImageLinearBackground(coverForExtraction);
+      let { backgroundColor, primaryColor } = playMusic;
+      if (options.loadCoverColor !== false && (!backgroundColor || !primaryColor)) {
+        const coverForExtraction =
+          playMusic.platform === 'bilibili' && playMusic.picUrl
+            ? (await import('@/api/bilibili')).toGatewayProxyUrl(playMusic.picUrl)
+            : getImgUrl(playMusic?.picUrl, '30y30');
+        ({ backgroundColor, primaryColor } = await getImageLinearBackground(coverForExtraction));
+      }
 
       // 验证请求
       if (requestId && !playbackRequestManager.isRequestValid(requestId)) {

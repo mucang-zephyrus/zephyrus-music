@@ -64,7 +64,7 @@ export function navigateToMusicList(
 
   // 路由跳转
   if (id !== undefined && id !== null && id !== '') {
-    router.push({
+    return router.push({
       name: 'musicList',
       params: { id },
       query: {
@@ -80,7 +80,7 @@ export function navigateToMusicList(
       }
     });
   } else {
-    router.push({
+    return router.push({
       name: 'musicList',
       query: { type: 'dailyRecommend' }
     });

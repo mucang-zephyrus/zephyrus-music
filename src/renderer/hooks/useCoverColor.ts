@@ -9,7 +9,8 @@ import { ref, watch } from 'vue';
 
 import { playMusic } from '@/hooks/MusicHook';
 import { getImgUrl } from '@/utils';
-import { adjustForAccent } from '@/utils/neutralColor';
+import { extractRepresentativeColorsFromPixels, resolveCoverPalette } from '@/utils/coverPalette';
+import { adjustForAccent, isNearGray } from '@/utils/neutralColor';
 
 // 当前提取的颜色
 const primaryColor = ref('#888888');
@@ -17,6 +18,9 @@ const primaryColorRgb = ref('136, 136, 136');
 // 封面原始平均色（不做暖色调整）
 const averageColor = ref('#888888');
 const averageColorRgb = ref('136, 136, 136');
+/** 封面近灰像素占比（0–1）：供黑白灰封面走中性墨色，而不是强行从噪声里取色相 */
+const grayRatio = ref(0);
+const coverPalette = ref<[string, string, string]>(['#888888', '#888888', '#888888']);
 
 // 默认灰色的 RGB
 const DEFAULT_R = 136;
@@ -24,39 +28,56 @@ const DEFAULT_G = 136;
 const DEFAULT_B = 136;
 
 /**
- * 从图片提取主色（基于 canvas 像素采样）
+ * 从图片提取主色 + 灰度占比（基于 canvas 像素采样）
+ *
+ * 32×32 而不是 10×10：灰度占比需要足够样本，否则 100 个像素里
+ * 几粒彩色噪点就会把「黑白封面」判成彩色。
  */
-async function extractColorFromImage(picUrl: string): Promise<{ r: number; g: number; b: number } | null> {
+async function extractColorFromImage(
+  picUrl: string
+): Promise<{ r: number; g: number; b: number; primary: { r: number; g: number; b: number }; grayRatio: number; palette: [string, string, string] } | null> {
   try {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.src = getImgUrl(picUrl, '50y50');
+    img.src = getImgUrl(picUrl, '130y130');
     await new Promise((resolve, reject) => {
       img.onload = resolve;
       img.onerror = reject;
     });
 
+    const SAMPLE = 32;
     const canvas = document.createElement('canvas');
-    canvas.width = 10;
-    canvas.height = 10;
+    canvas.width = SAMPLE;
+    canvas.height = SAMPLE;
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
-    ctx.drawImage(img, 0, 0, 10, 10);
-    const data = ctx.getImageData(0, 0, 10, 10).data;
+    ctx.drawImage(img, 0, 0, SAMPLE, SAMPLE);
+    const data = ctx.getImageData(0, 0, SAMPLE, SAMPLE).data;
 
     let r = 0, g = 0, b = 0;
+    let grayPixels = 0;
     const pixelCount = data.length / 4;
     for (let i = 0; i < data.length; i += 4) {
-      r += data[i];
-      g += data[i + 1];
-      b += data[i + 2];
+      const red = data[i];
+      const green = data[i + 1];
+      const blue = data[i + 2];
+      r += red;
+      g += green;
+      b += blue;
+      if (isNearGray(red, green, blue)) grayPixels += 1;
     }
 
+    const representativeColors = extractRepresentativeColorsFromPixels(data);
+    const palette = resolveCoverPalette(representativeColors, picUrl, grayPixels / pixelCount).colors;
+    const primary = tinycolor(palette[0]).toRgb();
     return {
       r: Math.round(r / pixelCount),
       g: Math.round(g / pixelCount),
-      b: Math.round(b / pixelCount)
+      b: Math.round(b / pixelCount),
+      primary,
+      grayRatio: grayPixels / pixelCount,
+      palette
     };
   } catch {
     return null;
@@ -95,6 +116,7 @@ function updateCSSVariables(r: number, g: number, b: number) {
   root.style.setProperty('--accent-color-dark', `rgb(${darker})`);
   root.style.setProperty('--accent-color-10', `rgba(${colorRgb}, 0.1)`);
   root.style.setProperty('--accent-color-20', `rgba(${colorRgb}, 0.2)`);
+  coverPalette.value.forEach((stop, index) => root.style.setProperty(`--cover-palette-${index + 1}`, stop));
 
   // === 封面取色设计令牌 ===
   const coverTiny = tinycolor({ r, g, b });
@@ -174,6 +196,8 @@ function resetToDefault() {
   primaryColorRgb.value = `${DEFAULT_R}, ${DEFAULT_G}, ${DEFAULT_B}`;
   averageColor.value = '#888888';
   averageColorRgb.value = `${DEFAULT_R}, ${DEFAULT_G}, ${DEFAULT_B}`;
+  grayRatio.value = 0;
+  coverPalette.value = ['#888888', '#888888', '#888888'];
   updateCSSVariables(DEFAULT_R, DEFAULT_G, DEFAULT_B);
 }
 
@@ -189,13 +213,18 @@ export function initCoverColor() {
         return;
       }
 
-      const color = await extractColorFromImage(picUrl);
-      if (color) {
+      const extracted = await extractColorFromImage(picUrl);
+      if (extracted) {
+        if (playMusic.value?.picUrl !== picUrl) return;
+        grayRatio.value = extracted.grayRatio;
+        coverPalette.value = extracted.palette;
         // 封面原始平均色（不做调整）
-        averageColor.value = `rgb(${color.r}, ${color.g}, ${color.b})`;
-        averageColorRgb.value = `${color.r}, ${color.g}, ${color.b}`;
+        averageColor.value = `rgb(${extracted.r}, ${extracted.g}, ${extracted.b})`;
+        averageColorRgb.value = `${extracted.r}, ${extracted.g}, ${extracted.b}`;
 
-        const accent = adjustForAccent(color.r, color.g, color.b);
+        const accent = extracted.grayRatio > 0.95
+          ? adjustForAccent(extracted.r, extracted.g, extracted.b)
+          : extracted.primary;
         primaryColor.value = `rgb(${accent.r}, ${accent.g}, ${accent.b})`;
         primaryColorRgb.value = `${accent.r}, ${accent.g}, ${accent.b}`;
         updateCSSVariables(accent.r, accent.g, accent.b);
@@ -218,6 +247,8 @@ export function useCoverColor() {
     primaryColor,
     primaryColorRgb,
     averageColor,
-    averageColorRgb
+    averageColorRgb,
+    grayRatio,
+    coverPalette
   };
 }

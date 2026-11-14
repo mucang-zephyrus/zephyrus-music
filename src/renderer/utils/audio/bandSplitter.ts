@@ -17,11 +17,8 @@ export const BAND_SPLITPOINTS = {
 };
 
 // 各频段淡出时机（0~1，相对于过渡时长的比例）
-export const BAND_FADE_TIMING = {
-  low: { fadeOutStart: 0.7, fadeInStart: 0.8 }, // 低频：70% 淡出，80% 淡入
-  mid: { fadeOutStart: 0.2, fadeInStart: 0.3 }, // 中频：20% 淡出（早），30% 淡入
-  high: { fadeOutStart: 0.5, fadeInStart: 0.5 } // 高频：50% 淡出，50% 淡入
-};
+/** 低频平台段：过渡前 55% 两曲低频各自保持，之后才换手 */
+export const BASS_SWAP_START = 0.55;
 
 /** 频段分裂器：为指定 source 创建 3 路滤波器链 */
 export interface BandSplitChain {
@@ -148,6 +145,14 @@ export function destroyBandSplitChain(
  * 注意：调用方应在调用前把 gainOut / gainIn 的 .gain 设为 1（_passthrough），
  * 把音量缩放完全交给频段 gain，避免与外层 EQ gainNode 的用户音量相乘导致双重缩放。
  *
+ * 曲线形状（借鉴 DJ 的 bass swap，见 Folia automix §6.5）：
+ * - 中/高频：全程等功率余弦（out = cos、in = sin），用分段线性逼近——
+ *   不用 `setValueCurveAtTime`，因为运行中的曲线无法被 `cancelScheduledValues` 取消，
+ *   用户在过渡中途暂停/切歌时会抛 NotSupportedError。
+ * - 低频：前 55% 保持原音量不动（平台段），之后才与进场曲换手。
+ *   「淡化」的听感签名是出场曲从头滑到底；「混音」的签名是出场曲一直在、然后走掉。
+ *   平台段两曲等强、全频谱只有一个低音，这正是那个 DJ 动作，也是它不糊的原因。
+ *
  * @param ctx AudioContext
  * @param chainOut 淡出歌曲的分裂链
  * @param chainIn 淡入歌曲的分裂链
@@ -163,57 +168,38 @@ export function applyBandSplitCrossfade(
   duration: number,
   volumeScale: number = 1
 ): void {
-  const tau = duration / 3; // 时间常数
   const v = Math.max(0, Math.min(1, volumeScale));
+  const swapStart = startTime + duration * BASS_SWAP_START;
 
-  // === 淡出歌曲 A ===
-  // 起始值设为音量缩放（保持过渡前响度连续）
-  chainOut.low.gain.setValueAtTime(v, startTime);
-  chainOut.mid.gain.setValueAtTime(v, startTime);
-  chainOut.high.gain.setValueAtTime(v, startTime);
+  // === 低频：平台 + 换手 ===
+  chainOut.low.gain.gain.setValueAtTime(v, startTime);
+  chainOut.low.gain.gain.linearRampToValueAtTime(v, swapStart);
+  chainOut.low.gain.gain.linearRampToValueAtTime(0, startTime + duration);
 
-  // 低频：在过渡段 70% 处开始衰减
-  chainOut.low.gain.setTargetAtTime(
-    0,
-    startTime + duration * BAND_FADE_TIMING.low.fadeOutStart,
-    tau
-  );
-  // 中频：在过渡段 20% 处开始衰减（早淡出，避免人声打架）
-  chainOut.mid.gain.setTargetAtTime(
-    0,
-    startTime + duration * BAND_FADE_TIMING.mid.fadeOutStart,
-    tau
-  );
-  // 高频：在过渡段 50% 处衰减
-  chainOut.high.gain.setTargetAtTime(
-    0,
-    startTime + duration * BAND_FADE_TIMING.high.fadeOutStart,
-    tau
-  );
+  chainIn.low.gain.gain.setValueAtTime(0, startTime);
+  chainIn.low.gain.gain.linearRampToValueAtTime(0, swapStart);
+  chainIn.low.gain.gain.linearRampToValueAtTime(v, startTime + duration);
 
-  // === 淡入歌曲 B ===
-  // 初始值设为 0
-  chainIn.low.gain.setValueAtTime(0, startTime);
-  chainIn.mid.gain.setValueAtTime(0, startTime);
-  chainIn.high.gain.setValueAtTime(0, startTime);
+  // === 中/高频：全程等功率 ===
+  scheduleEqualPower(chainOut.mid.gain.gain, v, startTime, duration, 'out');
+  scheduleEqualPower(chainOut.high.gain.gain, v, startTime, duration, 'out');
+  scheduleEqualPower(chainIn.mid.gain.gain, v, startTime, duration, 'in');
+  scheduleEqualPower(chainIn.high.gain.gain, v, startTime, duration, 'in');
+}
 
-  // 中频先入（30% 处）
-  chainIn.mid.gain.setTargetAtTime(v, startTime + duration * BAND_FADE_TIMING.mid.fadeInStart, tau);
-  // 高频中入（50% 处）
-  chainIn.high.gain.setTargetAtTime(
-    v,
-    startTime + duration * BAND_FADE_TIMING.high.fadeInStart,
-    tau
-  );
-  // 低频最后入（80% 处，保留节奏感）
-  chainIn.low.gain.setTargetAtTime(v, startTime + duration * BAND_FADE_TIMING.low.fadeInStart, tau);
-
-  // 过渡结束后确保终值精确
-  const endTime = startTime + duration + 0.1;
-  chainOut.low.gain.setValueAtTime(0, endTime);
-  chainOut.mid.gain.setValueAtTime(0, endTime);
-  chainOut.high.gain.setValueAtTime(0, endTime);
-  chainIn.low.gain.setValueAtTime(v, endTime);
-  chainIn.mid.gain.setValueAtTime(v, endTime);
-  chainIn.high.gain.setValueAtTime(v, endTime);
+/** 等功率余弦的分段线性逼近：10 段的最大偏差 <1%，且随时可被 cancelScheduledValues 中断 */
+function scheduleEqualPower(
+  param: AudioParam,
+  v: number,
+  startTime: number,
+  duration: number,
+  direction: 'out' | 'in'
+): void {
+  const steps = 10;
+  param.setValueAtTime(direction === 'out' ? v : 0, startTime);
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const shaped = direction === 'out' ? Math.cos((t * Math.PI) / 2) : Math.sin((t * Math.PI) / 2);
+    param.linearRampToValueAtTime(shaped * v, startTime + t * duration);
+  }
 }

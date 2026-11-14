@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
+import { createPlayerStyleConfig, resolvePlayerStyleConfig } from '@/config/playerStyleConfig';
 import {
-  STYLE_PARAM_SCHEMA,
   resolveStyleParams,
+  STYLE_PARAM_SCHEMA,
   styleParamDefaults
 } from '@/config/playerStyleParams';
-import { createPlayerStyleConfig, resolvePlayerStyleConfig } from '@/config/playerStyleConfig';
 
 describe('STYLE_PARAM_SCHEMA', () => {
   it('六种样式均有参数定义，且 key 唯一', () => {
-    const keys = ['default', 'stage', 'starChart', 'frenzy', 'smoke', 'error'];
+    const keys = ['default', 'stage', 'starChart', 'wordCloud', 'smoke', 'error'];
     for (const key of keys) {
       const schema = STYLE_PARAM_SCHEMA[key];
       expect(schema.length).toBeGreaterThan(0);

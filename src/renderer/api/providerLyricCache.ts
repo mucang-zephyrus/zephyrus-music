@@ -3,7 +3,7 @@ import type { ILyric } from '@/types/music';
 interface ProviderLyricCacheEntry {
   cachedAt: number;
   lyric: ILyric;
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
 }
 
 const DB_NAME = 'zephyrus-provider-lyrics';
@@ -48,10 +48,10 @@ export async function readProviderLyricCache(
       request.onsuccess = () => resolve(request.result as ProviderLyricCacheEntry | undefined);
       request.onerror = () => resolve(undefined);
     });
-    if (cached?.schemaVersion !== 1 || !cached.lyric?.lrcArray?.length) return null;
+    if (!cached?.lyric?.lrcArray?.length || ![1, 2].includes(cached.schemaVersion)) return null;
     return {
-      lyric: cached.lyric,
-      fresh: Date.now() - cached.cachedAt < CACHE_TTL_MS
+      lyric: cached.schemaVersion === 2 ? cached.lyric : { ...cached.lyric, legacyProcessed: true },
+      fresh: cached.schemaVersion === 2 && Date.now() - cached.cachedAt < CACHE_TTL_MS
     };
   } catch {
     return null;
@@ -67,7 +67,7 @@ export async function writeProviderLyricCache(key: string, lyric: ILyric): Promi
       transaction
         .objectStore(STORE_NAME)
         .put(
-          { schemaVersion: 1, cachedAt: Date.now(), lyric } satisfies ProviderLyricCacheEntry,
+          { schemaVersion: 2, cachedAt: Date.now(), lyric } satisfies ProviderLyricCacheEntry,
           key
         );
       transaction.oncomplete = () => resolve();

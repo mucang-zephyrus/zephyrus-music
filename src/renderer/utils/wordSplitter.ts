@@ -167,7 +167,9 @@ export function getWordByWordGroups(
 }
 
 // 初始化 jieba
-initJieba();
+const wordSplitterReady = initJieba();
+/** New display projections can wait once before fixing a song's segmentation. */
+export const ensureWordSplitterReady = () => wordSplitterReady;
 
 /**
  * 分割歌词文本（带词性标注）

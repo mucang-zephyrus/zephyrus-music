@@ -1,6 +1,7 @@
 import type { Ref } from 'vue';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
+import type { LyricMergeContext } from '@/services/lyricMergePolicy';
 import { SongResult } from '@/types/music';
 
 import type { LyricSettings } from './useLyricSettings';
@@ -65,6 +66,7 @@ export function useLyricState(lyricSetting: Ref<LyricSettings>) {
     lrcTimeArray: number[];
     allTime: number;
     playMusic: SongResult;
+    lyricMergeContext?: LyricMergeContext | null;
   }>({
     lrcArray: [],
     lrcTimeArray: [],
@@ -263,6 +265,7 @@ export function useLyricState(lyricSetting: Ref<LyricSettings>) {
     lrcTimeArray?: number[];
     allTime?: number;
     playMusic?: SongResult;
+    lyricMergeContext?: LyricMergeContext | null;
   }) => {
     if (!parsedData) {
       console.error('Invalid update data received:', parsedData);
@@ -283,6 +286,7 @@ export function useLyricState(lyricSetting: Ref<LyricSettings>) {
       lrcArray: parsedData.lrcArray || [],
       lrcTimeArray: parsedData.lrcTimeArray || [],
       allTime: parsedData.allTime || 0,
+      lyricMergeContext: parsedData.lyricMergeContext ?? null,
       playMusic: parsedData.playMusic || ({} as SongResult)
     };
     dynamicData.value = {

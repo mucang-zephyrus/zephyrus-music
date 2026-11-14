@@ -2,7 +2,8 @@
 import './default';
 import './stage';
 import './starChart';
-import './frenzy';
+import './wordCloud';
+import './dotMatrix';
 import './smoke';
 import './error';
 

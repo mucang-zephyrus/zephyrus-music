@@ -6,7 +6,10 @@ SERVER = os.environ.get("ZEPHYRUS_SSH_HOST", "mucang.xyz")
 PORT = 22
 USER = "root"
 PASSWORD = os.environ.get("ZEPHYRUS_SSH_PASSWORD")
-LOCAL_DIST = r"c:\Users\Administrator\Desktop\zephyrus-player-android\src\renderer\dist"
+# 默认取仓库内 vite 产物（root=src/renderer，默认 outDir 为其下 dist），可用
+# ZEPHYRUS_WEB_DIST 覆盖；不再硬编码旧机器的桌面绝对路径
+DEFAULT_DIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src", "renderer", "dist")
+LOCAL_DIST = os.environ.get("ZEPHYRUS_WEB_DIST", DEFAULT_DIST)
 REMOTE_BASE = "/var/www/mucang/zephyrus/web"
 
 

@@ -3,7 +3,14 @@
     class="search-page-container h-full w-full bg-white dark:bg-black transition-colors duration-500"
   >
     <n-scrollbar class="h-full">
-      <div class="search-content w-full pt-6 page-padding" style="padding-bottom: calc(var(--mobile-dock-content-inset, 144px) + var(--safe-area-inset-bottom, 0px) + 12px)">
+      <div
+        class="search-content w-full pt-6 page-padding"
+        style="
+          padding-bottom: calc(
+            var(--mobile-dock-content-inset, 144px) + var(--safe-area-inset-bottom, 0px) + 12px
+          );
+        "
+      >
         <!-- Search Header / Hero -->
         <div class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
@@ -14,6 +21,12 @@
             </h1>
             <p class="text-neutral-500 dark:text-neutral-400">{{ t('comp.pages.search.desc') }}</p>
           </div>
+          <button
+            class="share-link-import-button text-sm text-neutral-600 dark:text-neutral-300"
+            @click="openShareImport"
+          >
+            <i class="ri-link" aria-hidden="true" /> {{ t('share.import.title') }}
+          </button>
         </div>
 
         <!-- Hot Search Section -->
@@ -105,6 +118,7 @@ defineOptions({
 const { t } = useI18n();
 const router = useRouter();
 const searchStore = useSearchStore();
+const openShareImport = () => window.dispatchEvent(new Event('open-share-link-import'));
 
 const searchHistory = ref<Array<{ keyword: string; type: number }>>([]);
 

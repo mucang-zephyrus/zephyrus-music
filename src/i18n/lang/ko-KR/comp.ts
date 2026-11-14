@@ -1,4 +1,31 @@
 export default {
+  smartLyricMerge: {
+    legacySnapshot: '이전 버전의 가사 스냅샷을 유지하고 있습니다. 원본 가사를 가져온 뒤에만 스마트 처리를 다시 적용합니다.',
+    notice: '이 가사에는 스마트 번역 병합이 적용되었습니다. 오류가 있으면 여기를 눌러 알려 주세요.',
+    title: '스마트 가사 병합 피드백',
+    explanation:
+      '가사 구조로 번역을 추정하므로 두 언어의 의미가 같다고 보장할 수 없습니다. 잘못 병합되었다면 이 곡에서 끌 수 있습니다.',
+    description: '문제 설명',
+    placeholder: '어떤 원문 또는 번역이 잘못 병합되었나요?',
+    contact: '연락처 (선택)',
+    preview: '첨부 정보 확인',
+    privacy:
+      '곡, 가사 출처, 알고리즘 정보와 최대 세 묶음의 짧은 발췌문만 첨부합니다. 전체 가사는 업로드하지 않으며 제출하기 전에는 전송하지 않습니다.',
+    disable: '이 곡의 스마트 병합 끄기',
+    disabled: '이 곡의 스마트 병합이 꺼졌습니다',
+    restoreHint:
+      '이 기기의 현재 곡과 가사 출처에만 적용됩니다. 플레이어의 데이터 → 가사 출처에서 자동 처리를 복원할 수 있습니다.',
+    cancel: '닫기',
+    submit: '피드백 제출',
+    submitting: '제출 중…',
+    sent: '피드백을 제출했습니다. 감사합니다.',
+    emailOpened: '메일을 열었습니다. 메일 앱에서 전송을 확인해 주세요.',
+    failed: '제출하지 못했습니다. 다시 시도해 주세요.',
+    storageError: '설정을 저장할 수 없습니다. 이 기기의 저장소 권한을 확인해 주세요.',
+    setting: '스마트 번역 병합',
+    automatic: '자동 처리 켜짐',
+    restore: '이 곡의 자동 처리 복원'
+  },
   more: '더 보기',
   discover: '발견',
   homeListItem: {
@@ -226,6 +253,10 @@ export default {
     searchSongs: '곡 검색',
     playlistDescription: '재생목록 소개',
     albumDescription: '앨범 소개',
+    albumCover: '커버',
+    showAlbumDescription: '앨범 소개 보기',
+    backToAlbumCover: '앨범 커버로 돌아가기',
+    noAlbumDescription: '앨범 소개가 없습니다',
     noSearchResults: '관련 곡을 찾을 수 없습니다',
     toggleLayout: '레이아웃 전환',
     switchToNormal: '기본 레이아웃으로 전환',

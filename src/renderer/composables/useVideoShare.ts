@@ -125,6 +125,7 @@ export function useVideoShare(resolveStyleKey: () => string) {
 
   const canExport = computed(
     () =>
+      !['wordCloud', 'dotMatrix'].includes(resolveStyleKey()) &&
       supported.value &&
       !exporting.value &&
       segmentDurationSec.value >= VIDEO_MIN_SEGMENT_SEC &&

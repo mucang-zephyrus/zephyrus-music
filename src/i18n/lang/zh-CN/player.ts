@@ -1,4 +1,40 @@
 export default {
+  dotMatrix: {
+    shape: '点阵形状',
+    dot: '圆点',
+    grid: '方格网',
+    climax: '高潮动画',
+    auto: '自动轮换',
+    ripple: '同心波纹',
+    checker: '棋盘呼吸',
+    radial: '放射推进',
+    beat: '鼓点响应',
+    wordDrop: '分词砸落',
+    dotSpacing: '点阵间距',
+    dotRadius: '圆点半径',
+    dotFontCells: '字形格数',
+    dotIntensity: '动效强度',
+    videoUnsupported: '点阵样式暂不支持视频导出'
+  },
+  wordCloud: {
+    cloudFocus: '聚焦当前句',
+    cloudEstimate: '普通 LRC 时间估算',
+    background: '背景',
+    cloudScale: '字号倍率',
+    cloudSpacing: '句间距倍率',
+    cloudVertical: '竖句比例',
+    cloudCameraSpeed: '镜头速度',
+    interlude: '间奏',
+    videoUnsupported: '词云样式暂不支持视频导出',
+    backgrounds: {
+      cover: '封面模糊',
+      grid: '几何网格线',
+      mesh: 'AMLL 网格渐变',
+      liquid: '高速流体',
+      ether: '太阳耀斑',
+      ripple: '鼓点涟漪'
+    }
+  },
   nowPlaying: '正在播放',
   playlist: '播放列表',
   lyrics: '歌词',
@@ -114,6 +150,8 @@ export default {
   },
   // 播放器样式
   styles: {
+    dotMatrix: '点阵',
+    wordCloud: '词云',
     default: '默认',
     stage: '舞台',
     starChart: '星盘',

@@ -79,6 +79,7 @@ export function useLocalMusic() {
           if (content) {
             const result = parseLyricContent(content, boundPath);
             if (result && result.lrcTimeArray.length > 0) {
+              result.sourceId = `local:${boundPath}`;
               return result;
             }
           }
@@ -106,6 +107,7 @@ export function useLocalMusic() {
       if (communityLyric?.lrc) {
         const result = parseLyricContent(communityLyric.lrc);
         if (result && result.lrcTimeArray.length > 0) {
+          result.sourceId = `community:${communityLyric.id}`;
           return result;
         }
       }

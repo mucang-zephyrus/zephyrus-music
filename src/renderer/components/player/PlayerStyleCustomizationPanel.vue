@@ -28,7 +28,7 @@
     <div v-if="local.mode === 'custom'" class="panel-content">
       <div class="section-label">{{ tr('player.styleCustomization.appearance', '外观') }}</div>
 
-      <label class="setting-row">
+      <label v-if="!['wordCloud', 'dotMatrix'].includes(styleKey)" class="setting-row">
         <span>{{ tr('player.styleCustomization.lyricColor', '基础歌词颜色') }}</span>
         <AppColorPicker v-model="local.lyricColor" />
       </label>
@@ -79,7 +79,59 @@
         <input v-model.number="local.fontWeight" type="range" min="100" max="900" step="50" />
       </label>
 
-      <label class="setting-row">
+      <template v-if="styleKey === 'dotMatrix'">
+        <label class="setting-row">
+          <span>{{ tr('player.dotMatrix.shape', '点阵形状') }}</span>
+          <select v-model="local.dotShape" class="command-button">
+            <option value="dot">{{ tr('player.dotMatrix.dot', '圆点') }}</option>
+            <option value="grid">{{ tr('player.dotMatrix.grid', '方格网') }}</option>
+          </select>
+        </label>
+        <label class="setting-row">
+          <span>{{ tr('player.dotMatrix.climax', '高潮动画') }}</span>
+          <select v-model="local.dotClimax" class="command-button">
+            <option
+              v-for="kind in ['auto', 'ripple', 'checker', 'radial']"
+              :key="kind"
+              :value="kind"
+            >
+              {{ tr(`player.dotMatrix.${kind}`, kind) }}
+            </option>
+          </select>
+        </label>
+        <label class="setting-row">
+          <span>{{ tr('player.dotMatrix.beat', '鼓点响应') }}</span>
+          <input v-model="local.dotBeat" type="checkbox" />
+        </label>
+        <label class="setting-row">
+          <span>{{ tr('player.dotMatrix.wordDrop', '分词砸落') }}</span>
+          <input v-model="local.effectWordDrop" type="checkbox" />
+        </label>
+      </template>
+      <template v-if="styleKey === 'wordCloud'">
+        <label v-for="option in cloudToggles" :key="option.key" class="setting-row">
+          <span>{{ tr(`player.wordCloud.${option.key}`, option.label) }}</span>
+          <button
+            type="button"
+            class="toggle-switch"
+            :class="{ on: local[option.key] !== false }"
+            role="switch"
+            :aria-checked="local[option.key] !== false"
+            @click.prevent="local[option.key] = local[option.key] === false"
+          >
+            <span />
+          </button>
+        </label>
+        <label class="setting-row">
+          <span>{{ tr('player.wordCloud.background', '背景') }}</span>
+          <select v-model="local.cloudBackground" class="command-button" data-cloud-background>
+            <option v-for="kind in cloudBackgrounds" :key="kind" :value="kind">
+              {{ tr(`player.wordCloud.backgrounds.${kind}`, kind) }}
+            </option>
+          </select>
+        </label>
+      </template>
+      <label v-if="!['wordCloud', 'dotMatrix'].includes(styleKey)" class="setting-row">
         <span>{{ tr('player.styleCustomization.customBackground', '自定义背景') }}</span>
         <button
           type="button"
@@ -323,7 +375,10 @@
         </template>
       </template>
 
-      <div v-if="local.useCustomBackground" class="nested-settings">
+      <div
+        v-if="local.useCustomBackground && !['wordCloud', 'dotMatrix'].includes(styleKey)"
+        class="nested-settings"
+      >
         <div class="segmented-control three-options">
           <button
             v-for="option in backgroundOptions"
@@ -388,8 +443,10 @@
         </div>
       </div>
 
-      <div class="section-label">{{ tr('player.styleCustomization.climaxColor', '高潮配色') }}</div>
-      <label class="setting-row">
+      <div v-if="!['wordCloud', 'dotMatrix'].includes(styleKey)" class="section-label">
+        {{ tr('player.styleCustomization.climaxColor', '高潮配色') }}
+      </div>
+      <label v-if="!['wordCloud', 'dotMatrix'].includes(styleKey)" class="setting-row">
         <span>{{ tr('player.styleCustomization.useThemeColor', '高潮使用歌曲主题色') }}</span>
         <button
           type="button"
@@ -402,7 +459,10 @@
           <span></span>
         </button>
       </label>
-      <label v-if="local.climaxUseThemeColor" class="setting-row">
+      <label
+        v-if="!['wordCloud', 'dotMatrix'].includes(styleKey) && local.climaxUseThemeColor"
+        class="setting-row"
+      >
         <span>{{ tr('player.styleCustomization.splitColors', '部件独立配色') }}</span>
         <button
           type="button"
@@ -417,7 +477,11 @@
       </label>
 
       <div
-        v-if="local.climaxUseThemeColor && local.climaxSplitColors"
+        v-if="
+          !['wordCloud', 'dotMatrix'].includes(styleKey) &&
+          local.climaxUseThemeColor &&
+          local.climaxSplitColors
+        "
         class="nested-settings color-layers"
       >
         <div v-for="layer in colorLayers" :key="layer.key" class="color-layer-row">
@@ -526,11 +590,26 @@
         <div v-show="showAdvancedParams" class="advanced-params-body">
           <!-- 统一参数系统：schema 驱动渲染（playerStyleParams.ts 声明，resolve 自动钳制） -->
           <template v-for="group in paramGroups" :key="group.title">
-            <div class="section-label">{{ group.title }}</div>
+            <div class="section-label">
+              {{
+                ['wordCloud', 'dotMatrix'].includes(styleKey)
+                  ? tr(`player.styles.${styleKey}`, group.title)
+                  : group.title
+              }}
+            </div>
             <label v-for="def in group.items" :key="def.key" class="range-row">
               <span
-                >{{ def.label
-                }}{{ def.type === 'number' ? ` ${local[def.key]}${def.unit ?? ''}` : '' }}</span
+                >{{
+                  ['wordCloud', 'dotMatrix'].includes(styleKey)
+                    ? tr(`player.${styleKey}.${def.key}`, def.label)
+                    : def.label
+                }}{{
+                  def.type === 'number'
+                    ? def.key === 'cloudVertical'
+                      ? ` ${Math.round(Number(local[def.key]) * 100)}%`
+                      : ` ${local[def.key]}${def.unit ?? ''}`
+                    : ''
+                }}</span
               >
               <input
                 v-if="def.type === 'number'"
@@ -774,6 +853,11 @@ import type {
 import { BUILTIN_FONTS } from '@/types/share';
 import { ensureFontLoaded } from '@/utils/fontLoader';
 
+const cloudToggles = [
+  { key: 'cloudFocus', label: '聚焦当前句' },
+  { key: 'cloudEstimate', label: '普通 LRC 时间估算' }
+];
+const cloudBackgrounds = ['cover', 'grid', 'mesh', 'liquid', 'ether', 'ripple'];
 const props = defineProps<{
   styleKey: MobilePlayerStyleKey;
   modelValue: PlayerStyleCustomConfig;
@@ -897,10 +981,6 @@ async function selectBuiltinFont(fontId: string) {
   local.value.customFontName = undefined;
   local.value.customFontData = undefined;
   if (fontId) await ensureFontLoaded(fontId);
-}
-
-function checked(event: Event): boolean {
-  return (event.target as HTMLInputElement).checked;
 }
 
 const showAdvancedParams = ref(false);

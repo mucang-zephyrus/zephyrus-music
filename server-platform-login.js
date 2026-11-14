@@ -30,6 +30,7 @@ const { createBilibiliRouter } = require('./server-bilibili');
 // Folia 移植：qq-music-api（子进程+反代）/ KuGouMusicApi（进程内直调）
 const { createQqApiRouter } = require('./server-qq-api');
 const { createKugouApiRouter } = require('./server-kugou-api');
+const { createShareLinkRouter } = require('./server-share-link');
 
 const router = express.Router();
 
@@ -60,6 +61,7 @@ function platformCors(req, res, next) {
 }
 
 router.use(platformCors);
+router.use('/share', createShareLinkRouter());
 
 // ==================== 更新发布信息自动同步（RELEASE_NOTE） ====================
 

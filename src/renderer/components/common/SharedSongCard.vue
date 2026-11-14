@@ -1,7 +1,14 @@
 <template>
   <Transition name="card-pop">
     <div v-if="visible" class="shared-card-overlay" @click.self="dismiss">
-      <div class="shared-card">
+      <div
+        ref="card"
+        class="shared-card"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="metaLabel"
+        tabindex="-1"
+      >
         <!-- 封面 -->
         <div class="cover-wrap">
           <img v-if="coverUrl" :src="coverUrl" alt="" class="cover" crossorigin="anonymous" />
@@ -9,8 +16,8 @@
             <i v-if="loading" class="ri-loader-4-line spinning" />
             <i v-else :class="kindIcon" />
           </div>
-          <div class="kind-tag">{{ kindLabel }}</div>
-          <button class="card-close" aria-label="关闭" @click="dismiss">
+          <div class="kind-tag">{{ platformLabel || kindLabel }}</div>
+          <button class="card-close" :aria-label="t('share.import.close')" @click="dismiss">
             <i class="ri-close-line" />
           </button>
         </div>
@@ -18,7 +25,9 @@
         <!-- 信息 -->
         <div class="meta">
           <div class="meta-label">{{ metaLabel }}</div>
-          <div class="title">{{ title || '加载中' }}</div>
+          <div class="title">
+            {{ title || t(failed ? 'share.import.failed' : 'share.import.loading') }}
+          </div>
           <div class="subtitle">{{ subtitleText }}</div>
           <div v-if="statsText" class="stats">{{ statsText }}</div>
         </div>
@@ -33,18 +42,24 @@
             </div>
           </div>
           <div v-if="trackMore > 0" class="tracks-more">
-            还有 {{ trackMore }} 首，播放后查看全部
+            {{ t('share.import.moreTracks', { count: trackMore }) }}
           </div>
         </div>
 
         <!-- 动作 -->
         <div class="actions">
+          <p v-if="failed" class="share-error" role="alert">{{ t('share.import.failed') }}</p>
+          <button v-if="failed" class="btn btn-secondary" @click="retry">
+            {{ t('share.import.retry') }}
+          </button>
           <button class="btn btn-primary" :disabled="loading || !playable" @click="handlePlay">
             <i v-if="loading" class="ri-loader-4-line spinning" />
             <span v-else class="btn-inner"><i class="ri-play-fill" />{{ primaryLabel }}</span>
           </button>
           <button v-if="collectionId" class="btn btn-secondary" @click="openCollectionPage">
-            <i class="ri-arrow-right-line" /><span>查看完整{{ kindLabel }}</span>
+            <i class="ri-arrow-right-line" /><span>{{
+              t('share.import.openCollection', { kind: kindLabel })
+            }}</span>
           </button>
         </div>
       </div>
@@ -53,10 +68,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { getAlbumDetail, getMusicDetail, getPlaylistDetail } from '@/api/music';
+import { resolveSharedSong } from '@/api/musicShare';
+import { registerMobileBackLayer } from '@/services/mobileBackStack';
 import { usePlayerStore } from '@/store/modules/player';
 import type { SongResult } from '@/types/music';
 import { getImgUrl } from '@/utils';
@@ -70,6 +88,13 @@ interface TrackRow {
 }
 
 const router = useRouter();
+const { t } = useI18n();
+const card = ref<HTMLElement>();
+const failed = ref(false);
+const platformLabel = ref('');
+let session = 0;
+let retryAction: (() => void) | undefined;
+let previousFocus: HTMLElement | null = null;
 const visible = ref(false);
 const loading = ref(false);
 const kind = ref<CardKind>('song');
@@ -83,13 +108,12 @@ const trackMore = ref(0);
 const collectionId = ref<number | null>(null);
 const collectionSongs = ref<SongResult[]>([]);
 
-let currentTarget = '';
 let historyPushed = false;
+let historyBackPending = false;
+let historyBackDone: (() => void) | undefined;
 let totalTrackCount = 0;
 
-const kindLabel = computed(() =>
-  kind.value === 'song' ? '歌曲' : kind.value === 'album' ? '专辑' : '歌单'
-);
+const kindLabel = computed(() => t(`share.import.${kind.value}`));
 const kindIcon = computed(() =>
   kind.value === 'song'
     ? 'ri-music-2-fill'
@@ -98,20 +122,19 @@ const kindIcon = computed(() =>
       : 'ri-disc-fill'
 );
 const metaLabel = computed(() =>
-  kind.value === 'song'
-    ? '发现一首分享歌曲'
-    : kind.value === 'album'
-      ? '发现一张分享专辑'
-      : '发现一份分享歌单'
+  t(`share.import.found${kind.value[0].toUpperCase()}${kind.value.slice(1)}`)
 );
-const primaryLabel = computed(() => (kind.value === 'song' ? '播放' : '播放全部'));
+const primaryLabel = computed(() =>
+  t(kind.value === 'song' ? 'share.import.play' : 'share.import.playAll')
+);
 const playable = computed(() =>
   kind.value === 'song' ? Boolean(song.value) : collectionSongs.value.length > 0
 );
 
-function beginSession(target: string) {
-  if (target === currentTarget && visible.value) return;
-  currentTarget = target;
+function beginSession() {
+  const token = ++session;
+  failed.value = false;
+  platformLabel.value = '';
   loading.value = true;
   visible.value = true;
   kind.value = 'song';
@@ -127,42 +150,47 @@ function beginSession(target: string) {
   totalTrackCount = 0;
 
   // pushState 让返回手势可以关闭卡片
-  if (!historyPushed) {
+  if (!historyPushed && !historyBackPending) {
     historyPushed = true;
-    history.pushState({ sharedCard: true }, '');
+    history.pushState({ ...history.state, sharedCard: true }, '');
   }
+  return token;
 }
 
 /** 歌曲：加载详情 */
-async function showSongCard(songId: number) {
-  beginSession(`song-${songId}`);
+function showSongCard(songId: number) {
+  return showShareCard(`zephyrus://song/${songId}`);
+}
+async function showShareCard(url: string) {
+  const token = beginSession();
+  retryAction = () => {
+    void showShareCard(url);
+  };
   try {
-    const res = await getMusicDetail([songId]);
-    const detail = res?.data?.songs?.[0] as SongResult | undefined;
-    if (!detail) {
-      console.warn('[SharedSongCard] 未找到歌曲, id:', songId);
-      dismiss();
-      return;
-    }
-    kind.value = 'song';
+    const detail = await resolveSharedSong(url);
+    if (token !== session) return;
     song.value = detail;
-    title.value = detail.name || '未知歌曲';
-    subtitleText.value = (detail.ar || detail.artists || []).map((a: any) => a.name).join(' / ');
-    coverUrl.value =
-      detail.al?.picUrl || detail.album?.picUrl
-        ? getImgUrl(detail.al?.picUrl || detail.album?.picUrl, '400y400')
-        : '';
-  } catch (err) {
-    console.error('[SharedSongCard] 加载歌曲详情失败:', err);
-    dismiss();
+    title.value = detail.name || t('share.import.unknownSong');
+    subtitleText.value = (detail.ar || detail.artists || []).map((a) => a.name).join(' / ');
+    const cover = detail.al?.picUrl || detail.album?.picUrl || detail.picUrl;
+    coverUrl.value = cover ? getImgUrl(cover, '400y400') : '';
+    platformLabel.value = t(`share.import.platforms.${detail.platform || 'netease'}`);
+  } catch {
+    if (token === session) failed.value = true;
   } finally {
-    loading.value = false;
+    if (token === session) loading.value = false;
   }
+}
+function retry() {
+  retryAction?.();
 }
 
 /** 歌单/专辑：加载合集信息 + 前 5 首曲目 */
 async function showCollectionCard(kindArg: CollectionKind, id: number) {
-  beginSession(`${kindArg}-${id}`);
+  const token = beginSession();
+  retryAction = () => {
+    void showCollectionCard(kindArg, id);
+  };
   kind.value = kindArg;
   collectionId.value = id;
   const isAlbum = kindArg === 'album';
@@ -171,6 +199,7 @@ async function showCollectionCard(kindArg: CollectionKind, id: number) {
     let firstSongs: SongResult[] = [];
     if (isAlbum) {
       const res = await getAlbumDetail(String(id));
+      if (token !== session) return;
       const album = res?.data?.album;
       if (!album) throw new Error('未找到专辑');
       title.value = album.name || '未知专辑';
@@ -182,6 +211,7 @@ async function showCollectionCard(kindArg: CollectionKind, id: number) {
       totalTrackCount = firstSongs.length;
     } else {
       const detail = await getPlaylistDetail(String(id));
+      if (token !== session) return;
       const pl = detail?.playlist;
       if (!pl) throw new Error('未找到歌单');
       title.value = pl.name || '未知歌单';
@@ -193,6 +223,7 @@ async function showCollectionCard(kindArg: CollectionKind, id: number) {
       const ids = (pl.trackIds || []).slice(0, 5).map((t: any) => t.id);
       if (ids.length) {
         const res = await getMusicDetail(ids);
+        if (token !== session) return;
         firstSongs = (res?.data?.songs || []) as SongResult[];
       }
       totalTrackCount = total;
@@ -210,11 +241,11 @@ async function showCollectionCard(kindArg: CollectionKind, id: number) {
     }));
     trackMore.value = Math.max(0, totalTrackCount - tracks.value.length);
     collectionSongs.value = firstSongs;
-  } catch (err) {
-    console.error('[SharedSongCard] 加载合集失败:', err);
-    dismiss();
+  } catch {
+    console.warn('[SharedSongCard] Collection unavailable');
+    if (token === session) failed.value = true;
   } finally {
-    loading.value = false;
+    if (token === session) loading.value = false;
   }
 }
 
@@ -252,19 +283,22 @@ async function handlePlay() {
 }
 
 /** 打开完整歌单/专辑页 */
-function openCollectionPage() {
+async function openCollectionPage() {
   if (!collectionId.value) return;
   const id = collectionId.value;
-  dismiss();
+  const collectionKind = kind.value;
+  await dismiss();
+  if (visible.value) return;
   router.push({
     path: `/music-list/${id}`,
-    query: { type: kind.value, id: String(id) }
+    query: { type: collectionKind, id: String(id) }
   });
 }
 
-function dismiss() {
+function dismiss(): Promise<void> {
+  session++;
   visible.value = false;
-  currentTarget = '';
+  loading.value = false;
 
   // 重置去重标记，允许同一链接再次被处理
   resetLastHandledUrl();
@@ -272,46 +306,103 @@ function dismiss() {
   // 清理 pushState 的历史条目
   if (historyPushed) {
     historyPushed = false;
-    history.back();
+    historyBackPending = true;
+    return new Promise((resolve) => {
+      historyBackDone = resolve;
+      history.back();
+    });
   }
-
-  setTimeout(() => {
-    song.value = null;
-    title.value = '';
-    subtitleText.value = '';
-    statsText.value = '';
-    coverUrl.value = '';
-    tracks.value = [];
-    collectionSongs.value = [];
-    collectionId.value = null;
-  }, 300);
+  return Promise.resolve();
 }
 
 // 监听 popstate（返回手势关闭卡片）
 function onPopState() {
+  if (historyBackPending) {
+    historyBackPending = false;
+    // A new share may arrive before the previous card's asynchronous back completes.
+    if (visible.value) {
+      historyPushed = true;
+      history.pushState({ ...history.state, sharedCard: true }, '');
+    }
+    historyBackDone?.();
+    historyBackDone = undefined;
+    return;
+  }
   if (historyPushed && visible.value) {
     historyPushed = false;
     visible.value = false;
-    currentTarget = '';
     resetLastHandledUrl();
-    setTimeout(() => {
-      song.value = null;
-      tracks.value = [];
-    }, 300);
+    session++;
+    loading.value = false;
   }
 }
 
 window.addEventListener('popstate', onPopState);
+const unregisterBack = registerMobileBackLayer({
+  id: 'shared-song-card',
+  priority: 1200,
+  isActive: () => visible.value,
+  onBack: () => {
+    dismiss();
+    return true;
+  }
+});
+function keydown(event: KeyboardEvent) {
+  if (!visible.value) return;
+  event.stopImmediatePropagation();
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    dismiss();
+  }
+  if (event.key !== 'Tab') return;
+  const buttons = [
+    ...(card.value?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') || [])
+  ];
+  const first = buttons[0],
+    last = buttons[buttons.length - 1];
+  if (
+    event.shiftKey &&
+    (document.activeElement === first || document.activeElement === card.value)
+  ) {
+    event.preventDefault();
+    last?.focus();
+  } else if (
+    !event.shiftKey &&
+    (document.activeElement === last || document.activeElement === card.value)
+  ) {
+    event.preventDefault();
+    first?.focus();
+  }
+}
+document.addEventListener('keydown', keydown, true);
+watch(visible, async (value) => {
+  if (value) {
+    previousFocus = document.activeElement as HTMLElement;
+    await nextTick();
+    card.value?.focus();
+  } else if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+});
 
 onBeforeUnmount(() => {
+  session++;
+  unregisterBack();
+  document.removeEventListener('keydown', keydown, true);
   window.removeEventListener('popstate', onPopState);
 });
 
-defineExpose({ showSongCard, showCollectionCard });
+defineExpose({ showSongCard, showShareCard, showCollectionCard });
 </script>
 
 <style scoped>
 /* 与中继页（relay.html）统一的玻璃卡片设计语言 */
+.share-error {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #f0ada5;
+}
+.shared-card:focus {
+  outline: none;
+}
 .shared-card-overlay {
   position: fixed;
   inset: 0;

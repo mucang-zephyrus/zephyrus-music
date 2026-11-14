@@ -10,22 +10,21 @@ import type { MobilePlayerStyleKey } from '@/types/playerStyle';
 import type { VideoSkin } from '../types';
 import { defaultSkin } from './default';
 import { errorSkin } from './error';
-import { frenzySkin } from './frenzy';
 import { smokeSkin } from './smoke';
 import { stageSkin } from './stage';
 import { starChartSkin } from './starChart';
 
-const SKINS: Record<MobilePlayerStyleKey, VideoSkin> = {
+const SKINS: Partial<Record<MobilePlayerStyleKey, VideoSkin>> = {
   default: defaultSkin,
   stage: stageSkin,
   starChart: starChartSkin,
-  frenzy: frenzySkin,
   smoke: smokeSkin,
   error: errorSkin
 };
 
 /** 取指定样式的视频皮肤；未知 key 退回默认皮肤 */
 export function getSkin(key: string): VideoSkin {
+  if (key === 'wordCloud') throw new Error('词云样式暂不支持视频导出');
   return SKINS[key as MobilePlayerStyleKey] ?? defaultSkin;
 }
 

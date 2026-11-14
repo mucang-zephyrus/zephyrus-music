@@ -15,8 +15,8 @@ type LyricSwipeGestureOptions = {
   role?: 'lyrics' | 'comments';
   /** 返回 true 时手势不响应（页面互斥：歌词页打开时抑制评论手势，反之亦然） */
   suppressed?: () => boolean;
-  /** 入场变体：slide=整层横滑（现状）；scale=以小歌词区为锚的容器变换放大 */
-  variant?: () => 'slide' | 'scale';
+  /** resize 的实际尺寸由宿主按 progress 驱动，手势只负责进度与封面渐隐。 */
+  variant?: () => 'slide' | 'scale' | 'resize';
   /** scale 变体的折叠态几何（区中心与区/全屏宽高比），由消费方在手势外测量 */
   scaleGeometry?: () => { originX: number; originY: number; scaleX: number; scaleY: number } | null;
 };
@@ -155,6 +155,7 @@ export function useLyricSwipeGesture(options: LyricSwipeGestureOptions) {
 
   const overlayStyle = computed<CSSProperties>(() => {
     if (!previewing.value || !phase.value) return {};
+    if (options.variant?.() === 'resize') return {};
     if (options.variant?.() === 'scale') return scaleOverlayStyle();
     const width = viewportWidth();
     if (phase.value === 'opening') {
@@ -191,15 +192,13 @@ export function useLyricSwipeGesture(options: LyricSwipeGestureOptions) {
 
   const underlayStyle = computed<CSSProperties>(() => {
     if (!previewing.value || !phase.value) return {};
-    if (options.variant?.() === 'scale') {
+    if (options.variant?.() === 'scale' || options.variant?.() === 'resize') {
       // scale/morph 变体：原封面/信息区留在原地随手势渐隐/渐显（克隆层负责封面
       // 的飞行呈现，起点与原封面重合故无重影）；此前硬性 opacity 0 + transition:none
       // 会让歌名/作者瞬间消失，观感像假死
       const p = phase.value === 'opening' ? progress.value : 1 - progress.value;
       return animatedStyle(
-        phase.value === 'opening'
-          ? `translate3d(0, ${(-18 * p).toFixed(2)}px, 0)`
-          : 'none',
+        phase.value === 'opening' ? `translate3d(0, ${(-18 * p).toFixed(2)}px, 0)` : 'none',
         1 - p
       );
     }

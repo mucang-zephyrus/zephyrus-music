@@ -90,6 +90,10 @@ export default {
     albumBgVivid: '高飽和（貼合封面）'
   },
   playback: {
+    neteaseRequestMode: '網易雲 API 請求方式',
+    neteaseRequestModeDesc: '播放或載入異常時可切換請求方式，下次請求生效並儲存在本裝置。Enhanced 使用線上閘道；會員及版權限制仍適用。',
+    neteaseAlger: 'Alger（原有方式）',
+    neteaseEnhanced: 'Enhanced（xeapi）',
     quality: '音質設定',
     qualityDesc: '選擇音樂播放音質（網易云VIP）',
     qualityOptions: {

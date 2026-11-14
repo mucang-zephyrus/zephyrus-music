@@ -1,7 +1,8 @@
-import { computed, nextTick, ref } from 'vue';
 import { describe, expect, it } from 'vitest';
+import { computed, nextTick, ref } from 'vue';
 
-import { ttmlToTimedLines, type TtmlLine, type TtmlLyric } from '@/services/ttmlParser';
+import { type TtmlLine, type TtmlLyric,ttmlToTimedLines } from '@/services/ttmlParser';
+import type { ILyricText } from '@/types/music';
 import { providerLyricsToAmll, ttmlLyricsToAmll } from '@/utils/amllLyricAdapter';
 import {
   cleanCreditKeywords,
@@ -11,7 +12,6 @@ import {
   projectCreditLyrics,
   projectCreditTtml
 } from '@/utils/lyricCredits';
-import type { ILyricText } from '@/types/music';
 
 const enabled = normalizeCreditConfig({ hideIntroOutroCredits: true });
 const rows = (...texts: string[]): ILyricText[] =>
@@ -34,6 +34,13 @@ describe('intro/outro credit recognition', () => {
     '制作：人',
     '製作:人',
     'lYrIcS ： Someone',
+    '鼓手：示例 Drums: Example',
+    '音频编辑：示例 Track Editing: Example',
+    '器乐录音：示例 / 录音棚：示例 Instrument Recording: Example / Studio: Example',
+    '人声錄音：示例 Vocal Recording: Example',
+    'Instrument Recording: Example / Recording Studio: Example',
+    '编曲 Arrangement: Example',
+    'Vocal Recording人声录音: Example',
     ' 原词 / 作曲／編曲&混音＆母帶、錄音+Producer＋Vocals : 人'
   ])('matches complete equivalent fields: %s', (credit) => {
     expect(hidden([credit, '正文', credit])).toEqual([0, 2]);
@@ -54,6 +61,7 @@ describe('intro/outro credit recognition', () => {
       '作词人名',
       '某某作曲:甲',
       '作曲/未知:甲',
+      '编曲 Unknown: Example',
       '作词/:甲',
       '作.*:甲'
     ]) {

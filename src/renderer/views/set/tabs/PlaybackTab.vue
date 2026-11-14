@@ -1,6 +1,19 @@
 <template>
   <div>
     <setting-section :title="t('settings.sections.playback')">
+      <ios-audio-protection-settings class="mb-4" />
+      <setting-item
+        item-id="netease-request-mode"
+        :title="t('settings.playback.neteaseRequestMode')"
+        :description="t('settings.playback.neteaseRequestModeDesc')"
+      >
+        <s-select
+          :model-value="normalizeNeteaseRequestMode(setData.neteaseRequestMode)"
+          :options="neteaseRequestOptions"
+          width="w-56 max-md:w-full"
+          @update:model-value="changeNeteaseRequestMode"
+        />
+      </setting-item>
       <setting-item
         :title="t('settings.playback.quality')"
         :description="t('settings.playback.qualityDesc')"
@@ -12,10 +25,7 @@
         />
       </setting-item>
 
-      <setting-item
-        v-if="isElectron"
-        :title="t('settings.playback.musicSources')"
-      >
+      <setting-item v-if="isElectron" :title="t('settings.playback.musicSources')">
         <template #description>
           <div class="flex items-center gap-2">
             <n-switch v-model:value="setData.enableMusicUnblock">
@@ -104,25 +114,40 @@ import { computed, inject, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import AudioDeviceSettings from '@/components/settings/AudioDeviceSettings.vue';
+import IosAudioProtectionSettings from '@/components/settings/IosAudioProtectionSettings.vue';
 import MusicSourceSettings from '@/components/settings/MusicSourceSettings.vue';
 import SmartMixSettings from '@/components/settings/SmartMixSettings.vue';
+import { useSettingsStore } from '@/store/modules/settings';
 import { type Platform } from '@/types/music';
 import { isElectron } from '@/utils';
+import { normalizeNeteaseRequestMode } from '@/utils/neteaseRequestMode';
 
-import KeepAliveTab from './KeepAliveTab.vue';
 import { SETTINGS_DATA_KEY } from '../keys';
 import SBtn from '../SBtn.vue';
 import SettingItem from '../SettingItem.vue';
 import SettingSection from '../SettingSection.vue';
 import SSelect from '../SSelect.vue';
+import KeepAliveTab from './KeepAliveTab.vue';
 
 const ALL_PLATFORMS: Platform[] = ['migu', 'kugou', 'kuwo', 'pyncmd'];
 
 const { t } = useI18n();
 const setData = inject(SETTINGS_DATA_KEY)!;
+const settingsStore = useSettingsStore();
 const platform = window.electron ? window.electron.ipcRenderer.sendSync('get-platform') : 'web';
 
 const showMusicSourcesModal = ref(false);
+
+const neteaseRequestOptions = computed(() => [
+  { label: t('settings.playback.neteaseAlger'), value: 'alger' },
+  { label: t('settings.playback.neteaseEnhanced'), value: 'enhanced' }
+]);
+
+function changeNeteaseRequestMode(value: string | number | boolean) {
+  setData.value = { ...setData.value, neteaseRequestMode: normalizeNeteaseRequestMode(value) };
+  // Persist immediately so returning to playback or refreshing uses the chosen backend.
+  settingsStore.setSetData(setData.value);
+}
 
 const qualityOptions = computed(() => [
   { label: t('settings.playback.qualityOptions.standard'), value: 'standard' },

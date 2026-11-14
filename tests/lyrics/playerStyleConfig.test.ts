@@ -8,6 +8,25 @@ import {
 } from '@/config/playerStyleConfig';
 
 describe('smoke player style configuration', () => {
+  it('provides isolated word-cloud defaults and normalizes its controls', () => {
+    expect(createPlayerStyleConfig('wordCloud')).toMatchObject({
+      cloudFocus: true,
+      cloudEstimate: true,
+      cloudBackground: 'cover',
+      cloudScale: 1,
+      cloudSpacing: 1,
+      cloudVertical: 0.3,
+      cloudCameraSpeed: 1
+    });
+    expect(
+      resolvePlayerStyleConfig('wordCloud', { cloudScale: 4, cloudVertical: -1 })
+    ).toMatchObject({
+      cloudScale: 1.8,
+      cloudVertical: 0
+    });
+    expect(createPlayerStyleConfig('stage')).not.toHaveProperty('cloudFocus');
+  });
+
   it('defaults smoke and climax glow colors to the song theme', () => {
     const config = createPlayerStyleConfig('smoke');
 

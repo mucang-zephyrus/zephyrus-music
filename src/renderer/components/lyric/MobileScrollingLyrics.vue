@@ -56,18 +56,22 @@
       class="amll-player"
       :style="scrollPlayerStyle"
       :lyric-lines="amllLines"
-      :current-time="amllDisabled ? 0 : currentTimeMs"
+      :current-time="currentTimeMs"
       :disabled="amllDisabled"
       :playing="isPlaying && !amllDisabled"
       align-anchor="center"
-      :align-position="0.48"
+      :align-position="lyricAlignPosition"
       :enable-spring="springEnabled"
       :enable-blur="blurEnabled"
       :enable-scale="!androidNative && !reduceMotion"
       :word-fade-width="1"
       :optimize-options="optimizeOptions"
       @line-click="handleLineClick"
-    />
+    >
+      <template #bottom-line>
+        <lyric-merge-notice :visible="!playback.usingTtml.value && !selectMode" />
+      </template>
+    </lyric-player>
 
     <div v-else-if="hasSourceLyrics" class="lyric-transition-placeholder" aria-hidden="true">
       {{ transitionLyricText }}
@@ -95,12 +99,18 @@
 <script setup lang="ts">
 import '@applemusic-like-lyrics/core/style.css';
 
-import type { LyricLine, LyricLineMouseEvent } from '@applemusic-like-lyrics/core';
+import type {
+  LyricLine,
+  LyricLineMouseEvent,
+  LyricPlayer as CoreLyricPlayer
+} from '@applemusic-like-lyrics/core';
 import { LyricPlayer, type LyricPlayerRef } from '@applemusic-like-lyrics/vue';
 import { computed, isRef, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
+import LyricMergeNotice from '@/components/lyric/LyricMergeNotice.vue';
 import { useLyricSelectionSurface } from '@/composables/useLyricSelectionSurface';
+import { useMeasuredLyricMount } from '@/composables/useMeasuredLyricMount';
 import { useMobilePlayerTransition } from '@/composables/useMobilePlayerTransition';
 import { useWordTimedPlayback } from '@/composables/useWordTimedPlayback';
 import { isAndroidNative } from '@/services/androidNative';
@@ -109,6 +119,7 @@ import { registerMobileBackLayer } from '@/services/mobileBackStack';
 import { usePlayerStore } from '@/store/modules/player';
 import { DEFAULT_LYRIC_CONFIG, type LyricConfig, normalizeLyricAlignment } from '@/types/lyric';
 import type { SelectedLyric } from '@/types/share';
+import { followAmllLayout } from '@/utils/amllLayoutFollow';
 import {
   lyricLineText,
   MOBILE_AMLL_OPTIMIZE_OPTIONS,
@@ -120,10 +131,10 @@ import { acquirePlayerResource } from '@/utils/playerResourceDiagnostics';
 
 let scrollingLyricsInstanceId = 0;
 
-const props = withDefaults(defineProps<{ backCloses?: boolean; active?: boolean }>(), {
-  backCloses: false,
-  active: true
-});
+const props = withDefaults(
+  defineProps<{ backCloses?: boolean; active?: boolean; followLayout?: boolean }>(),
+  { backCloses: false, active: true, followLayout: false }
+);
 const emit = defineEmits<{ close: []; interact: []; generatePoster: [lyrics: SelectedLyric[]] }>();
 const { t } = useI18n();
 const playerStore = usePlayerStore();
@@ -135,19 +146,13 @@ const playerRef = ref<LyricPlayerRef | null>(null);
 const rootRef = ref<HTMLElement | null>(null);
 const config = ref<LyricConfig>({ ...DEFAULT_LYRIC_CONFIG });
 const reduceMotion = ref(false);
-const isIntersecting = ref(true);
 const pageVisible = ref(!document.hidden);
-const hasMountedPlayer = ref(false);
-let releaseLyricPlayerResource: (() => void) | null = null;
-const showPreparingOverlay = ref(false);
 const isPointerScrolling = ref(false);
 const selectMode = ref(false);
 const selectedSet = ref<Set<number>>(new Set());
 const toastMsg = ref('');
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 let motionQuery: MediaQueryList | null = null;
-let visibilityObserver: IntersectionObserver | null = null;
-let releaseVisibilityObserver: (() => void) | null = null;
 let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 let pointerId: number | null = null;
 let pointerStartX = 0;
@@ -165,8 +170,6 @@ function notifyScrollActivity() {
   emit('interact');
 }
 let suppressedLineSourceIndex: number | null = null;
-let mountTimer: ReturnType<typeof setTimeout> | null = null;
-let mountIdleCallback = 0;
 let unregisterBackLayer: (() => void) | null = null;
 const androidNative = isAndroidNative();
 const backLayerId = `mobile-scrolling-lyrics-${++scrollingLyricsInstanceId}`;
@@ -175,6 +178,7 @@ const optimizeOptions = MOBILE_AMLL_OPTIMIZE_OPTIONS;
 
 const currentTimeMs = computed(() => Math.max(0, Math.round(playback.correctedTime.value * 1000)));
 const isPlaying = computed(() => playerStore.isPlaying);
+const lyricAlignPosition = 0.48;
 // 滚动歌词独立字体配置：字体按需加载，字重/字号直接内联到 AMLL 播放器根节点
 const scrollFontFamily = ref('');
 watch(
@@ -189,6 +193,7 @@ watch(
   { immediate: true }
 );
 const scrollPlayerStyle = computed(() => ({
+  '--amll-align-position': lyricAlignPosition,
   fontFamily: scrollFontFamily.value || undefined,
   fontWeight: config.value.scrollFontWeight || undefined,
   ...(config.value.scrollFontSize > 0
@@ -207,8 +212,16 @@ const transitionSettled = computed(
     playerTransition.state.value === 'open' ||
     (playerTransition.state.value === 'idle' && playerStore.musicFull)
 );
+const playerMountAllowed = computed(() => props.active && transitionSettled.value);
+const { mounted: hasMountedPlayer, pending: showPreparingOverlay } = useMeasuredLyricMount(
+  () => playerMountAllowed.value,
+  rootRef
+);
 const amllDisabled = computed(
-  () => !props.active || !transitionSettled.value || !isIntersecting.value || !pageVisible.value
+  // The host owns visibility. During the capsule's clip-path transition an
+  // IntersectionObserver can retain a hidden result after the player opens,
+  // leaving AMLL's animation loop stopped and all lyric groups offscreen.
+  () => !props.active || !transitionSettled.value || !pageVisible.value
 );
 const springEnabled = computed(() => !reduceMotion.value);
 const blurEnabled = computed(
@@ -220,9 +233,7 @@ const allAmllLines = computed<LyricLine[]>(() => {
   }
   return providerLyricsToAmll(playback.displayLines.value);
 });
-const hasSourceLyrics = computed(
-  () => allAmllLines.value.some((line) => lyricLineText(line))
-);
+const hasSourceLyrics = computed(() => allAmllLines.value.some((line) => lyricLineText(line)));
 const amllLines = computed(() =>
   deepPlainLines(
     allAmllLines.value.map((line) => ({
@@ -243,11 +254,26 @@ function deepPlainLines(lines: LyricLine[]): LyricLine[] {
     return lines;
   }
 }
-const renderAmllPlayer = computed(() => hasMountedPlayer.value && hasSourceLyrics.value);
-const transitionLyricText = computed(
-  () =>
-    playback.currentDisplayLine.value?.text || ''
+// v-show on the host reports zero heights to AMLL's virtualized lyric rows.
+// Those measurements survive re-entry and progressively hide the whole song.
+// Dispose while inactive and mount a fresh core only after the viewport returns.
+const renderAmllPlayer = computed(
+  () => playerMountAllowed.value && hasMountedPlayer.value && hasSourceLyrics.value
 );
+watch(
+  renderAmllPlayer,
+  (render, _, onCleanup) => {
+    if (render) {
+      onCleanup(acquirePlayerResource('lyric-player'));
+    } else {
+      if (pointerId !== null) releasePointerCapture(pointerId);
+      clearLongPress();
+      if (selectMode.value) exitSelectMode();
+    }
+  },
+  { flush: 'sync' }
+);
+const transitionLyricText = computed(() => playback.currentDisplayLine.value?.text || '');
 const selectableIndices = computed(() =>
   amllLines.value
     .map((line, index) => ({ line, index }))
@@ -287,7 +313,7 @@ function seekToLine(index: number) {
   emit('interact');
 }
 
-type AmllPlayerRuntime = {
+type AmllPlayerRuntime = Pick<CoreLyricPlayer, 'calcLayout' | 'update'> & {
   currentLyricGroups?: Array<{ mainLine?: AmllLineHandle }>;
   resetScroll?: () => void;
 };
@@ -297,6 +323,23 @@ function resolvedAmllPlayer(): AmllPlayerRuntime | null {
   const player = isRef(exposed) ? exposed.value : exposed;
   return player && typeof player === 'object' ? (player as AmllPlayerRuntime) : null;
 }
+
+watch(
+  resolvedAmllPlayer,
+  (player, _, onCleanup) => {
+    if (!player) return;
+    const layout = followAmllLayout(player);
+    const stop = watch(() => props.followLayout, layout.setFollowing, {
+      immediate: true,
+      flush: 'sync'
+    });
+    onCleanup(() => {
+      stop();
+      layout.dispose();
+    });
+  },
+  { flush: 'post' }
+);
 
 /** 供宿主在手势/页面切换后显式恢复 AMLL 自动跟随（挂起态的兜底出口） */
 defineExpose({
@@ -572,7 +615,9 @@ function selectedLyrics(): SelectedLyric[] {
     .map((index) => {
       const line = amllLines.value[index];
       return {
-        index: (line as LyricLine & { __zephyrusOriginalIndex?: number }).__zephyrusOriginalIndex ?? index,
+        index:
+          (line as LyricLine & { __zephyrusOriginalIndex?: number }).__zephyrusOriginalIndex ??
+          index,
         text: lyricLineText(line),
         trText: line.translatedLyric || undefined
       };
@@ -605,55 +650,6 @@ function handleVisibilityChange() {
   pageVisible.value = !document.hidden;
 }
 
-function cancelDeferredMount() {
-  if (mountTimer) clearTimeout(mountTimer);
-  mountTimer = null;
-  if (mountIdleCallback && 'cancelIdleCallback' in window) {
-    window.cancelIdleCallback(mountIdleCallback);
-  }
-  mountIdleCallback = 0;
-}
-
-function mountPlayerWhenIdle() {
-  if (!transitionSettled.value || hasMountedPlayer.value) return;
-  showPreparingOverlay.value = true;
-  // Let the loading surface paint before AMLL creates its lyric tree. One
-  // frame is enough; waiting for browser idle can leave the user staring at a
-  // blank lyric area for hundreds of milliseconds on a busy Android WebView.
-  requestAnimationFrame(() => {
-    if (!transitionSettled.value) {
-      showPreparingOverlay.value = false;
-      return;
-    }
-    hasMountedPlayer.value = true;
-    releaseLyricPlayerResource = acquirePlayerResource('lyric-player');
-    showPreparingOverlay.value = false;
-  });
-}
-
-watch(
-  transitionSettled,
-  (settled) => {
-    cancelDeferredMount();
-    if (!settled || hasMountedPlayer.value) return;
-
-    // Paint the loading surface first, then mount AMLL on the next frame. The
-    // previous Android-specific 320ms delay plus requestIdleCallback made the
-    // first lyric view feel unresponsive even when the device was otherwise
-    // idle.
-    showPreparingOverlay.value = hasSourceLyrics.value;
-    mountTimer = setTimeout(
-      () => {
-        mountTimer = null;
-        if (!transitionSettled.value) return;
-        mountPlayerWhenIdle();
-      },
-      androidNative ? 0 : 16
-    );
-  },
-  { immediate: true }
-);
-
 onMounted(() => {
   unregisterBackLayer = registerMobileBackLayer({
     id: backLayerId,
@@ -670,14 +666,6 @@ onMounted(() => {
   motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
   handleMotionChange(motionQuery);
   motionQuery.addEventListener('change', handleMotionChange);
-  visibilityObserver = new IntersectionObserver(
-    ([entry]) => {
-      isIntersecting.value = entry?.isIntersecting ?? true;
-    },
-    { threshold: 0.01 }
-  );
-  releaseVisibilityObserver = acquirePlayerResource('observer');
-  if (rootRef.value) visibilityObserver.observe(rootRef.value);
   document.addEventListener('visibilitychange', handleVisibilityChange);
   window.addEventListener('music-full-config-updated', handleConfigUpdate);
 });
@@ -694,17 +682,11 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  releaseLyricPlayerResource?.();
-  releaseLyricPlayerResource = null;
-  releaseVisibilityObserver?.();
-  releaseVisibilityObserver = null;
   unregisterBackLayer?.();
   unregisterBackLayer = null;
-  cancelDeferredMount();
   if (toastTimer) clearTimeout(toastTimer);
   clearLongPress();
   lyricSelection.end(selectionOwner);
-  visibilityObserver?.disconnect();
   motionQuery?.removeEventListener('change', handleMotionChange);
   document.removeEventListener('visibilitychange', handleVisibilityChange);
   window.removeEventListener('music-full-config-updated', handleConfigUpdate);
@@ -725,15 +707,15 @@ onBeforeUnmount(() => {
   mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    #000 56px,
-    #000 calc(100% - 56px),
+    #000 var(--lyric-edge-fade, 56px),
+    #000 calc(100% - var(--lyric-edge-fade, 56px)),
     transparent 100%
   );
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    #000 56px,
-    #000 calc(100% - 56px),
+    #000 var(--lyric-edge-fade, 56px),
+    #000 calc(100% - var(--lyric-edge-fade, 56px)),
     transparent 100%
   );
 }
@@ -814,7 +796,10 @@ onBeforeUnmount(() => {
   position: relative;
   z-index: 1;
   width: 100%;
-  height: 100%;
+  height: max(100%, var(--amll-viewport-min-height, 0px));
+  /* 可视框缩小时，以同一个对齐比例裁切完整视口；位移直接跟随外层的
+   * 实际高度，不触发 AMLL Resize，也不再叠加一条独立的滚动动画。 */
+  top: calc((100% - max(100%, var(--amll-viewport-min-height, 0px))) * var(--amll-align-position));
   pointer-events: none;
   --amll-lp-color: var(
     --player-style-custom-main-color,

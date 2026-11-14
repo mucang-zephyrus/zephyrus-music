@@ -35,10 +35,10 @@ export function registerBuiltinFeatures() {
   });
 
   registerFeature({
-    id: 'frenzy-style',
-    name: '狂躁样式',
-    description: '全屏动态效果的歌词展示',
-    icon: 'ri-fire-line',
+    id: 'wordCloud-style',
+    name: '词云样式',
+    description: '固定词云画布，随演唱显现并聚焦当前句',
+    icon: 'ri-font-size-2',
     type: 'playerStyle'
   });
 

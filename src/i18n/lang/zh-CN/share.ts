@@ -1,4 +1,32 @@
 export default {
+  import: {
+    title: '导入分享链接',
+    hint: '支持网易云音乐、QQ音乐、酷狗音乐的歌曲链接及完整分享文案。识别后确认播放。',
+    placeholder: '在此粘贴分享链接或分享文案',
+    pasteManually: '未能读取剪贴板，请在上方长按或按 Ctrl+V 粘贴。',
+    identify: '识别歌曲',
+    unsupported: '未找到支持的歌曲分享链接。',
+    failed: '链接暂时无法解析或歌曲不可用，请重试。',
+    retry: '重试',
+    close: '关闭',
+    loading: '正在识别…',
+    song: '歌曲',
+    album: '专辑',
+    playlist: '歌单',
+    foundSong: '发现一首分享歌曲',
+    foundAlbum: '发现一张分享专辑',
+    foundPlaylist: '发现一份分享歌单',
+    play: '播放',
+    playAll: '播放全部',
+    unknownSong: '未知歌曲',
+    openCollection: '查看完整{kind}',
+    moreTracks: '还有 {count} 首，播放后查看全部',
+    platforms: {
+      netease: '网易云音乐',
+      qq: 'QQ音乐',
+      kugou: '酷狗音乐'
+    }
+  },
   hub: {
     title: '分享',
     image: '图片分享',

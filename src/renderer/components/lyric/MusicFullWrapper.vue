@@ -23,18 +23,20 @@ import { useWindowSize } from '@vueuse/core';
 import { computed, markRaw, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import DefaultMobilePlayerV2 from '@/components/lyric/DefaultMobilePlayerV2.vue';
+import DotMatrixPlayer from '@/components/lyric/DotMatrixPlayer.vue';
 import ErrorMobilePlayer from '@/components/lyric/ErrorMobilePlayer.vue';
-import FrenzyMobilePlayer from '@/components/lyric/FrenzyMobilePlayer.vue';
 import MusicFull from '@/components/lyric/MusicFull.vue';
 import SmokeMobilePlayer from '@/components/lyric/SmokeMobilePlayer.vue';
 import StageMobilePlayer from '@/components/lyric/StageMobilePlayer.vue';
 import StarChartPlayer from '@/components/lyric/StarChartPlayer.vue';
+import WordCloudPlayer from '@/components/lyric/WordCloudPlayer.vue';
 import { getStyle } from '@/playerStyles';
 import { usePlayerStore } from '@/store/modules/player';
 import { useStyleEngineStore } from '@/store/modules/styleEngine';
 import { DEFAULT_LYRIC_CONFIG, type LyricConfig } from '@/types/lyric';
 import { isMobilePlayerStyleKey } from '@/types/playerStyle';
 import { isMobile } from '@/utils';
+import { migrateWordCloudSettings } from '@/utils/wordCloudMigration';
 
 // 响应式配置状态
 const playerStyle = ref<LyricConfig['playerStyle']>(DEFAULT_LYRIC_CONFIG.playerStyle);
@@ -44,7 +46,7 @@ function loadConfig() {
   const saved = localStorage.getItem('music-full-config');
   if (saved) {
     try {
-      const parsed = JSON.parse(saved);
+      const parsed = migrateWordCloudSettings(JSON.parse(saved));
       const savedStyle = parsed.playerStyle;
       const normalized =
         savedStyle === 'classic' || isMobilePlayerStyleKey(savedStyle)
@@ -102,7 +104,8 @@ const isFullScreenStyle = computed(() => {
 const mobileStyleComponents: Record<string, any> = {
   stage: markRaw(StageMobilePlayer),
   starChart: markRaw(StarChartPlayer),
-  frenzy: markRaw(FrenzyMobilePlayer),
+  wordCloud: markRaw(WordCloudPlayer),
+  dotMatrix: markRaw(DotMatrixPlayer),
   smoke: markRaw(SmokeMobilePlayer),
   error: markRaw(ErrorMobilePlayer)
 };

@@ -510,11 +510,12 @@ import { getSearch } from '@/api/search';
 import SongItem from '@/components/common/SongItem.vue';
 import AccountLoginMorph from '@/components/login/AccountLoginMorph.vue';
 import DefaultMobilePlayerV2 from '@/components/lyric/DefaultMobilePlayerV2.vue';
+import DotMatrixPlayer from '@/components/lyric/DotMatrixPlayer.vue';
 import ErrorMobilePlayer from '@/components/lyric/ErrorMobilePlayer.vue';
-import FrenzyMobilePlayer from '@/components/lyric/FrenzyMobilePlayer.vue';
 import SmokeMobilePlayer from '@/components/lyric/SmokeMobilePlayer.vue';
 import StageMobilePlayer from '@/components/lyric/StageMobilePlayer.vue';
 import StarChartPlayer from '@/components/lyric/StarChartPlayer.vue';
+import WordCloudPlayer from '@/components/lyric/WordCloudPlayer.vue';
 import PlayerStyleCustomizationPanel from '@/components/player/PlayerStyleCustomizationPanel.vue';
 import { createPlayerStyleConfig, resolvePlayerStyleConfig } from '@/config/playerStyleConfig';
 import {
@@ -942,11 +943,12 @@ const previewStyle = ref<MobilePlayerStyleKey>('default');
 const previewWrapRef = ref<HTMLElement | null>(null);
 const previewScale = ref(0.32);
 
-const mobileStyleComponents: Record<MobilePlayerStyleKey, any> = {
+const mobileStyleComponents: Partial<Record<MobilePlayerStyleKey, any>> = {
   default: markRaw(DefaultMobilePlayerV2),
   stage: markRaw(StageMobilePlayer),
   starChart: markRaw(StarChartPlayer),
-  frenzy: markRaw(FrenzyMobilePlayer),
+  wordCloud: markRaw(WordCloudPlayer),
+  dotMatrix: markRaw(DotMatrixPlayer),
   smoke: markRaw(SmokeMobilePlayer),
   error: markRaw(ErrorMobilePlayer)
 };
@@ -996,10 +998,16 @@ const playerStyleOptions = computed<
     color: 'var(--accent-color, #a0a0a0)'
   },
   {
-    key: 'frenzy',
-    label: tr('player.styles.frenzy', '狂热'),
-    icon: 'ri-fire-line',
+    key: 'wordCloud',
+    label: tr('player.styles.wordCloud', '词云'),
+    icon: 'ri-font-size-2',
     color: '#ef4444'
+  },
+  {
+    key: 'dotMatrix',
+    label: tr('player.styles.dotMatrix', '点阵'),
+    icon: 'ri-grid-fill',
+    color: '#555555'
   },
   {
     key: 'smoke',

@@ -42,6 +42,7 @@ export async function fetchLrclibLyric(song: SongResult) {
     if (result.instrumental) return null;
     const content = result.syncedLyrics || result.plainLyrics || '';
     const lyric = parseTimedLyrics(content, { format: 'lrc', source: 'lrclib' });
+    lyric.sourceId = `lrclib:${result.id}`;
     return isUsableLyric(lyric) ? lyric : null;
   } catch {
     return null;

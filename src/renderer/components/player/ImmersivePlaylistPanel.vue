@@ -20,33 +20,40 @@
           @touchcancel="onRowTouchCancel"
           @contextmenu.prevent="onRowContextMenu($event, index)"
         >
-          <!-- 拖拽位移挂在 body 内层：TransitionGroup 的 FLIP 会改写行本身的 transform -->
-          <div class="iq-row-body" :style="dragRowStyle(index)">
-            <img class="iq-cover" :src="getImgUrl(song.picUrl, '100y100')" loading="lazy" alt="" />
-            <div class="iq-copy">
-              <div class="iq-name">
-                <span
-                  v-if="isCurrent(song)"
-                  class="iq-eq"
-                  :class="{ paused: !playerStore.isPlaying }"
-                  aria-hidden="true"
-                  ><i></i><i></i><i></i
-                ></span>
-                <span class="iq-name-text">{{ song.name }}</span>
+          <div class="iq-row-entrance">
+            <!-- 拖拽位移挂在 body 内层：TransitionGroup 的 FLIP 会改写行本身的 transform -->
+            <div class="iq-row-body" :style="dragRowStyle(index)">
+              <img
+                class="iq-cover"
+                :src="getImgUrl(song.picUrl, '100y100')"
+                loading="lazy"
+                alt=""
+              />
+              <div class="iq-copy">
+                <div class="iq-name">
+                  <span
+                    v-if="isCurrent(song)"
+                    class="iq-eq"
+                    :class="{ paused: !playerStore.isPlaying }"
+                    aria-hidden="true"
+                    ><i></i><i></i><i></i
+                  ></span>
+                  <span class="iq-name-text">{{ song.name }}</span>
+                </div>
+                <div class="iq-artist">{{ artistText(song) }}</div>
               </div>
-              <div class="iq-artist">{{ artistText(song) }}</div>
-            </div>
-            <div
-              class="iq-handle"
-              :class="{ dragging: dragIndex === index }"
-              @pointerdown.stop="onHandlePointerDown($event, index)"
-              @pointermove.stop="onHandlePointerMove"
-              @pointerup.stop="onHandlePointerUp"
-              @pointercancel.stop="onHandlePointerCancel"
-              @touchstart.stop
-              @click.stop
-            >
-              <i class="iconfont icon-list"></i>
+              <div
+                class="iq-handle"
+                :class="{ dragging: dragIndex === index }"
+                @pointerdown.stop="onHandlePointerDown($event, index)"
+                @pointermove.stop="onHandlePointerMove"
+                @pointerup.stop="onHandlePointerUp"
+                @pointercancel.stop="onHandlePointerCancel"
+                @touchstart.stop
+                @click.stop
+              >
+                <i class="iconfont icon-list"></i>
+              </div>
             </div>
           </div>
         </div>
@@ -74,7 +81,7 @@
  * 行单击播放；手柄拖拽排序（reorder 增量交换，TransitionGroup 让位动画）；
  * 手柄单击弹出 ContextSongMenu（喜爱/下一首/移除 + 播放/查看歌手 + 清空队列）。
  */
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import ContextSongMenu, {
@@ -83,6 +90,7 @@ import ContextSongMenu, {
 } from '@/components/common/ContextSongMenu.vue';
 import { immersiveSurfaceMode } from '@/composables/useImmersiveLyrics';
 import { usePlayerSurfaceFeedback } from '@/composables/usePlayerSurfaceFeedback';
+import { useQueueEntrance } from '@/composables/useQueueEntrance';
 import { playMusic } from '@/hooks/MusicHook';
 import { useArtist } from '@/hooks/useArtist';
 import { useOverlayNavigate } from '@/hooks/useOverlayNavigate';
@@ -118,13 +126,24 @@ function handlePlay(song: SongResult) {
 // ── 打开时滚动到当前曲 ──
 const immersiveModeActive = computed(() => immersiveSurfaceMode.value === 'playlist');
 const listRef = ref<HTMLElement | null>(null);
-watch(immersiveModeActive, async (active) => {
-  if (!active) return;
-  await nextTick();
-  const el = listRef.value;
-  if (!el) return;
-  el.scrollTop = Math.max(0, playlistStore.playListIndex * ROW_H - ROW_H * 2);
-});
+const queueEntrance = useQueueEntrance();
+watch(
+  immersiveModeActive,
+  async (active, _previous, onCleanup) => {
+    let cancelled = false;
+    onCleanup(() => {
+      cancelled = true;
+      queueEntrance.stop();
+    });
+    if (!active) return;
+    await nextTick();
+    const el = listRef.value;
+    if (cancelled || !el) return;
+    el.scrollTop = Math.max(0, playlistStore.playListIndex * ROW_H - ROW_H * 2);
+    queueEntrance.start(el, '.iq-row-entrance');
+  },
+  { immediate: true }
+);
 
 // ── 手柄拖拽排序 + 单击手柄菜单 + 行任意处长按菜单 ──
 const dragIndex = ref(-1);
@@ -215,6 +234,8 @@ function clearRowPressTimer() {
     rowPressTimer = null;
   }
 }
+
+onUnmounted(clearRowPressTimer);
 
 function onRowTouchStart(event: TouchEvent, index: number) {
   if (event.touches.length !== 1) {
@@ -417,6 +438,10 @@ function closeMenu() {
 
 /* 行视觉（flex/底色/圆角）都在 body 内层：拖拽时 body 跟手位移并浮顶，
    行本身静止让位给 TransitionGroup FLIP */
+.iq-row-entrance {
+  height: 100%;
+}
+
 .iq-row-body {
   display: flex;
   align-items: center;

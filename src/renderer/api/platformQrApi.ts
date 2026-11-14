@@ -147,8 +147,7 @@ async function pollQrViaServer(
   provider: QqLoginProvider = 'qq'
 ): Promise<QrPollResult> {
   try {
-    const path =
-      platform === 'bilibili' ? '/bilibili/qr/poll' : `/platform/${platform}/qr/poll`;
+    const path = platform === 'bilibili' ? '/bilibili/qr/poll' : `/platform/${platform}/qr/poll`;
     const response = await gatewayRequest.get(path, {
       params: {
         key,
@@ -435,13 +434,8 @@ export async function fetchPlatformPlayUrlViaApi(
           }
         );
         const playUrlMap =
-          response.data?.data?.playUrl ||
-          response.data?.data?.url ||
-          response.data?.url;
-        const url =
-          typeof playUrlMap === 'string'
-            ? playUrlMap
-            : playUrlMap?.[songId]?.url;
+          response.data?.data?.playUrl || response.data?.data?.url || response.data?.url;
+        const url = typeof playUrlMap === 'string' ? playUrlMap : playUrlMap?.[songId]?.url;
         if (url && typeof url === 'string' && url.startsWith('http')) {
           return url;
         }
@@ -506,9 +500,7 @@ export async function createPlatformQr(
     const channels = await getQqApiChannels();
     if (channels && channels.configured) {
       // qqmusic 通用码在后端支持时优先（三 App 都能扫），否则按所选通道
-      const useChannel: QqApiChannel = channels.channels.includes('qqmusic')
-        ? 'qqmusic'
-        : provider;
+      const useChannel: QqApiChannel = channels.channels.includes('qqmusic') ? 'qqmusic' : provider;
       return createQqApiQr(useChannel);
     }
   }
@@ -632,9 +624,7 @@ async function fetchQqApiAccountData(cookie: string): Promise<PlatformAccountDat
     return {
       userInfo,
       playlists,
-      favorites: playlists.filter(
-        (p: { dirShow: number }) => p.dirShow === 2 || p.dirShow === 3
-      ),
+      favorites: playlists.filter((p: { dirShow: number }) => p.dirShow === 2 || p.dirShow === 3),
       albums: [],
       history: []
     };
@@ -724,6 +714,7 @@ async function fetchQqApiPlaylistTracks(
 }
 
 export interface QqLyricPayload {
+  sourceId?: string;
   platform: 'qq';
   format: 'qrc' | 'lrc';
   lyric: string;
@@ -807,6 +798,7 @@ export async function fetchQqSingerHotSongs(
 }
 
 export interface KugouLyricPayload {
+  sourceId?: string;
   platform: 'kugou';
   format: 'krc';
   lyric: string;
@@ -932,6 +924,7 @@ export async function fetchQqLyric(mid: string): Promise<QqLyricPayload | null> 
     return {
       platform: 'qq',
       format: data.format === 'qrc' ? 'qrc' : 'lrc',
+      sourceId: `qq:${songMid}`,
       lyric: String(data.lyric || ''),
       translation: String(data.translation || ''),
       romanization: String(data.romanization || '')
@@ -968,6 +961,7 @@ export async function fetchKugouLyric(song: SongResult): Promise<KugouLyricPaylo
     return {
       platform: 'kugou',
       format: 'krc',
+      sourceId: `kugou:${hash}:${String(data.id || '')}`,
       lyric: String(data.lyric || ''),
       translation: String(data.translation || ''),
       romanization: String(data.romanization || '')

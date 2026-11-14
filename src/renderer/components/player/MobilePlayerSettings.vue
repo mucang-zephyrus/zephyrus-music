@@ -3,9 +3,10 @@
     <Transition name="settings-drawer" :css="!embedded">
       <div
         v-if="visible"
-        class="player-settings-overlay fixed inset-0 z-[99999] flex items-end justify-center"
+        class="player-settings-overlay no-toggle fixed inset-0 z-[99999] flex items-end justify-center"
         :class="{ embedded }"
-        @click.self="close"
+        @click.stop.self="close"
+        @dblclick.stop
       >
         <!-- 遮罩层 -->
         <div v-if="!embedded" class="absolute inset-0 bg-black/50" @click="close"></div>
@@ -516,6 +517,31 @@
                           {{ opt.label }}
                         </button>
                       </div>
+                      <div v-if="currentMergeContext" class="mt-5 pt-4 border-t border-white/10">
+                        <p class="text-sm">{{ t('comp.smartLyricMerge.setting') }}</p>
+                        <p class="text-xs text-white/50 mt-1">{{ currentMergeContext.sourceId }}</p>
+                        <p
+                          v-if="currentMergeContext.legacySnapshot"
+                          class="text-xs text-white/50 mt-2"
+                        >
+                          {{ t('comp.smartLyricMerge.legacySnapshot') }}
+                        </p>
+                        <button
+                          v-else
+                          type="button"
+                          class="mt-2 py-2 text-sm underline underline-offset-4"
+                          :disabled="currentMergeEnabled"
+                          @click="restoreLyricMerge"
+                        >
+                          {{
+                            t(
+                              currentMergeEnabled
+                                ? 'comp.smartLyricMerge.automatic'
+                                : 'comp.smartLyricMerge.restore'
+                            )
+                          }}
+                        </button>
+                      </div>
                       <p v-if="overrideReloading" class="override-status">
                         正在按新来源重新加载歌词…
                       </p>
@@ -548,6 +574,7 @@
               >
                 <div class="control-section-reveal expanded">
                   <div id="control-section-speed" class="control-section-body">
+                    <ios-audio-protection-settings class="mb-4" />
                     <div class="flex flex-wrap gap-2">
                       <button
                         v-for="option in speedOptions"
@@ -1283,6 +1310,7 @@ import {
   uploadClimax
 } from '@/api/climax';
 import { searchServerSongs } from '@/api/serverSongs';
+import AppSelect from '@/components/common/AppSelect.vue';
 import InlinePlaylistPicker from '@/components/common/InlinePlaylistPicker.vue';
 import { navigateToMusicList } from '@/components/common/MusicListNavigator';
 import SongMetadataEditor from '@/components/common/SongMetadataEditor.vue';
@@ -1291,8 +1319,8 @@ import SongMetadataEditor from '@/components/common/SongMetadataEditor.vue';
 import EqControl from '@/components/EQControl.vue';
 import LyricCreditSettings from '@/components/lyric/LyricCreditSettings.vue';
 import PhotosensitivityWarning from '@/components/lyric/PhotosensitivityWarning.vue';
-import AppSelect from '@/components/common/AppSelect.vue';
 import PlayerStyleCustomizationPanel from '@/components/player/PlayerStyleCustomizationPanel.vue';
+import IosAudioProtectionSettings from '@/components/settings/IosAudioProtectionSettings.vue';
 import ListenTogetherSettings from '@/components/settings/ListenTogetherSettings.vue';
 import PosterShareModal from '@/components/share/PosterShareModal.vue';
 import ShareHubModal from '@/components/share/ShareHubModal.vue';
@@ -1316,6 +1344,11 @@ import {
 } from '@/services/androidNative';
 import { audioService } from '@/services/audioService';
 import { deleteClimaxCache, getLocalClimax, saveLocalClimax } from '@/services/cacheService';
+import {
+  currentLyricMergeContext as currentMergeContext,
+  isLyricMergeEnabled,
+  setLyricMergeEnabled
+} from '@/services/lyricMergePolicy';
 import { registerMobileBackLayer } from '@/services/mobileBackStack';
 import { activeAudioFormat } from '@/services/nativeAudioPlayer';
 import { useClimaxStore } from '@/store/modules/climax';
@@ -1345,6 +1378,7 @@ import { BUILTIN_FONTS } from '@/types/share';
 import { getImgUrl, secondToMinute } from '@/utils';
 import { formatAudioSegments } from '@/utils/audioFormat';
 import { showShortcutToast } from '@/utils/shortcutToast';
+import { migrateWordCloudSettings } from '@/utils/wordCloudMigration';
 
 const { t } = useI18n();
 const router = useRouter();
@@ -1609,6 +1643,16 @@ const finishTabPointer = (event: PointerEvent, cancelled = false) => {
 const onTabPointerUp = (event: PointerEvent) => finishTabPointer(event);
 const onTabPointerCancel = (event: PointerEvent) => finishTabPointer(event, true);
 const currentSong = computed(() => playMusic.value || null);
+const currentMergeEnabled = computed(
+  () =>
+    !!currentMergeContext.value &&
+    isLyricMergeEnabled(currentMergeContext.value.songKey, currentMergeContext.value.sourceId)
+);
+function restoreLyricMerge() {
+  const context = currentMergeContext.value;
+  if (context && !setLyricMergeEnabled(context.songKey, context.sourceId, true))
+    message.error(t('comp.smartLyricMerge.storageError'));
+}
 
 // ==================== 数据 · 歌词来源 ====================
 const lyricSourceStore = useLyricSourceStore();
@@ -2273,7 +2317,7 @@ const analyzeLyrics = async () => {
 function loadStoredLyricConfig(): LyricConfig {
   try {
     const saved = localStorage.getItem('music-full-config');
-    const parsed = saved ? JSON.parse(saved) : {};
+    const parsed = migrateWordCloudSettings(saved ? JSON.parse(saved) : {});
     return {
       ...DEFAULT_LYRIC_CONFIG,
       ...parsed,
@@ -2345,10 +2389,14 @@ function persistLyricConfig(next: LyricConfig) {
   if (!ok && !storageWarnShown) {
     storageWarnShown = true;
     try {
-      showShortcutToast(tr('settings.storageWriteFailed', '设置保存失败：浏览器存储写入未生效'), '', {
-        position: 'top',
-        showIcon: true
-      });
+      showShortcutToast(
+        tr('settings.storageWriteFailed', '设置保存失败：浏览器存储写入未生效'),
+        '',
+        {
+          position: 'top',
+          showIcon: true
+        }
+      );
     } catch {
       // toast 通道异常时保持静默（日志已留）
     }
@@ -2438,10 +2486,16 @@ const playerStyles = computed<
     color: 'var(--accent-color, #a0a0a0)'
   },
   {
-    key: 'frenzy' as const,
-    label: tr('player.styles.frenzy', '狂热'),
-    icon: 'ri-fire-line',
+    key: 'wordCloud' as const,
+    label: tr('player.styles.wordCloud', '词云'),
+    icon: 'ri-font-size-2',
     color: '#ef4444'
+  },
+  {
+    key: 'dotMatrix' as const,
+    label: tr('player.styles.dotMatrix', '点阵'),
+    icon: 'ri-grid-fill',
+    color: '#555555'
   },
   {
     key: 'smoke' as const,
@@ -2754,7 +2808,7 @@ const hasTimerActive = computed(() => playerStore.hasSleepTimerActive);
 
 const timerStatusText = computed(() => {
   // 摘要展示位：子页化后挂在「播放 · 定时关闭」分区顶部
-  
+
   if (sleepTimer.value.type === 'time') return t('player.sleepTimer.timeMode');
   if (sleepTimer.value.type === 'songs') return t('player.sleepTimer.songsMode');
   if (sleepTimer.value.type === 'end') return t('player.sleepTimer.afterPlaylist');
@@ -2936,6 +2990,9 @@ onUnmounted(() => {
 }
 
 .player-settings-surface {
+  /* The tab pages are absolutely positioned; max-height alone collapses
+     the portrait sheet to its header and puts its controls below the viewport. */
+  height: min(78dvh, 760px);
   border: 1px solid var(--player-glass-border, rgba(255, 255, 255, 0.24));
   border-bottom: 0;
   border-radius: 30px 30px 0 0;
@@ -2990,6 +3047,7 @@ onUnmounted(() => {
   }
   .player-settings-surface {
     width: min(430px, 48vw) !important;
+    height: 100dvh;
     max-height: 100dvh !important;
     border-right: 0;
     border-bottom: 1px solid color-mix(in srgb, #fff 22%, transparent);

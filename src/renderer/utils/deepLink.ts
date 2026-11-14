@@ -1,12 +1,15 @@
 /**
  * Deep link / 剪贴板分享处理工具
- * 解析 zephyrus://song/{id} 格式的链接，弹出歌曲卡片供用户手动播放
+ * 识别三平台分享文本及 Zephyrus 链接，弹出卡片供用户手动播放
  *
  * 统一入口：无论是 Intent deep link 还是剪贴板检测，都走卡片流程
  */
 
 import { getMusicDetail } from '@/api/music';
+import { startShareClipboardMonitor } from '@/services/shareClipboard';
 import type { SongResult } from '@/types/music';
+
+import { extractMusicShareUrls, parseMusicShareUrl } from '../../shared/musicShareLink.mjs';
 
 // 防止重复处理同一个 URL（卡片显示期间）
 let lastHandledUrl = '';
@@ -14,6 +17,7 @@ let lastHandledUrl = '';
 // SharedSongCard 组件引用
 let sharedSongCardRef: {
   showSongCard: (songId: number) => void;
+  showShareCard: (url: string) => void;
   showCollectionCard: (kind: 'playlist' | 'album', id: number) => void;
 } | null = null;
 
@@ -23,135 +27,27 @@ let listenTogetherInviteRef: { showInvite: (roomCode: string) => void } | null =
 // 待处理的 URL 队列：如果组件尚未就绪，先缓存，就绪后重放
 let pendingUrl: string | null = null;
 
-/**
- * 解析 deep link URL，提取歌曲 ID
- */
-function parseDeepLink(url: string): number | null {
-  try {
-    const match = url.match(/^zephyrus:\/\/song\/(\d+)$/);
-    if (match) {
-      return Number(match[1]);
-    }
-    return null;
-  } catch {
-    return null;
+/** Native intents, clipboard text and explicit paste share this entry. */
+async function processShareUrl(text: string): Promise<boolean> {
+  const url = extractMusicShareUrls(text)[0];
+  if (!url) return false;
+  const target = parseMusicShareUrl(url);
+  if (target?.kind === 'listen') {
+    if (listenTogetherInviteRef) listenTogetherInviteRef.showInvite(target.id);
+    else pendingUrl = url;
+    return true;
   }
-}
-
-/**
- * 解析一起听 deep link，提取房间识别码
- */
-function parseListenDeepLink(url: string): string | null {
-  try {
-    const match = url.match(/^zephyrus:\/\/listen\/([A-Za-z0-9]{3,16})$/);
-    if (match) {
-      return match[1].toUpperCase();
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 解析歌单/专辑 deep link，提取类型与 ID
- */
-function parseCollectionDeepLink(url: string): { kind: 'playlist' | 'album'; id: number } | null {
-  try {
-    const match = url.match(/^zephyrus:\/\/(playlist|album)\/(\d+)$/);
-    if (match) {
-      return { kind: match[1] as 'playlist' | 'album', id: Number(match[2]) };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 解析网易云分享链接（music.163.com / y.music.163.com），提取歌曲 ID。
- * 仅支持歌曲页（/song）；歌单、专辑等其他类型返回 null。
- * 163cn.tv 短链已由原生层跟随 302 还原为长链，此处不再处理短链。
- */
-function parseNeteaseSongUrl(url: string): number | null {
-  try {
-    const parsed = new URL(url);
-    const host = parsed.hostname.toLowerCase();
-    if (
-      host !== 'music.163.com' &&
-      host !== 'y.music.163.com' &&
-      !host.endsWith('.music.163.com')
-    ) {
-      return null;
-    }
-    const path = parsed.pathname;
-    if (!/(^|\/)song(\/|$)/.test(path)) return null;
-    const queryId = parsed.searchParams.get('id');
-    if (queryId && /^\d+$/.test(queryId)) return Number(queryId);
-    const pathMatch = path.match(/\/song\/(\d+)/);
-    if (pathMatch) return Number(pathMatch[1]);
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 统一处理函数：解析 URL 并弹出歌曲卡片
- * 无论来源是 Intent deep link 还是剪贴板，都走同一条路径
- */
-async function processShareUrl(url: string): Promise<void> {
-  console.info('[ShareLink] 收到分享链接:', url);
-
-  // 一起听邀请链接：弹确认卡片
-  const roomCode = parseListenDeepLink(url);
-  if (roomCode !== null) {
-    console.info('[ShareLink] 解析到一起听房间码:', roomCode);
-    if (listenTogetherInviteRef) {
-      listenTogetherInviteRef.showInvite(roomCode);
-    } else {
-      pendingUrl = url;
-      console.warn('[ShareLink] ListenTogetherInvite 尚未就绪，缓存 URL 待重放');
-    }
-    return;
-  }
-
-  // 防止重复处理（卡片正在显示同一首歌时跳过）
-  if (url === lastHandledUrl) {
-    console.info('[ShareLink] 与上次相同，跳过');
-    return;
-  }
-  lastHandledUrl = url;
-
-  // zephyrus://playlist 或 zephyrus://album，弹出歌单/专辑卡片
-  const collection = parseCollectionDeepLink(url);
-  if (collection !== null) {
-    console.info('[ShareLink] 解析到合集链接:', collection.kind, collection.id);
-    if (sharedSongCardRef) {
-      sharedSongCardRef.showCollectionCard(collection.kind, collection.id);
-    } else {
-      console.warn('[ShareLink] SharedSongCard 尚未就绪，缓存 URL 待重放');
-      pendingUrl = url;
-    }
-    return;
-  }
-
-  // zephyrus://song 或网易云分享链接，统一提取歌曲 ID 走卡片流程
-  const songId = parseDeepLink(url) ?? parseNeteaseSongUrl(url);
-  if (songId === null) {
-    console.warn('[ShareLink] 无法解析 URL:', url);
-    return;
-  }
-
-  console.info('[ShareLink] 解析到歌曲 ID:', songId);
-
-  if (sharedSongCardRef) {
-    sharedSongCardRef.showSongCard(songId);
-  } else {
-    // 组件尚未就绪（冷启动时 JS 刚加载），缓存 URL，组件注册后重放
-    console.warn('[ShareLink] SharedSongCard 尚未就绪，缓存 URL 待重放');
+  if (!sharedSongCardRef) {
     pendingUrl = url;
+    return true;
   }
+  const key = target ? `${target.kind}:${target.platform}:${target.id}` : url;
+  if (key === lastHandledUrl) return true;
+  lastHandledUrl = key;
+  if (target?.kind === 'playlist' || target?.kind === 'album')
+    sharedSongCardRef.showCollectionCard(target.kind, Number(target.id));
+  else sharedSongCardRef.showShareCard(url);
+  return true;
 }
 
 /**
@@ -183,16 +79,16 @@ export async function playSongById(songId: number): Promise<void> {
  * 处理 deep link（Intent 跳转）
  * 注册到 window.__handleDeepLink，行为与剪贴板一致：弹卡片
  */
-export async function handleDeepLink(url: string): Promise<void> {
-  await processShareUrl(url);
+export async function handleDeepLink(url: string): Promise<boolean> {
+  return processShareUrl(url);
 }
 
 /**
  * 处理剪贴板分享链接
  * 注册到 window.__handleClipboardShare
  */
-export async function handleClipboardShare(url: string): Promise<void> {
-  await processShareUrl(url);
+export async function handleClipboardShare(url: string): Promise<boolean> {
+  return processShareUrl(url);
 }
 
 /**
@@ -209,16 +105,22 @@ export function resetLastHandledUrl(): void {
 export function setSharedSongCardRef(
   ref: {
     showSongCard: (songId: number) => void;
+    showShareCard: (url: string) => void;
     showCollectionCard: (kind: 'playlist' | 'album', id: number) => void;
   } | null
 ): void {
   sharedSongCardRef = ref;
 
   // 组件就绪后，重放缓存的 URL
-  if ((ref || listenTogetherInviteRef) && pendingUrl) {
+  replayPendingUrl();
+}
+
+function replayPendingUrl() {
+  const target = pendingUrl && parseMusicShareUrl(pendingUrl);
+  const ready = target && target.kind === 'listen' ? listenTogetherInviteRef : sharedSongCardRef;
+  if (ready && pendingUrl) {
     const url = pendingUrl;
     pendingUrl = null;
-    console.info('[ShareLink] 组件就绪，重放缓存的 URL:', url);
     // 重放时清除 lastHandledUrl，确保能正常处理
     lastHandledUrl = '';
     processShareUrl(url).catch(console.error);
@@ -232,18 +134,33 @@ export function setListenTogetherInviteRef(
   ref: { showInvite: (roomCode: string) => void } | null
 ): void {
   listenTogetherInviteRef = ref;
+  replayPendingUrl();
 }
 
 /**
  * 注册处理器到 window
  * 在应用启动时调用，原生 MainActivity 通过 evaluateJavascript 调用
  */
+let stopClipboard: (() => void) | undefined;
 export function setupDeepLinkHandler(): void {
-  (window as any).__handleDeepLink = (url: string) => {
-    handleDeepLink(url).catch(console.error);
+  stopClipboard?.();
+  const accept = (text: string) => {
+    if (!extractMusicShareUrls(text).length) return false;
+    void processShareUrl(text).catch(console.error);
+    return true;
   };
-  (window as any).__handleClipboardShare = (url: string) => {
-    handleClipboardShare(url).catch(console.error);
-  };
-  console.info('[ShareLink] 处理器已注册 (intent + clipboard 统一弹卡片)');
+  (window as any).__handleDeepLink = accept;
+  (window as any).__handleClipboardShare = accept;
+  // Android's native listener supplies clipboard text and handles foreground access.
+  if (!(window as any).AndroidNative) {
+    stopClipboard = startShareClipboardMonitor({
+      onText: handleClipboardShare,
+      ...((window as any).api?.readMusicShareClipboard
+        ? {
+            readText: () => (window as any).api.readMusicShareClipboard(),
+            canRead: async () => true
+          }
+        : {})
+    });
+  }
 }

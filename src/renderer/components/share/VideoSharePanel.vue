@@ -1,7 +1,11 @@
 <template>
   <div class="vs-panel">
     <!-- 环境不支持 -->
-    <div v-if="!supported" class="vs-notice">
+    <div v-if="styleKey === 'wordCloud' || styleKey === 'dotMatrix'" class="vs-notice">
+      <i class="ri-information-line" />
+      <p>{{ t(`player.${styleKey}.videoUnsupported`) }}</p>
+    </div>
+    <div v-else-if="!supported" class="vs-notice">
       <i class="ri-error-warning-line"></i>
       <p>{{ t('share.video.unsupported') }}</p>
     </div>

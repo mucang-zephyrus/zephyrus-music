@@ -17,9 +17,9 @@ import android.webkit.WebView;
 import android.util.Log;
 import org.json.JSONObject;
 
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.activity.BackEventCompat;
@@ -35,6 +35,10 @@ public class MainActivity extends BridgeActivity {
     public static final int REQUEST_PICK_AUDIO_FOLDER = 10001;
     // 记录上次处理的剪贴板内容，避免重复处理
     private String lastClipboardContent = "";
+    private ClipboardManager shareClipboard;
+    private String pendingShareUrl;
+    private final ClipboardManager.OnPrimaryClipChangedListener shareClipboardListener =
+            () -> getWindow().getDecorView().postDelayed(this::checkClipboardForDeepLink, 150);
     // 标记是否已通过 deep link intent 处理过（避免与剪贴板重复）
     private boolean deepLinkHandled = false;
     private String pendingExternalAudioPath;
@@ -204,11 +208,14 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onStart() {
         super.onStart();
+        shareClipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (shareClipboard != null) shareClipboard.addPrimaryClipChangedListener(shareClipboardListener);
         StatusBarLyricOverlay.getInstance(this).setAppVisible(true);
     }
 
     @Override
     public void onStop() {
+        if (shareClipboard != null) shareClipboard.removePrimaryClipChangedListener(shareClipboardListener);
         StatusBarLyricOverlay.getInstance(this).setAppVisible(false);
         super.onStop();
     }
@@ -298,18 +305,24 @@ public class MainActivity extends BridgeActivity {
 
     private boolean handleDeepLink(Intent intent) {
         if (intent == null) return false;
+        if (Intent.ACTION_SEND.equals(intent.getAction())) {
+            String share = extractMusicShareUrl(intent.getStringExtra(Intent.EXTRA_TEXT));
+            if (share == null) return false;
+            lastClipboardContent = intent.getStringExtra(Intent.EXTRA_TEXT);
+            dispatchShareUrlToWeb(share);
+            return true;
+        }
         Uri data = intent.getData();
         if (data == null) return false;
         String url = data.toString();
         String scheme = data.getScheme() == null ? "" : data.getScheme().toLowerCase(Locale.ROOT);
 
-        // 网易云分享链接（微信/浏览器"用其他软件打开"）：解析后走同一弹卡片流程
+        // 三平台分享链接：解析后走统一卡片流程
         if ("https".equals(scheme) || "http".equals(scheme)) {
             String host = data.getHost() == null ? "" : data.getHost().toLowerCase(Locale.ROOT);
-            if (!isNeteaseMusicHost(host)) return false;
-            Log.i("ZephyrusDeepLink", "Received netease link: " + url);
+            if (!isMusicShareHost(host)) return false;
             lastClipboardContent = url;
-            resolveNeteaseUrlAsync(url);
+            dispatchShareUrlToWeb(url);
             return true;
         }
 
@@ -330,82 +343,54 @@ public class MainActivity extends BridgeActivity {
             return true;
         }
 
-        // 歌曲分享链接：zephyrus://song/{id}
-        WebView webView = bridge.getWebView();
-        if (webView != null) {
-            // 统一调用 __handleClipboardShare：Intent 和剪贴板都走卡片流程
-            // url 来自外部 Intent（任意应用可发送，属不可信输入），必须经 JSONObject.quote
-            // 转义为合法 JS 字符串字面量，防止拼接式 JS 注入（写法参照 dispatchSpotifyCallback）
-            final String js = "window.__handleClipboardShare && window.__handleClipboardShare("
-                    + JSONObject.quote(url) + ");";
-            // 延迟执行，确保前端 JS 已就绪
-            webView.postDelayed(() -> evaluateJavascript(js), 500);
-            // 兜底：1.5秒后再试一次（冷启动时 JS 可能尚未注册）
-            webView.postDelayed(() -> evaluateJavascript(js), 1500);
-            // 再次兜底：3秒后最后试一次
-            webView.postDelayed(() -> evaluateJavascript(js), 3000);
-        }
-        // 记录到 lastClipboardContent 防止 onResume 重复处理
+        dispatchShareUrlToWeb(url);
         lastClipboardContent = url;
         return true;
     }
 
-    private boolean isNeteaseMusicHost(String host) {
-        return "music.163.com".equals(host)
-                || "y.music.163.com".equals(host)
-                || host.endsWith(".music.163.com")
-                || "163cn.tv".equals(host)
-                || host.endsWith(".163cn.tv");
+    private boolean isMusicShareHost(String host) {
+        return "music.163.com".equals(host) || "y.music.163.com".equals(host)
+                || "m.music.163.com".equals(host) || "163cn.tv".equals(host)
+                || "y.qq.com".equals(host) || "c.y.qq.com".equals(host)
+                || "c6.y.qq.com".equals(host) || "i.y.qq.com".equals(host)
+                || "i2.y.qq.com".equals(host) || "m.kugou.com".equals(host)
+                || "www.kugou.com".equals(host) || "kugou.com".equals(host);
     }
 
-    /** 163cn.tv 短链需跟随 302 拿最终长链（原生解析绕开 WebView CORS），其他网易域名直接使用 */
-    private void resolveNeteaseUrlAsync(final String url) {
-        if (!url.contains("163cn.tv")) {
-            dispatchShareUrlToWeb(url);
-            return;
-        }
-        new Thread(() -> {
-            String resolved = resolveRedirectTarget(url);
-            final String target = resolved != null ? resolved : url;
-            runOnUiThread(() -> dispatchShareUrlToWeb(target));
-        }).start();
-    }
-
-    /** 单次 302 跟随：网易云短链 Location 即最终长链 */
-    private String resolveRedirectTarget(String url) {
-        try {
-            HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-            conn.setInstanceFollowRedirects(false);
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(5000);
-            conn.setRequestMethod("HEAD");
-            conn.setRequestProperty("User-Agent",
-                    "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/130 Mobile Safari/537.36");
-            int code = conn.getResponseCode();
-            String location = conn.getHeaderField("Location");
-            conn.disconnect();
-            if (location != null && !location.isEmpty()
-                    && (code == HttpURLConnection.HTTP_MOVED_PERM
-                        || code == HttpURLConnection.HTTP_MOVED_TEMP
-                        || code == 303 || code == 307 || code == 308)) {
-                return new URL(new URL(url), location).toString();
-            }
-        } catch (Exception e) {
-            Log.w("ZephyrusDeepLink", "Resolve netease short link failed", e);
+    private String extractMusicShareUrl(String text) {
+        if (text == null || text.length() > 65536) return null;
+        Matcher matcher = Pattern.compile("(?:https?://|zephyrus://)[^\\s<>\"'`()\\[\\]{}\\u3000-\\u303f\\u4e00-\\u9fff\\uff00-\\uffef]+", Pattern.CASE_INSENSITIVE).matcher(text);
+        while (matcher.find()) {
+            String candidate = matcher.group().replaceAll("[).,;!\\]\\}]+$", "");
+            Uri uri = Uri.parse(candidate);
+            String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+            if ("zephyrus".equals(uri.getScheme()) &&
+                    ("song".equals(host) || "playlist".equals(host) || "album".equals(host) || "listen".equals(host))) return candidate;
+            if (isMusicShareHost(host)) return candidate;
         }
         return null;
     }
 
-    /** 复用 Intent 链路的三次重试注入，把链接交给前端统一弹卡片 */
+    /** Retry until JS acknowledges receipt; do not reopen a dismissed card on timers. */
     private void dispatchShareUrlToWeb(String url) {
+        pendingShareUrl = url;
+        dispatchShareUrlToWeb(url, 0);
+    }
+
+    private void dispatchShareUrlToWeb(String url, int attempt) {
+        if (!url.equals(pendingShareUrl) || attempt >= 40) return;
         WebView webView = bridge.getWebView();
-        if (webView == null) return;
-        // url 来自外部 Intent（不可信输入），必须经 JSONObject.quote 转义
-        final String js = "window.__handleClipboardShare && window.__handleClipboardShare("
-                + JSONObject.quote(url) + ");";
-        webView.postDelayed(() -> evaluateJavascript(js), 300);
-        webView.postDelayed(() -> evaluateJavascript(js), 1500);
-        webView.postDelayed(() -> evaluateJavascript(js), 3000);
+        if (webView == null) {
+            new Handler(getMainLooper()).postDelayed(() -> dispatchShareUrlToWeb(url, attempt + 1), 250);
+            return;
+        }
+        final String js = "Boolean(window.__handleClipboardShare && window.__handleClipboardShare("
+                + JSONObject.quote(url) + "))";
+        webView.evaluateJavascript(js, result -> {
+            if ("true".equals(result)) {
+                if (url.equals(pendingShareUrl)) pendingShareUrl = null;
+            } else webView.postDelayed(() -> dispatchShareUrlToWeb(url, attempt + 1), 250);
+        });
     }
 
     /**
@@ -435,40 +420,22 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * 检查剪贴板是否包含 zephyrus://song/ 格式的歌曲链接
-     * 如果包含且与上次处理的不同，则传递给前端播放
+     * 前台检查三平台或 Zephyrus 分享，变化时交给前端识别，等待用户确认播放。
      */
     private void checkClipboardForDeepLink() {
+        if (!hasWindowFocus()) return;
         try {
             ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-            if (clipboard == null) return;
-            if (!clipboard.hasPrimaryClip()) return;
+            if (clipboard == null || !clipboard.hasPrimaryClip()) return;
             ClipData clip = clipboard.getPrimaryClip();
             if (clip == null || clip.getItemCount() == 0) return;
-            CharSequence text = clip.getItemAt(0).coerceToText(this);
+            CharSequence text = clip.getItemAt(0).getText();
             if (text == null) return;
             String content = text.toString().trim();
-
-            // 检查是否是 zephyrus:// 歌曲链接
-            if (!content.startsWith("zephyrus://song/")) return;
-
-            // 避免重复处理同一内容
             if (content.equals(lastClipboardContent)) return;
             lastClipboardContent = content;
-
-            Log.i("ZephyrusClipboard", "Found deep link in clipboard: " + content);
-
-            // 传递给前端处理：弹出歌曲卡片
-            WebView webView = bridge.getWebView();
-            if (webView != null) {
-                // content 来自系统剪贴板（不可信输入），同样必须经 JSONObject.quote 转义
-                final String js = "window.__handleClipboardShare && window.__handleClipboardShare("
-                        + JSONObject.quote(content) + ");";
-                // 延迟执行，确保前端 JS 已就绪
-                webView.postDelayed(() -> evaluateJavascript(js), 500);
-                // 兜底：1.5秒后再试一次
-                webView.postDelayed(() -> evaluateJavascript(js), 1500);
-            }
+            String url = extractMusicShareUrl(content);
+            if (url != null) dispatchShareUrlToWeb(url);
         } catch (Exception e) {
             Log.w("ZephyrusClipboard", "Failed to read clipboard", e);
         }
@@ -578,6 +545,7 @@ public class MainActivity extends BridgeActivity {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
             applySystemBarsMode();
+            getWindow().getDecorView().postDelayed(this::checkClipboardForDeepLink, 250);
         }
     }
 

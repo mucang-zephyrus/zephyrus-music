@@ -162,23 +162,27 @@
       :style="searchPillStyle"
       @click="!isSearchPage && !isSettingsPage && openSearch()"
       :aria-label="t('comp.searchBar.searchPlaceholder')"
-      @pointerdown.stop
+      @pointerdown.stop="onSearchPointerDown"
     >
       <div class="topbar-search-row">
         <i class="ri-search-line search-icon"></i>
         <input
           ref="searchInputRef"
           :value="
-            isSettingsPage ? settingsSearchValue : isSearchPage ? searchStore.searchValue : ''
+            isSettingsPage
+              ? settingsSearchValue
+              : isSearchPage || searchEntryPending
+                ? searchStore.searchValue
+                : ''
           "
           type="text"
           class="search-input"
-          :readonly="!isSearchPage && !isSettingsPage"
+          :readonly="!isSearchPage && !isSettingsPage && !searchEntryPending"
           :placeholder="isSettingsPage ? topbarSearchPlaceholder : searchStore.placeholder"
           @input="onTopbarInput"
           @focus="(isSearchPage || isSettingsPage) && handleSearchFocus()"
           @click="(isSearchPage || isSettingsPage) && handleSearchFocus()"
-          @keydown.enter="isSearchPage && handleSearchSubmit()"
+          @keydown.enter="isSearchPage ? handleSearchSubmit() : !isSettingsPage && openSearch()"
         />
         <i
           v-if="
@@ -699,7 +703,7 @@ const isSearchResultPage = computed(() => route.path === '/mobile-search-result'
 watch(
   () => route.path,
   (to, from) => {
-    if (to === '/mobile-search' && from !== '/mobile-search-result') {
+    if (to === '/mobile-search' && from !== '/mobile-search-result' && !searchEntryPending.value) {
       searchStore.setSearchValue('');
     }
   }
@@ -861,6 +865,7 @@ const onCollapseIndicatorClick = () => {
 };
 
 const searchInputRef = ref<HTMLInputElement | null>(null);
+const searchEntryPending = ref(false);
 const morphSearchInputRef = ref<HTMLInputElement | null>(null);
 const topbarRootRef = ref<HTMLElement | null>(null);
 const morphAnchorRef = ref<HTMLElement | null>(null);
@@ -1010,14 +1015,19 @@ const closeSearchAssist = () => {
   showSearchAssist.value = false;
 };
 
-// Focus search input when entering search page
-watch(isSearchPage, (val) => {
-  if (val && route.path === '/mobile-search') {
-    nextTick(() => {
-      setTimeout(() => searchInputRef.value?.focus(), 300);
-    });
-  }
-});
+// 顶栏输入框跨路由保留；在 DOM 更新后接续建议面板，不用延时重新抢焦点。
+watch(
+  isSearchPage,
+  (val) => {
+    if (val && route.path === '/mobile-search') {
+      searchInputRef.value?.focus({ preventScroll: true });
+      openSearchAssist();
+    } else if (!val && !isSettingsPage.value) {
+      searchInputRef.value?.blur();
+    }
+  },
+  { flush: 'post' }
+);
 
 // Sync search value from URL on search result page
 watch(
@@ -1208,7 +1218,40 @@ const selectMorphActionOption = (action: any, value: string | number) => {
   expandedMorphActionId.value = null;
 };
 
-const openSearch = () => router.push('/mobile-search');
+const onSearchPointerDown = (event: PointerEvent) => {
+  if (!isSearchPage.value && !isSettingsPage.value && !searchEntryPending.value) {
+    // 避免浏览器先聚焦只读输入框；click 中会同步启用并聚焦同一个输入框。
+    event.preventDefault();
+  }
+};
+
+const openSearch = async () => {
+  if (isSearchPage.value || isSettingsPage.value || searchEntryPending.value) return;
+
+  searchEntryPending.value = true;
+  searchStore.setSearchValue('');
+  const input = searchInputRef.value;
+  if (input) {
+    // 必须在用户点击的同步调用链内启用并聚焦，不能等待懒加载路由或动画。
+    // 键盘导航可能已聚焦只读框，此时先释放，让本次焦点真正进入可编辑状态。
+    if (input.readOnly && document.activeElement === input) input.blur();
+    input.readOnly = false;
+    input.value = '';
+    input.focus({ preventScroll: true });
+  }
+
+  try {
+    await router.push('/mobile-search');
+  } catch (error) {
+    console.error('打开搜索页失败:', error);
+  } finally {
+    searchEntryPending.value = false;
+    if (!isSearchPage.value && !isSettingsPage.value && input) {
+      input.blur();
+      input.readOnly = true;
+    }
+  }
+};
 
 const onSettingsSearchInput = (event: Event) => {
   const value = (event.target as HTMLInputElement).value;
@@ -1219,7 +1262,7 @@ const onSettingsSearchInput = (event: Event) => {
 const onTopbarInput = (event: Event) => {
   if (isSettingsPage.value) {
     onSettingsSearchInput(event);
-  } else if (isSearchPage.value) {
+  } else if (isSearchPage.value || searchEntryPending.value) {
     onSearchInput(event);
   }
 };

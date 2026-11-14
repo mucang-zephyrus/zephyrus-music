@@ -12,10 +12,12 @@ import { resolveSaturatedHsl } from '@/utils/neutralColor';
 
 type PlayerAppearanceVars = Record<string, string>;
 
-const ORIGINAL_STYLE_BACKGROUNDS: Record<MobilePlayerStyleKey, string> = {
+const ORIGINAL_STYLE_BACKGROUNDS: Record<string, string> = {
   default: '',
   stage: '#1a1a1a',
   starChart: '#050505',
+  wordCloud: '#101215',
+  dotMatrix: '#ffffff',
   frenzy: '#f5f5f5',
   eerie: '',
   neon: '#1a1814',
@@ -63,6 +65,11 @@ export function usePlayerStyleAppearance(styleKey: MobilePlayerStyleKey) {
       'var(--accent-color, #ffffff)'
   );
   const saturatedThemeColor = computed(() => saturateHex(themeColor.value));
+  /** 封面原始平均色（未做去灰/饱和拉伸）：低饱和封面仍保留可辨色相，供墨色类样式造色 */
+  const averageThemeColor = computed(() => coverColor.averageColor.value || themeColor.value);
+  /** 封面近灰像素占比：>0.95 时样式应走中性灰度，而不是从残余色度里造色相 */
+  const coverGrayRatio = computed(() => coverColor.grayRatio.value);
+  const coverPalette = computed(() => coverColor.coverPalette.value);
   const customBackgroundActive = computed(() => isCustom.value && config.value.useCustomBackground);
   const background = computed(() => {
     if (!customBackgroundActive.value) return 'transparent';
@@ -177,6 +184,9 @@ export function usePlayerStyleAppearance(styleKey: MobilePlayerStyleKey) {
     climaxColors,
     themeColor,
     saturatedThemeColor,
+    averageThemeColor,
+    coverGrayRatio,
+    coverPalette,
     selectedFontFamily,
     customFontActive,
     styleVars

@@ -22,6 +22,7 @@ import {
 } from './audioAnalysisGate';
 import { climaxDetector } from './climaxDetector';
 import { drumDetector } from './drumDetector';
+import { iosAudioProtection } from './iosAudioProtection';
 import { connectAnalysisNodes, disconnectAnalysisNodes } from './leadDetector';
 import { LocalAudioPlayer } from './localAudioPlayer';
 import { NativeAudioPlayer } from './nativeAudioPlayer';
@@ -156,9 +157,26 @@ class AudioService {
   private soundingTrackedSound: AudioHandle | null = null;
 
   constructor() {
-    if ('mediaSession' in navigator) {
+    if (iosAudioProtection.enabled) {
+      this.clearMediaSession();
+    } else if ('mediaSession' in navigator) {
       this.initMediaSession();
     }
+    iosAudioProtection.subscribe(() => {
+      if (iosAudioProtection.enabled) {
+        this.clearMediaSession();
+        // iOS 的出声元素未接图，可以原位切换，无须重载歌曲或改变进度。
+        if (this.currentSound instanceof Howl) {
+          void this.disposeEQ(true);
+          this.releaseAnalysisMirror();
+          this.applyVolume(Number(localStorage.getItem('volume') ?? 1));
+        }
+      } else if ('mediaSession' in navigator) {
+        this.initMediaSession();
+        if (this.currentTrack) this.updateMediaSessionMetadata(this.currentTrack);
+        this.syncPlaybackStateFromElement();
+      }
+    });
     // 从本地存储加载 EQ 开关状态
     const bypassState = localStorage.getItem('eqBypass');
     this.bypass = bypassState ? JSON.parse(bypassState) : false;
@@ -293,11 +311,19 @@ class AudioService {
    * 用于 iOS PWA 音频管线被系统局部回收（元素假死）与背景 contextlost 先验的联动自救；
    * 同一 track 最多自动恢复 2 次，超过则上抛失败（UI 提示），换歌后计数重置。
    */
-  async softRecoverSound(reason: string): Promise<boolean> {
+  async softRecoverSound(reason: string, expectedTrack?: SongResult): Promise<boolean> {
     if (isAndroidNative()) return false;
     if (this.crossfadingSound) return false; // 过渡期双实例淡变音量为 0，属误报
     if (this.isLoading()) return false; // 加载/缓冲期勿动
     if (!(this.currentSound instanceof Howl) || !this.currentTrack || !this.currentUrl) {
+      return false;
+    }
+    if (
+      expectedTrack &&
+      (String(expectedTrack.id) !== String(this.currentTrack.id) ||
+        (expectedTrack.platform && expectedTrack.platform !== this.currentTrack.platform) ||
+        (expectedTrack.source && expectedTrack.source !== this.currentTrack.source))
+    ) {
       return false;
     }
 
@@ -337,7 +363,49 @@ class AudioService {
     }
   }
 
+  private get mediaSessionEnabled(): boolean {
+    return !iosAudioProtection.enabled && 'mediaSession' in navigator;
+  }
+
+  private clearMediaSession() {
+    if (!('mediaSession' in navigator)) return;
+    const session = navigator.mediaSession;
+    const actions: MediaSessionAction[] = [
+      'play',
+      'pause',
+      'stop',
+      'seekto',
+      'seekbackward',
+      'seekforward',
+      'previoustrack',
+      'nexttrack'
+    ];
+    for (const action of actions) {
+      try {
+        session.setActionHandler(action, null);
+      } catch {
+        // 不同 iOS 版本支持的 action 子集不同。
+      }
+    }
+    try {
+      session.metadata = null;
+    } catch {
+      /* 系统可能不支持此字段。 */
+    }
+    try {
+      session.playbackState = 'none';
+    } catch {
+      /* 同上。 */
+    }
+    try {
+      session.setPositionState?.();
+    } catch {
+      /* 同上。 */
+    }
+  }
+
   private initMediaSession() {
+    if (!this.mediaSessionEnabled) return;
     navigator.mediaSession.setActionHandler('play', () => {
       this.cancelSeekRecovery();
       this.currentSound?.play();
@@ -441,9 +509,9 @@ class AudioService {
     }, 80);
   }
 
-  private updateMediaSessionMetadata(track: SongResult) {
+  private updateMediaSessionMetadata(track: SongResult, artistOverride?: string) {
     try {
-      if (!('mediaSession' in navigator)) return;
+      if (!this.mediaSessionEnabled) return;
 
       const artists = track.ar
         ? track.ar.map((a) => a.name)
@@ -461,7 +529,7 @@ class AudioService {
         .filter((item) => item.src);
       const metadata = {
         title: track.name || '',
-        artist: artists ? artists.join(',') : '',
+        artist: artistOverride ?? (artists ? artists.join(',') : ''),
         album: album || '',
         artwork
       };
@@ -477,16 +545,30 @@ class AudioService {
   /**
    * 控制中心歌词(网易云式):将媒体会话标题替换为当前歌词行。
    * lyric 为 null 时恢复真实歌名。复用 updateMediaSessionMetadata 的
-   * 构造(歌手/专辑/封面不动),仅替换 name 字段。
+   * 构造(专辑/封面不动),仅替换 name 字段。
+   * 歌词占用标题期间,歌手位改挂"歌手 / 歌名",避免歌名从系统媒体面板消失;
+   * 歌词文本与歌名相同(间奏回退)时不视为歌词,歌手位维持原样。
    */
   public setMediaSessionLyricTitle(lyric: string | null): void {
-    if (!('mediaSession' in navigator) || !this.currentTrack) return;
-    const track = lyric ? { ...this.currentTrack, name: lyric } : this.currentTrack;
-    this.updateMediaSessionMetadata(track);
+    if (!this.mediaSessionEnabled || !this.currentTrack) return;
+    const songName = this.currentTrack.name?.trim() || '';
+    const lyricText = lyric?.trim() || '';
+    const isLyricTitle = Boolean(lyricText && lyricText !== songName);
+    const track = isLyricTitle ? { ...this.currentTrack, name: lyricText } : this.currentTrack;
+
+    let artistOverride: string | undefined;
+    if (isLyricTitle) {
+      const artists = this.currentTrack.ar
+        ? this.currentTrack.ar.map((a) => a.name)
+        : this.currentTrack.song.artists?.map((a) => a.name);
+      const artistText = artists?.join(' / ') || '';
+      artistOverride = [artistText, songName].filter(Boolean).join(' / ');
+    }
+    this.updateMediaSessionMetadata(track, artistOverride);
   }
 
   private updateMediaSessionState(isPlaying: boolean) {
-    if (!('mediaSession' in navigator)) return;
+    if (!this.mediaSessionEnabled) return;
 
     navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
     this.updateMediaSessionPositionState();
@@ -494,7 +576,7 @@ class AudioService {
 
   private updateMediaSessionPositionState() {
     try {
-      if (!this.currentSound || !('mediaSession' in navigator)) return;
+      if (!this.currentSound || !this.mediaSessionEnabled) return;
       if ('setPositionState' in navigator.mediaSession) {
         const duration = this.currentSound.duration();
         const position = this.currentSound.seek() as number;
@@ -838,6 +920,9 @@ class AudioService {
         if (sound instanceof LocalAudioPlayer) {
           return await this._setupEQLocalMobile(sound);
         }
+        if (iosAudioProtection.enabled) {
+          return this._setupEQHowlMobile(sound as Howl);
+        }
         // 网页端：探测通过且已挂 crossOrigin 的流媒体走建图路径（鼓点/高潮分析）
         if (isAnalysisArmed(sound as Howl)) {
           return await this._setupEQHowlWebAnalyzed(sound as Howl);
@@ -1030,6 +1115,11 @@ class AudioService {
 
       // 清理旧图（保持上下文），再以 CORS 干净的元素建源
       await this.disposeEQ(true);
+      // 用户可能在等待 resume 的过程中确认开启，不能继续创建镜像图。
+      if (iosAudioProtection.enabled) {
+        this.releaseAnalysisMirror();
+        return this._setupEQHowlMobile(sound);
+      }
       // 一个元素在同一 AudioContext 里只能绑定一个 MediaElementSourceNode：
       // Howler 跨曲复用 html5 元素，crossfade 也会先给新元素建源，
       // 这里再建一次会抛 InvalidStateError（表现为退化成直通播放、失去鼓点/频谱）。
@@ -1082,6 +1172,12 @@ class AudioService {
     try {
       // 清理现有连接（保持上下文）
       await this.disposeEQ(true);
+
+      if (iosAudioProtection.enabled) {
+        this.releaseAnalysisMirror();
+        sound.volume(Number(localStorage.getItem('volume') ?? 1));
+        return;
+      }
 
       // 确保 Howler 上下文已初始化（供 LocalAudioPlayer 后续使用）
       this.context = Howler.ctx as AudioContext;
@@ -2137,12 +2233,15 @@ class AudioService {
             throw new Error('播放请求已取消');
           }
           // 确保 Howler 上下文已初始化
-          if (!Howler.ctx) {
+          if (!Howler.ctx && (!iosAudioProtection.enabled || url.startsWith('local://'))) {
             Howler.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
           }
 
           // 确保使用同一个音频上下文
-          if (Howler.ctx.state === 'closed') {
+          if (
+            Howler.ctx?.state === 'closed' &&
+            (!iosAudioProtection.enabled || url.startsWith('local://'))
+          ) {
             Howler.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
             this.context = Howler.ctx;
             Howler.masterGain = this.context.createGain();
@@ -2152,7 +2251,10 @@ class AudioService {
           }
 
           // 恢复上下文状态
-          if (Howler.ctx.state === 'suspended') {
+          if (
+            Howler.ctx?.state === 'suspended' &&
+            (!iosAudioProtection.enabled || url.startsWith('local://'))
+          ) {
             await Howler.ctx.resume();
           }
 
@@ -2201,12 +2303,14 @@ class AudioService {
             });
             // 网页端：探测通过则给元素挂 crossOrigin（为建图分析做准备）；
             // 未通过/未探测时必须摘除对象池残留的 crossOrigin，否则无 ACAO 节点会整段加载失败
-            if (isWebAnalysisPlatform()) {
-              if (await probeAnalysisCapability(url)) {
+            if (isWebAnalysisPlatform() && !iosAudioProtection.enabled) {
+              if ((await probeAnalysisCapability(url)) && !iosAudioProtection.enabled) {
                 armHowlForAnalysis(newSound, url);
               } else {
                 disarmHowlAudio(newSound, url);
               }
+            } else if (iosAudioProtection.enabled) {
+              disarmHowlAudio(newSound, url);
             }
           }
 
@@ -2557,13 +2661,37 @@ class AudioService {
       }
 
       this.currentTrack = null;
-      if ('mediaSession' in navigator) {
+      if (this.mediaSessionEnabled) {
         navigator.mediaSession.playbackState = 'none';
       }
       this.disposeEQ();
     } catch (error) {
       console.error('停止音频时发生错误:', error);
     }
+  }
+
+  /** Invalidate in-flight loads before a new track starts resolving metadata or its URL. */
+  async cancelPendingPlayback(): Promise<void> {
+    this.playbackGeneration += 1;
+    this.cancelSeekRecovery();
+    this.cancelCrossfade();
+    const pending = this.pendingSound;
+    this.pendingSound = null;
+    const current = this.currentSound;
+    this.currentSound = null;
+    this.currentTrack = null;
+    this.currentUrl = null;
+    for (const sound of new Set([pending, current])) {
+      if (!sound) continue;
+      try {
+        sound.stop();
+        sound.unload();
+      } catch {
+        // A load may already have released the underlying audio node.
+      }
+      this.hardStopSound(sound);
+    }
+    await this.disposeEQ(true);
   }
 
   setVolume(volume: number) {
@@ -2796,7 +2924,7 @@ class AudioService {
     }
 
     // 同步给 Media Session UI
-    if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
+    if (this.mediaSessionEnabled && 'setPositionState' in navigator.mediaSession) {
       navigator.mediaSession.setPositionState({
         duration: this.currentSound.duration(),
         playbackRate: rate,

@@ -22,12 +22,13 @@ export function subtitleLinesToLyric(lines: SubtitleLine[]): ILyric {
     .map((line) => ({
       text: line.content,
       trText: '',
-      startTime: line.from,
-      duration: Math.max(0, line.to - line.from)
+      startTime: line.from * 1000,
+      duration: Math.max(0, line.to - line.from) * 1000
     }));
 
   return {
-    lrcTimeArray: lrcArray.map((line) => line.startTime ?? 0),
+    rawSchemaVersion: 2,
+    lrcTimeArray: lrcArray.map((line) => (line.startTime ?? 0) / 1000),
     lrcArray,
     hasWordByWord: false,
     format: 'lrc'
@@ -35,7 +36,9 @@ export function subtitleLinesToLyric(lines: SubtitleLine[]): ILyric {
 }
 
 /** 手动匹配结果的缓存 key（与 providerLyricCache 的 key 习惯一致） */
-export function manualLyricCacheKey(song: Pick<SongResult, 'id' | 'platform' | 'platformId'>): string {
+export function manualLyricCacheKey(
+  song: Pick<SongResult, 'id' | 'platform' | 'platformId'>
+): string {
   const platform = song.platform || 'netease';
   const identity = song.platformId || String(song.id);
   return `manual:${platform}:${identity}`;

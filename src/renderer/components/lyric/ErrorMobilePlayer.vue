@@ -157,7 +157,11 @@
                   }"
                   :style="{ color: mainLyricColor, fontFamily: errorFontFamily }"
                 >
-                  {{ wordPlayback.hasDisplayLyrics.value ? decoratedText(currentLyricText) : $t('player.lrc.noLrc') }}
+                  {{
+                    wordPlayback.hasDisplayLyrics.value
+                      ? decoratedText(currentLyricText)
+                      : $t('player.lrc.noLrc')
+                  }}
                 </div>
               </div>
             </div>
@@ -241,6 +245,7 @@
               :settings-active="immersiveSurfaceMode === 'settings'"
               entrance="rise"
               @show-settings="toggleImmersiveSurface('settings')"
+              @return-cover="closeImmersive()"
             />
           </div>
         </div>
@@ -298,7 +303,6 @@ import ImmersivePlaylistPanel from '@/components/player/ImmersivePlaylistPanel.v
 import MobilePlayerSettings from '@/components/player/MobilePlayerSettings.vue';
 import PosterShareModal from '@/components/share/PosterShareModal.vue';
 import { useCommentsPage } from '@/composables/useCommentsPage';
-import { useBackgroundHealthStore } from '@/store/modules/backgroundHealth';
 import {
   immersiveSurfaceMode,
   toggleImmersiveSurface,
@@ -314,6 +318,7 @@ import { useSwipeClose } from '@/composables/useSwipeClose';
 import { useTapToggle } from '@/composables/useTapToggle';
 import { useWordTimedPlayback } from '@/composables/useWordTimedPlayback';
 import { playMusic } from '@/hooks/MusicHook';
+import { useBackgroundHealthStore } from '@/store/modules/backgroundHealth';
 import { usePlayerStore } from '@/store/modules/player';
 import { useStyleEngineStore } from '@/store/modules/styleEngine';
 import { probeEtherSupport } from '@/utils/etherFluid';
@@ -404,7 +409,7 @@ const {
   resetOnGestureClose
 } = useStyleImmersiveLyrics({
   showFullLyrics,
-  openAnimated: openLyricsAnimated,
+  closeAnimated: closeLyricsAnimated,
   swipePreviewing: () => lyricsSwipePreview.value
 });
 const immersiveHeaderCollapse = useStyleImmersiveHeaderCollapse(closeImmersive);

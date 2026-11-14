@@ -24,7 +24,12 @@
             :class="{ selected: config.playerStyle === style.key }"
             @click="config.playerStyle = style.key"
           >
-            <div class="style-card-preview" :class="'preview-' + style.key"></div>
+            <div class="style-card-preview" :class="'preview-' + style.key">
+              <template v-if="style.key === 'wordCloud'">
+                <span>{{ style.label }}</span
+                ><span>music</span><span>flow</span>
+              </template>
+            </div>
             <div class="style-card-name">{{ style.label }}</div>
           </div>
         </div>
@@ -560,11 +565,14 @@ const playerStyles = computed(() => {
       if (s.key === 'default') return true;
       if (s.key === 'stage') return isFeatureEnabled('stage-style');
       if (s.key === 'starChart') return isFeatureEnabled('star-chart-style');
-      if (s.key === 'frenzy') return isFeatureEnabled('frenzy-style');
+      if (s.key === 'wordCloud') return isFeatureEnabled('wordCloud-style');
       if (s.key === 'error') return isFeatureEnabled('error-style');
       return false;
     })
-    .map((s) => ({ key: s.key as LyricConfig['playerStyle'], label: s.label }));
+    .map((s) => ({
+      key: s.key as LyricConfig['playerStyle'],
+      label: tr(`player.styles.${s.key}`, s.label)
+    }));
 });
 
 // 当前选中模式的设置项（基于 config.playerStyle 而非导航视图）
@@ -942,32 +950,60 @@ defineExpose({
   text-shadow: 0 1px 5px #000;
 }
 
-/* 狂躁样式预览：白色背景 + 黑色文字 + 红色强调 */
-.preview-frenzy {
-  background: #ffffff;
+/* 固定词块预览，字号和方向对应词云排版。 */
+.preview-wordCloud {
+  background: radial-gradient(ellipse at 30% 60%, #31465a, #10151c 80%);
   position: relative;
   overflow: hidden;
 }
-.preview-frenzy::before {
-  content: '一走了之';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 11px;
-  font-weight: 900;
-  color: #1a1a1a;
+.preview-dotMatrix {
+  background:
+    radial-gradient(circle, #aaa 1.1px, transparent 1.2px) 0 0 / 6px 6px,
+    #fff;
 }
-.preview-frenzy::after {
+.preview-dotMatrix::after {
   content: '';
   position: absolute;
+  inset: 22% 25%;
+  background: radial-gradient(circle, #181818 1.3px, transparent 1.4px) 0 0 / 6px 6px;
+  clip-path: polygon(
+    0 0,
+    24% 0,
+    24% 36%,
+    76% 36%,
+    76% 0,
+    100% 0,
+    100% 100%,
+    76% 100%,
+    76% 60%,
+    24% 60%,
+    24% 100%,
+    0 100%
+  );
+}
+.preview-wordCloud span {
+  position: absolute;
+  font-weight: 700;
+  line-height: 1;
+}
+.preview-wordCloud span:first-child {
+  top: 29%;
+  left: 16%;
+  font-size: 17px;
+  color: #c4e2ee;
+}
+.preview-wordCloud span:nth-child(2) {
+  top: 62%;
+  left: 22%;
+  font-size: 9px;
+  color: #83a3b8;
+}
+.preview-wordCloud span:nth-child(3) {
   top: 50%;
-  left: 42%;
-  width: 18px;
-  height: 11px;
-  background: #cc0000;
-  transform: translate(-50%, -50%) skewX(-8deg);
-  opacity: 0.9;
+  right: 2%;
+  transform: translateY(-50%) rotate(-90deg);
+  font-size: 11px;
+  color: #e3d4c6;
 }
 
 .style-card-name {

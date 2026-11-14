@@ -7,12 +7,15 @@
       <n-dialog-provider>
         <n-message-provider>
           <router-view></router-view>
+          <lyric-merge-feedback-panel />
           <traffic-warning-drawer v-if="!isElectron"></traffic-warning-drawer>
           <disclaimer-modal></disclaimer-modal>
           <shared-song-card ref="sharedSongCardRef"></shared-song-card>
+          <share-link-import />
           <listen-together-invite-modal ref="listenTogetherInviteRef" />
           <mobile-update-modal v-if="!isElectron" />
           <onboarding-overlay v-if="!isElectron" ref="onboardingRef" />
+          <ios-audio-protection-prompt v-if="!isElectron && !isLyricWindow" />
           <splash-screen v-if="startupSplashVisible" @finish="startupSplashVisible = false" />
         </n-message-provider>
       </n-dialog-provider>
@@ -28,14 +31,18 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import DisclaimerModal from '@/components/common/DisclaimerModal.vue';
+import IosAudioProtectionPrompt from '@/components/common/IosAudioProtectionPrompt.vue';
 import ListenTogetherInviteModal from '@/components/common/ListenTogetherInviteModal.vue';
 import MobileUpdateModal from '@/components/common/MobileUpdateModal.vue';
 import OnboardingOverlay from '@/components/common/OnboardingOverlay.vue';
 import SharedSongCard from '@/components/common/SharedSongCard.vue';
+import ShareLinkImport from '@/components/common/ShareLinkImport.vue';
+import LyricMergeFeedbackPanel from '@/components/lyric/LyricMergeFeedbackPanel.vue';
 import SplashScreen from '@/components/splash/SplashScreen.vue';
 import TrafficWarningDrawer from '@/components/TrafficWarningDrawer.vue';
 import { setSmartAudioInstance, useSmartAudio } from '@/composables/useSmartAudio';
 import { registerBuiltinFeatures } from '@/features/register';
+import { isBareMobileLaunch } from '@/router/mobileStartup';
 import { registerExternalAudioHandler } from '@/services/externalAudio';
 import { useBackgroundHealthStore } from '@/store/modules/backgroundHealth';
 import { usePlatformAccountsStore } from '@/store/modules/platformAccounts';
@@ -381,8 +388,9 @@ onMounted(async () => {
   // 初始化样式引擎（启动鼓点/高潮检测器）
   styleEngine.init();
 
-  // 首次使用展示新手引导
-  if (!isElectron) {
+  // 首次使用展示新手引导;仅裸启动(直接访问根路径)时弹出,
+  // 通过分享链接直达歌单等二级页时不遮挡目标内容
+  if (!isElectron && isBareMobileLaunch(window.location.hash)) {
     nextTick(() => onboardingRef.value?.show());
   }
 

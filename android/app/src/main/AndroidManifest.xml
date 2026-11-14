@@ -86,8 +86,21 @@
                 <data android:host="music.163.com" />
                 <data android:host="y.music.163.com" />
                 <data android:host="163cn.tv" />
+                <data android:host="m.music.163.com" />
+                <data android:host="y.qq.com" />
+                <data android:host="c.y.qq.com" />
+                <data android:host="c6.y.qq.com" />
+                <data android:host="i.y.qq.com" />
+                <data android:host="i2.y.qq.com" />
+                <data android:host="m.kugou.com" />
+                <data android:host="www.kugou.com" />
             </intent-filter>
 
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
 
         <!-- Spotify OAuth 回调独立接收器，避免浏览器任务切换时吞掉自定义 Scheme。 -->

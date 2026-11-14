@@ -1,6 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import type { Howl } from 'howler';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   armHowlForAnalysis,
@@ -23,11 +22,33 @@ describe('audioAnalysisGate', () => {
     resetProbeCache();
   });
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
   describe('probeAnalysisCapability', () => {
+    it('无响应的探测在 1.5 秒后中止，不拖住播放，也不缓存为永久失败', async () => {
+      vi.useFakeTimers();
+      const fetchMock = vi.fn().mockImplementation(() => new Promise(() => {}));
+      vi.stubGlobal('fetch', fetchMock);
+      const probe = probeAnalysisCapability('https://slow.example/a.mp3');
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(await probe).toBe(false);
+      expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
+
+      fetchMock.mockResolvedValueOnce({ ok: true, body: null });
+      expect(await probeAnalysisCapability('https://slow.example/b.mp3')).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('取消响应体无响应时仍立即结束探测', async () => {
+      const cancel = vi.fn().mockImplementation(() => new Promise(() => {}));
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: { cancel } }));
+      expect(await probeAnalysisCapability('https://slow-cancel.example/a.mp3')).toBe(true);
+      expect(cancel).toHaveBeenCalledOnce();
+    });
+
     it('同 host 只探测一次，结果跨 URL 复用', async () => {
       const fetchMock = vi.fn().mockResolvedValue({ ok: true, body: null });
       vi.stubGlobal('fetch', fetchMock);

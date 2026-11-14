@@ -9,20 +9,18 @@ import { isLocalSong, useLocalMusic } from '@/hooks/useLocalMusic';
 import { useLyrics, useSongDetail } from '@/hooks/usePlayerHooks';
 import { isAndroidNative } from '@/services/androidNative';
 import { audioService } from '@/services/audioService';
+import { playbackRequestManager } from '@/services/playbackRequestManager';
 import {
   markSessionSnapshotSong,
   readPlayerSessionSnapshot,
   writePlayerSessionSnapshot
 } from '@/services/playbackSnapshot';
-import { playbackRequestManager } from '@/services/playbackRequestManager';
 import { preloadService } from '@/services/preloadService';
 import { SongSourceConfigManager } from '@/services/SongSourceConfigManager';
 import type { AudioOutputDevice } from '@/types/audio';
 import type { Platform, SongResult } from '@/types/music';
 import { getImgUrl } from '@/utils';
 import { getImageLinearBackground } from '@/utils/linearColor';
-import { mergeBilingualAlternation } from '@/utils/lyricTranslationMerge';
-import { isChunxiaoAlbumSongId } from '@/utils/songTitle';
 
 import { BACKGROUND_HEALTH_DEGRADED_EVENT, useBackgroundHealthStore } from './backgroundHealth';
 import { usePlayHistoryStore } from './playHistory';
@@ -311,7 +309,7 @@ export const usePlayerCoreStore = defineStore(
       if (watchdogStallTicks >= 2) {
         watchdogStallTicks = 0;
         watchdogLastPosition = null;
-        void audioService.softRecoverSound('stall').then((ok) => {
+        void audioService.softRecoverSound('stall', playMusic.value).then((ok) => {
           if (!ok) message.warning(i18n.global.t('player.audioSoftRecoverFailed'));
         });
       }
@@ -321,7 +319,7 @@ export const usePlayerCoreStore = defineStore(
     // 背景降级由宿主组件响应自身状态处理，此处不管背景。
     const onBackgroundDegraded = () => {
       message.warning(i18n.global.t('player.backgroundDegraded'));
-      void audioService.softRecoverSound('contextlost').then((ok) => {
+      void audioService.softRecoverSound('contextlost', playMusic.value).then((ok) => {
         if (!ok) message.warning(i18n.global.t('player.audioSoftRecoverFailed'));
       });
     };
@@ -345,15 +343,8 @@ export const usePlayerCoreStore = defineStore(
 
       // 创建新的播放请求并取消之前的所有请求
       const requestId = playbackRequestManager.createRequest(music);
-
-      const currentSound = audioService.getCurrentSound();
-      if (currentSound) {
-        currentSound.stop();
-        currentSound.unload();
-        // Howler 在 iOS 中断窗口里可能把 stop/unload 排队而不真正执行，
-        // 再硬暂停一次底层元素，避免旧歌与新歌同时出声（听感是叠音/倍速）。
-        audioService.hardStopSound(currentSound);
-      }
+      // URL/歌曲详情尚未解析时也先使旧音源加载失效，避免其迟到的 load 回调复活旧歌。
+      await audioService.cancelPendingPlayback();
 
       // 验证请求是否仍然有效
       if (!playbackRequestManager.isRequestValid(requestId)) {
@@ -372,58 +363,43 @@ export const usePlayerCoreStore = defineStore(
       const localMusic = useLocalMusic();
 
       // 本地歌曲：使用专属逻辑加载歌词（不走网易云 API）
-      const [lyrics, { backgroundColor, primaryColor }] = await Promise.all([
-        (async () => {
-          // 云端托管歌曲：从服务器加载歌词
-          if (music.platform === 'server' && music.platformId) {
-            try {
-              const { getServerSongDetail } = await import('@/api/serverSongs');
-              const detail = await getServerSongDetail(music.platformId);
-              // TTML 歌词(逐字):交给 AMLL 链路(amllStore.watch(currentSong) 自动
-              // 经 server 平台的 lyricsUrl 直链加载),不写入 music.lyric
-              if (detail.lyricsUrl?.toLowerCase().endsWith('.ttml')) {
-                return { lrcTimeArray: [], lrcArray: [], hasWordByWord: false };
-              }
-              if (detail.lyricsText) {
-                const { parseLyricContent } = await import('@/utils/localMusicUtils');
-                const parsed = parseLyricContent(detail.lyricsText, detail.lyricsUrl);
-                if (parsed && parsed.lrcTimeArray.length > 0) {
-                  return parsed;
-                }
-              }
-            } catch (e) {
-              console.warn('[云端歌曲] 歌词加载失败:', e);
+      const loadLyrics = async () => {
+        // 云端托管歌曲：从服务器加载歌词
+        if (music.platform === 'server' && music.platformId) {
+          try {
+            const { getServerSongDetail } = await import('@/api/serverSongs');
+            const detail = await getServerSongDetail(music.platformId);
+            // TTML 歌词(逐字):交给 AMLL 链路(amllStore.watch(currentSong) 自动
+            // 经 server 平台的 lyricsUrl 直链加载),不写入 music.lyric
+            if (detail.lyricsUrl?.toLowerCase().endsWith('.ttml')) {
+              return { lrcTimeArray: [], lrcArray: [], hasWordByWord: false };
             }
-            return { lrcTimeArray: [], lrcArray: [], hasWordByWord: false };
+            if (detail.lyricsText) {
+              const { parseLyricContent } = await import('@/utils/localMusicUtils');
+              const parsed = parseLyricContent(detail.lyricsText, detail.lyricsUrl);
+              if (parsed && parsed.lrcTimeArray.length > 0) {
+                return parsed;
+              }
+            }
+          } catch (e) {
+            console.warn('[云端歌曲] 歌词加载失败:', e);
           }
-          // 本地歌曲始终走专属歌词加载（优先级：外部 .lrc → 内嵌歌词 → 社区歌词）
-          if (isLocalSong(music)) {
-            return await localMusic.loadLocalLyrics(music);
-          }
-          return await loadBestLyric(music);
-        })(),
-        (async () => {
-          if (music.backgroundColor && music.primaryColor) {
-            return { backgroundColor: music.backgroundColor, primaryColor: music.primaryColor };
-          }
-          return await getImageLinearBackground(getImgUrl(music?.picUrl, '30y30'));
-        })()
-      ]);
+          return { lrcTimeArray: [], lrcArray: [], hasWordByWord: false };
+        }
+        // 本地歌曲始终走专属歌词加载（优先级：外部 .lrc → 内嵌歌词 → 社区歌词）
+        if (isLocalSong(music)) {
+          return await localMusic.loadLocalLyrics(music);
+        }
+        return await loadBestLyric(music);
+      };
 
       // 在更新状态前再次验证请求
       if (!playbackRequestManager.isRequestValid(requestId)) {
         return false;
       }
 
-      // 设置歌词和背景色
-      music.lyric = lyrics;
-      // 春晓《长大就好了》：中英双语整行交替演唱——英文行并入中文行的 trText
-      if (isChunxiaoAlbumSongId(music.id)) {
-        lyrics.lrcArray = mergeBilingualAlternation(lyrics.lrcArray);
-        lyrics.lrcTimeArray = lyrics.lrcArray.map((l) => (l.startTime ?? 0) / 1000);
-      }
-      music.backgroundColor = backgroundColor;
-      music.primaryColor = primaryColor;
+      // 起播只依赖音频地址；歌词和取色并行补齐，不等待慢图床或歌词接口。
+      music.lyric ||= { lrcArray: [], lrcTimeArray: [], hasWordByWord: false };
       music.playLoading = true;
 
       // 更新 playMusic 和播放状态
@@ -446,6 +422,30 @@ export const usePlayerCoreStore = defineStore(
       document.title = 'Zephyrus - ' + title;
 
       try {
+        const pendingLyric = playMusic.value.lyric;
+        const updateSupplement = (patch: Partial<SongResult>) => {
+          if (!playbackRequestManager.isRequestValid(requestId)) return;
+          Object.assign(originalMusic, patch);
+          Object.assign(music, patch);
+          Object.assign(playMusic.value, patch);
+        };
+        void loadLyrics()
+          .then((lyric) => {
+            // 加载期间用户手动换了歌词时，保留用户的新选择。
+            if (playMusic.value.lyric === pendingLyric) updateSupplement({ lyric });
+          })
+          .catch((error) => console.warn('后台歌词加载失败:', error));
+        if (!music.backgroundColor || !music.primaryColor) {
+          void (async () => {
+            const cover =
+              music.platform === 'bilibili' && music.picUrl
+                ? (await import('@/api/bilibili')).toGatewayProxyUrl(music.picUrl)
+                : getImgUrl(music.picUrl, '30y30');
+            const colors = await getImageLinearBackground(cover);
+            if (colors.primaryColor) updateSupplement(colors);
+          })().catch((error) => console.warn('后台封面取色失败:', error));
+        }
+
         // 添加到历史记录
         const playHistoryStore = usePlayHistoryStore();
         if (music.isPodcast) {
@@ -457,7 +457,9 @@ export const usePlayerCoreStore = defineStore(
         }
 
         // 获取歌曲详情
-        const updatedPlayMusic = await getSongDetail(originalMusic, requestId);
+        const updatedPlayMusic = await getSongDetail(originalMusic, requestId, {
+          loadCoverColor: false
+        });
 
         // 在获取详情后再次验证请求
         if (!playbackRequestManager.isRequestValid(requestId)) {
@@ -465,11 +467,10 @@ export const usePlayerCoreStore = defineStore(
           return false;
         }
 
-        updatedPlayMusic.lyric = lyrics;
-        if (isChunxiaoAlbumSongId(updatedPlayMusic.id)) {
-          lyrics.lrcArray = mergeBilingualAlternation(lyrics.lrcArray);
-          lyrics.lrcTimeArray = lyrics.lrcArray.map((l) => (l.startTime ?? 0) / 1000);
-        }
+        // 取链期间已返回的辅助数据不能被详情快照覆盖。
+        updatedPlayMusic.lyric = playMusic.value.lyric;
+        updatedPlayMusic.backgroundColor = playMusic.value.backgroundColor;
+        updatedPlayMusic.primaryColor = playMusic.value.primaryColor;
 
         // 本地歌曲：确保 URL 正确编码（统一格式：local:///编码后的路径）
         // 仅对已是 local:// 的来源改写;网页会话条目的 blob: URL 原样保留
@@ -536,11 +537,15 @@ export const usePlayerCoreStore = defineStore(
         // A newer tap/cut has already superseded this request. The old
         // request is expected to fail silently; showing its error produces
         // stacked toasts during rapid switching.
-        if (playbackRequestManager.getCurrentRequestId() === requestId) {
+        const isCurrentRequest = playbackRequestManager.getCurrentRequestId() === requestId;
+        if (isCurrentRequest) {
           message.error(i18n.global.t('player.playFailed'));
-        }
-        if (playMusic.value) {
-          playMusic.value.playLoading = false;
+          // Failed detail/URL resolution must not leave the watchdog armed for the old track.
+          await audioService.cancelPendingPlayback();
+          play.value = false;
+          isPlay.value = false;
+          userPlayIntent.value = false;
+          if (playMusic.value) playMusic.value.playLoading = false;
         }
         playbackRequestManager.failRequest(requestId);
 

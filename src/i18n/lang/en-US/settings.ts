@@ -93,6 +93,10 @@ export default {
     albumBgVivid: 'Vivid (cover-faithful)'
   },
   playback: {
+    neteaseRequestMode: 'NetEase API request method',
+    neteaseRequestModeDesc: 'Switch if playback or loading fails. Saved on this device and used for the next request. Enhanced uses the online gateway; subscription and licensing restrictions still apply.',
+    neteaseAlger: 'Alger (original)',
+    neteaseEnhanced: 'Enhanced (xeapi)',
     quality: 'Audio Quality',
     qualityDesc: 'Select music playback quality (VIP)',
     qualityOptions: {

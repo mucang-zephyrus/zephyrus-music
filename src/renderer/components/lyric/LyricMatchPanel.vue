@@ -13,7 +13,9 @@
         referrerpolicy="no-referrer"
         alt=""
       />
-      <span v-else class="lm-target-cover lm-target-placeholder"><i class="ri-music-2-line" /></span>
+      <span v-else class="lm-target-cover lm-target-placeholder"
+        ><i class="ri-music-2-line"
+      /></span>
       <div class="lm-target-copy">
         <strong>{{ song.name }}</strong>
         <small>{{ targetArtist }}</small>
@@ -98,8 +100,8 @@ import { useMessage } from 'naive-ui';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-import { getBilibiliSubtitle } from '@/api/bilibili';
 import { getAmllLyricForSong, resolveAmllSource } from '@/api/amllLyrics';
+import { getBilibiliSubtitle } from '@/api/bilibili';
 import { queryCommunityLyrics } from '@/api/communityLyric';
 import { fetchLrclibLyric } from '@/api/lrclibLyrics';
 import { readProviderLyricCache, writeProviderLyricCache } from '@/api/providerLyricCache';
@@ -111,14 +113,13 @@ import { ttmlToTimedLines } from '@/services/ttmlParser';
 import { usePlayerStore } from '@/store/modules/player';
 import type { ILyric, SongResult } from '@/types/music';
 import { getImgUrl } from '@/utils';
-import { mergeTranslationFeatures } from '@/utils/lyricTranslationMerge';
 import { isUsableLyric } from '@/utils/lyricValidation';
-import { mergeAuxiliaryLyrics, parseTimedLyrics } from '@/utils/timedLyrics';
 import {
   defaultLyricSearchKeyword,
   manualLyricCacheKey,
   subtitleLinesToLyric
 } from '@/utils/subtitleParser';
+import { mergeAuxiliaryLyrics, parseTimedLyrics } from '@/utils/timedLyrics';
 
 type CandidateSource = 'bilibili' | 'netease' | 'amll' | 'community' | 'lrclib';
 
@@ -184,6 +185,7 @@ async function amllToLyric(current: SongResult): Promise<ILyric | null> {
     lrcTimeArray: lines.map((line) => line.startTime ?? 0),
     lrcArray: lines,
     hasWordByWord: lines.some((line) => line.words?.length),
+    rawSchemaVersion: 2,
     format: 'ttml',
     source: 'amll-ttml'
   };
@@ -192,7 +194,9 @@ async function amllToLyric(current: SongResult): Promise<ILyric | null> {
 /** Zephyrus 社区歌词：按平台 id / 内部 id 各查一次，逐条候选 */
 async function communityCandidates(current: SongResult): Promise<LyricCandidate[]> {
   const ids = Array.from(
-    new Set([current.platformId, current.id].filter((id) => id !== undefined && id !== null).map(String))
+    new Set(
+      [current.platformId, current.id].filter((id) => id !== undefined && id !== null).map(String)
+    )
   );
   const list: LyricCandidate[] = [];
   const seen = new Set<number>();
@@ -215,7 +219,6 @@ async function communityCandidates(current: SongResult): Promise<LyricCandidate[
           load: async () => {
             const parsed = parseTimedLyrics(entry.lrc, { format: 'lrc', source: 'community' });
             if (entry.trLrc) mergeAuxiliaryLyrics(parsed, entry.trLrc, 'trText', 'lrc');
-            mergeTranslationFeatures(parsed.lrcArray);
             return parsed;
           }
         });
@@ -350,6 +353,9 @@ async function apply(candidate: LyricCandidate): Promise<void> {
       return;
     }
     // 写入「手动匹配」缓存（优先级最高），当前播放中则立即生效
+    lyric.sourceId ||= candidate.id;
+    lyric.rawSchemaVersion = 2;
+    lyric.manualSelection = { id: candidate.id, source: candidate.source, keyword: keyword.value };
     await writeProviderLyricCache(manualLyricCacheKey(current), lyric);
     if (playerStore.playMusic && String(playerStore.playMusic.id) === String(current.id)) {
       playerStore.playMusic.lyric = lyric;

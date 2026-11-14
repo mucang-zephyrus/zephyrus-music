@@ -1,0 +1,179 @@
+@import 'tailwindcss';
+
+/* ==================== 设计令牌 ==================== */
+/* 克莱因蓝 / 电光蓝 / 深蓝 + 黑白灰。暗色锁定。
+   渐变灰化（用户定）：大面积渐变一律灰阶，克莱因蓝只留一处深蓝洗；
+   全面磨砂（用户定）：面板/卡片/悬浮件均玻璃拟态。 */
+@theme {
+  --color-abyss: #08090b; /* 页面底：中性近黑（禁纯黑） */
+  --color-panel: rgba(16, 18, 22, 0.55); /* 磨砂面板基底 */
+  --color-panel-solid: #101216;
+  --color-line: rgba(255, 255, 255, 0.08);
+  --color-ink: #f2f4f8;
+  --color-ink-dim: #a8b0c2;
+  --color-ink-faint: #6d7488;
+  --color-klein: #002fa7; /* 克莱因蓝 */
+  --color-klein-bright: #1d49d8; /* 暗底可读的克莱因亮化 */
+  --color-electric: #4d7dff; /* 电光蓝：交互/高亮 */
+
+  --font-sans:
+    'Inter', 'SF Pro Display', -apple-system, 'PingFang SC', 'HarmonyOS Sans SC',
+    'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  --font-mono: 'Geist Mono', 'SF Mono', ui-monospace, 'Cascadia Mono', monospace;
+
+  --radius-card: 16px;
+  --radius-panel: 22px;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  @apply bg-abyss text-ink font-sans antialiased;
+  font-feature-settings: 'ss01' on;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(77, 125, 255, 0.32);
+}
+
+/* ==================== 滚动入场（v-reveal） ==================== */
+.reveal {
+  opacity: 0;
+  transform: translate3d(0, 26px, 0);
+  filter: blur(10px);
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform, filter;
+}
+
+.reveal.is-revealed {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  filter: blur(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    transition: opacity 0.2s ease;
+    transform: none;
+    filter: none;
+  }
+}
+
+/* ==================== 通用细节 ==================== */
+.site-shell {
+  @apply mx-auto w-full max-w-[1200px] px-5 md:px-8;
+}
+
+.hairline-t {
+  border-top: 1px solid var(--color-line);
+}
+
+/* 全面磨砂：玻璃面板（用户定） */
+.glass {
+  background: rgba(16, 18, 22, 0.5);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 30px 80px rgba(0, 0, 0, 0.45);
+}
+
+.glass-soft {
+  background: rgba(20, 22, 27, 0.42);
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass-soft {
+    background: var(--color-panel-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* 主按钮：克莱因蓝，按下物理反馈（蓝只用于交互元素） */
+.btn-primary {
+  @apply inline-flex items-center gap-2 rounded-full bg-klein-bright px-6 py-3 text-sm font-medium text-white;
+  box-shadow: 0 14px 40px rgba(29, 73, 216, 0.35);
+  transition:
+    transform 120ms ease-out,
+    background-color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.btn-primary:hover {
+  background: var(--color-electric);
+  box-shadow: 0 16px 48px rgba(77, 125, 255, 0.4);
+}
+
+.btn-primary:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+.btn-ghost {
+  @apply inline-flex items-center gap-2 rounded-full border border-line px-6 py-3 text-sm font-medium text-ink-dim;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition:
+    transform 120ms ease-out,
+    color 200ms ease,
+    border-color 200ms ease,
+    background-color 200ms ease;
+}
+
+.btn-ghost:hover {
+  color: var(--color-ink);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.btn-ghost:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+.text-link {
+  @apply inline-flex items-center gap-1.5 text-sm font-medium text-electric;
+}
+
+.text-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.section-title {
+  @apply text-3xl leading-snug font-semibold tracking-tight text-ink md:text-4xl;
+}
+
+.section-body {
+  @apply mt-4 max-w-[62ch] text-[15px] leading-relaxed text-ink-dim;
+}
+
+/* 真实组件预览的共用画布：灰阶渐变 + 磨砂 */
+.ui-stage {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.015) 100%);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-panel);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 30px 80px rgba(0, 0, 0, 0.45);
+}

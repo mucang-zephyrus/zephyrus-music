@@ -88,7 +88,13 @@
               fontFamily: frenzyFontFamily
             }"
           >
-            {{ !wordPlayback.hasDisplayLyrics.value ? $t('player.lrc.noLrc') : isCustom && styleCfg.forceNoWrap ? currentLyricText : lyricPart1 }}
+            {{
+              !wordPlayback.hasDisplayLyrics.value
+                ? $t('player.lrc.noLrc')
+                : isCustom && styleCfg.forceNoWrap
+                  ? currentLyricText
+                  : lyricPart1
+            }}
           </div>
           <div
             v-if="!(isCustom && styleCfg.forceNoWrap)"
@@ -193,6 +199,7 @@
               :settings-active="immersiveSurfaceMode === 'settings'"
               entrance="rise"
               @show-settings="toggleImmersiveSurface('settings')"
+              @return-cover="closeImmersive()"
             />
           </div>
         </div>
@@ -326,7 +333,7 @@ const {
   resetOnGestureClose
 } = useStyleImmersiveLyrics({
   showFullLyrics,
-  openAnimated: openLyricsAnimated,
+  closeAnimated: closeLyricsAnimated,
   swipePreviewing: () => lyricsSwipePreview.value
 });
 const immersiveHeaderCollapse = useStyleImmersiveHeaderCollapse(closeImmersive);
@@ -395,7 +402,6 @@ const frenzyBeatWeak = computed(() => Number(styleCustom.value.frenzyBeatWeak ??
 const frenzyBeatSpikeMs = computed(() => Number(styleCustom.value.frenzyBeatSpikeMs ?? 120));
 const frenzyGlitchBase = computed(() => Number(styleCustom.value.frenzyGlitchBase ?? 0.15));
 const frenzyCrtLevel = computed(() => Number(styleCustom.value.frenzyCrtLevel ?? 0.6));
-
 
 onMounted(() => {
   const unsubscribe = drumDetector.onBeat((info) => {

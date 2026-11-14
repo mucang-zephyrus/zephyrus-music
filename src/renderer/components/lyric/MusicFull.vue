@@ -152,6 +152,7 @@
                 </div>
               </div>
 
+              <lyric-merge-notice :visible="!playback.usingTtml.value" />
               <!-- 无歌词 -->
               <div v-if="!hasLyrics" class="music-lrc-text">
                 <span>{{ t('player.lrc.noLrc') }}</span>
@@ -177,6 +178,7 @@ import { useI18n } from 'vue-i18n';
 
 import Cover3D from '@/components/cover/Cover3D.vue';
 import LyricCorrectionControl from '@/components/lyric/LyricCorrectionControl.vue';
+import LyricMergeNotice from '@/components/lyric/LyricMergeNotice.vue';
 import LyricSettings from '@/components/lyric/LyricSettings.vue';
 import PlayerControls from '@/components/lyric/PlayerControls.vue';
 import SimplePlayBar from '@/components/player/SimplePlayBar.vue';

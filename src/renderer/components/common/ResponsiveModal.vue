@@ -4,6 +4,7 @@
       <div
         v-if="show"
         class="fixed inset-0 z-[1000] flex items-center justify-center md:items-center items-end"
+        :style="zIndex === undefined ? undefined : { zIndex }"
         @click="handleMaskClick"
       >
         <!-- Overlay -->
@@ -14,6 +15,9 @@
           <div
             v-if="show"
             class="relative z-10 w-full bg-white dark:bg-[#1c1c1e] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+            role="dialog"
+            aria-modal="true"
+            :aria-label="title"
             :class="[isMobile ? 'rounded-t-[20px] pb-safe' : 'md:max-w-[720px] md:rounded-2xl']"
             @click.stop
           >
@@ -26,6 +30,7 @@
               </h3>
               <button
                 class="p-1 -mr-1 rounded-full text-gray-400 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
+                :aria-label="closeLabel"
                 @click="close"
               >
                 <i class="ri-close-line text-lg"></i>
@@ -57,6 +62,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 const props = defineProps<{
   modelValue: boolean;
   title?: string;
+  zIndex?: number;
+  closeLabel?: string;
 }>();
 
 const emit = defineEmits<{

@@ -24,7 +24,7 @@ import {
 } from '@/types/shareVideo';
 import { buildSongDeepLink, generateQRCodeImage } from '@/utils/qrCodeUtil';
 
-import { type AudioSourceRef,prepareSegmentAudio } from './videoAudio';
+import { type AudioSourceRef, prepareSegmentAudio } from './videoAudio';
 import { loadMuxer, resolveEncodePlan } from './videoCodecSupport';
 import { buildTimeline, resolveLyricState } from './videoLyricTimeline';
 import { resolveAccent } from './videoRenderers/common';
@@ -174,6 +174,8 @@ function syntheticEnvelope(totalFrames: number): Envelope {
  * @throws 当环境不支持 WebCodecs 编码，或指定清晰度无可用编码方案时抛出
  */
 export async function exportStyleVideo(input: StyleVideoExportInput): Promise<VideoExportResult> {
+  if (input.styleKey === 'wordCloud') throw new Error('词云样式暂不支持视频导出');
+  if (input.styleKey === 'dotMatrix') throw new Error('点阵样式暂不支持视频导出');
   const { config, song, lyrics, audioSource, onProgress, signal } = input;
   const skin = getSkin(input.styleKey);
 

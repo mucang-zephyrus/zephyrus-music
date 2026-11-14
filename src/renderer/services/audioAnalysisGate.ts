@@ -30,6 +30,8 @@ const FAIL_TTL_MS = 5 * 60 * 1000;
 /** host 级缓存：网易 CDN 节点按解析轮换，host 粒度足够；带界防泄漏 */
 const probeCache = new Map<string, ProbeVerdict>();
 const PROBE_CACHE_MAX = 96;
+// 可视化探测不能无限阻塞媒体加载；跨境 CDN 无响应时退回普通播放。
+const PROBE_TIMEOUT_MS = 1500;
 
 /**
  * 是否为"纯 Web 浏览器"平台：
@@ -69,6 +71,9 @@ export function upgradeToHttps(url: string): string {
  */
 export async function probeAnalysisCapability(url: string): Promise<boolean> {
   let host: string;
+  const controller = new AbortController();
+  let timedOut = false;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     host = new URL(url).host;
   } catch {
@@ -84,15 +89,24 @@ export async function probeAnalysisCapability(url: string): Promise<boolean> {
   try {
     // 与媒体元素实际请求对齐：https 升级 + CORS 模式 + 小段 Range
     const probeUrl = upgradeToHttps(url);
-    const res = await fetch(probeUrl, {
+    const response = fetch(probeUrl, {
       mode: 'cors',
-      headers: { Range: 'bytes=0-1023' }
+      headers: { Range: 'bytes=0-1023' },
+      signal: controller.signal
     });
-    try {
-      await res.body?.cancel();
-    } catch {
-      /* 连接释放失败无关紧要 */
-    }
+    // 不等待响应体取消，也处理超时后迟到的响应，避免占用下载连接。
+    const probe = response.then((res) => {
+      void res.body?.cancel().catch(() => {});
+      return res;
+    });
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        timedOut = true;
+        reject(new Error('Audio analysis probe timed out'));
+        controller.abort();
+      }, PROBE_TIMEOUT_MS);
+    });
+    const res = await Promise.race([probe, timeout]);
     const ok = res.ok;
     console.debug(
       `[audioAnalysisGate] 探测 ${host}: ${ok ? 'ACAO 通过，武装建图' : `不可分析(HTTP ${res.status})，维持直通`}`
@@ -102,8 +116,11 @@ export async function probeAnalysisCapability(url: string): Promise<boolean> {
   } catch {
     // CORS 拒绝时 fetch 直接 throw；按不可分析处理，5 分钟后复检
     console.debug(`[audioAnalysisGate] 探测 ${host}: 请求被拒(CORS/网络)，维持直通`);
-    cacheVerdict(host, false);
+    // 超时属于暂时网络状态，不将其缓存成整段会话的 CORS 能力结论。
+    if (!timedOut) cacheVerdict(host, false);
     return false;
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
   }
 }
 

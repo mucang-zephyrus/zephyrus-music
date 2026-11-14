@@ -8,6 +8,8 @@
       :class="{
         landscape: isLandscape,
         'lyrics-expanded': rootLyricsExpanded,
+        'lyrics-resize-layout': resizeLyrics,
+        'lyrics-page-active': lyricsExpanded || lyricsSwipePreview,
         'custom-background': customBackgroundActive,
         'player-transitioning': playerTransitionBusy,
         'controls-docked': controlsDocked,
@@ -107,8 +109,12 @@
         }"
       >
         <div
-          v-if="(!lyricsExpanded || lyricsSwipePreview) && (showArtwork || showTrackInfo)"
+          v-if="
+            (resizeLyrics || !lyricsExpanded || lyricsSwipePreview) &&
+            (showArtwork || showTrackInfo)
+          "
           class="artwork-zone"
+          :inert="resizeLyrics && rootLyricsExpanded"
           :style="[lyricsUnderlayStyle, artworkZoneStyle]"
         >
           <div
@@ -155,15 +161,23 @@
           </div>
         </div>
 
+        <!-- 保留封面页网格落点；实际歌词只有下方一个实例，按同一进度改变布局尺寸。 -->
+        <div
+          v-if="resizeLyrics"
+          ref="lyricsSlotRef"
+          class="lyrics-zone-slot"
+          aria-hidden="true"
+        ></div>
+
         <div
           v-if="!config.hideLyrics"
-          ref="lyricsZoneRef"
           class="lyrics-zone"
           :class="{
             expanded: lyricsExpanded || lyricsSwipePreview,
+            'chrome-transition': lyricsExpanded && !lyricsSwipePreview,
             'zone-hidden': !showLyricsZone && !(lyricsExpanded || lyricsSwipePreview)
           }"
-          :style="lyricsSwipePreview ? lyricsOverlayStyle : undefined"
+          :style="lyricsZoneStyle"
           @dblclick.stop="toggleLyricsExpanded"
         >
           <template v-if="immersiveSurfaceMode === 'lyrics' || !lyricsExpanded">
@@ -171,7 +185,8 @@
               v-if="lrcArray.some((line) => line.text.trim())"
               ref="scrollingLyricsRef"
               class="default-scrolling-lyrics"
-              :active="true"
+              :active="showLyricsZone || lyricsExpanded || lyricsSwipePreview"
+              :follow-layout="resizeLyrics && lyricsSwipePreview"
               :back-closes="lyricsExpanded"
               @close="handleLyricsSurfaceClose"
               @interact="playerTransition.showControls()"
@@ -231,6 +246,7 @@
             :entrance="headerEntrance"
             :settings-active="immersiveSurfaceMode === 'settings'"
             @show-settings="toggleImmersiveSurface('settings')"
+            @return-cover="setLyricsExpanded(false)"
           />
         </div>
         <!-- 封面克隆飞行层：预览期从大封面矩形飞向顶栏槽位，落定后由顶栏封面接管 -->
@@ -262,7 +278,7 @@
 </template>
 
 <script setup lang="ts">
-import { useElementSize, useWindowSize } from '@vueuse/core';
+import { useElementSize, useResizeObserver, useWindowSize } from '@vueuse/core';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -534,8 +550,7 @@ const {
   suppressed: () => playerStore.fullCommentsVisible,
   onOpen: () => commitLyricsExpanded(true),
   onClose: () => commitLyricsExpanded(false),
-  variant: () => lyricsArrival.value,
-  scaleGeometry: () => zoneGeometry.value
+  variant: () => (resizeLyrics.value ? 'resize' : 'slide')
 });
 
 // 沉浸打开回调：底栏播放列表按钮在其他分页（封面/评论）时经 requestImmersiveOpen
@@ -544,38 +559,16 @@ const immersiveOpener = () => openLyricsAnimated();
 registerImmersiveOpener(immersiveOpener);
 
 // ── 沉浸歌词过渡：变体 / 顶栏 / 封面克隆飞行 ──
-const lyricsZoneRef = ref<HTMLElement | null>(null);
+const lyricsSlotRef = ref<HTMLElement | null>(null);
 const artworkTriggerRef = ref<HTMLElement | null>(null);
 const scrollingLyricsRef = ref<{ resetFollow: () => void } | null>(null);
-const zoneGeometry = ref<{
-  originX: number;
-  originY: number;
-  scaleX: number;
-  scaleY: number;
-} | null>(null);
-
-// 歌词区域开启 → 由小歌词区容器变换放大（scale）；关闭 → 保持横滑（slide）。
-// 评论三页开启时同样走 scale：横滑语义只属于歌词↔播放页导航，与放大入场不冲突。
-const lyricsArrival = computed<'scale' | 'slide'>(() => (showLyricsZone.value ? 'scale' : 'slide'));
+const resizeLyrics = computed(() => showLyricsZone.value && !config.value.hideLyrics);
 // 封面或信息任一开启 → 顶栏由大封面/信息 morph 而来；都关 → 顶栏整体自上滑入（降级）
 const headerEntrance = computed<'morph' | 'top-in'>(() =>
   showArtwork.value || showTrackInfo.value ? 'morph' : 'top-in'
 );
 
-function captureZoneGeometry() {
-  if (lyricsExpanded.value || !lyricsZoneRef.value) return;
-  const rect = lyricsZoneRef.value.getBoundingClientRect();
-  if (rect.height < 40 || rect.width < 40) return;
-  zoneGeometry.value = {
-    originX: rect.left + rect.width / 2,
-    originY: rect.top + rect.height / 2,
-    scaleX: Math.min(1, rect.width / Math.max(1, window.innerWidth)),
-    scaleY: Math.min(1, rect.height / Math.max(1, window.innerHeight))
-  };
-}
-
 function onRootPointerDown(event: PointerEvent) {
-  captureZoneGeometry();
   onLyricsSwipePointerDown(event);
   commentsSwipe.onPointerDown(event);
 }
@@ -592,6 +585,94 @@ const immersiveProgress = computed(() => {
 });
 watchEffect(() => {
   immersive.progress.value = immersiveProgress.value;
+});
+
+// 使用布局坐标，避免播放器本身的打开缩放污染测量。占位不受歌词尺寸影响，
+// 因而控制栏显隐、布局设置与旋转时都能安全重测，也不会形成 ResizeObserver 回路。
+const lyricsLayout = ref<{
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  expandedLeft: number;
+  expandedWidth: number;
+  expandedHeight: number;
+} | null>(null);
+const progressElement = ref<HTMLElement | null>(null);
+const lyricChromeBounds = ref({ top: 120, bottom: 0 });
+function measureLyricsLayout() {
+  const content = contentRef.value;
+  const slot = lyricsSlotRef.value;
+  const surface = surfaceRef.value;
+  if (!content || !surface) return;
+  const padding = getComputedStyle(content);
+  const left = parseFloat(padding.paddingLeft) || 0;
+  const right = parseFloat(padding.paddingRight) || 0;
+  lyricsLayout.value = {
+    left: slot?.offsetLeft ?? left,
+    top: slot?.offsetTop ?? 0,
+    width: slot?.offsetWidth ?? content.clientWidth - left - right,
+    height: slot?.offsetHeight ?? content.clientHeight,
+    expandedLeft: left,
+    expandedWidth: Math.max(0, content.clientWidth - left - right),
+    expandedHeight: surface.clientHeight
+  };
+  const surfaceStyles = getComputedStyle(surface);
+  const safeTop = parseFloat(surfaceStyles.getPropertyValue('--safe-area-inset-top')) || 0;
+  const safeBottom = parseFloat(surfaceStyles.getPropertyValue('--safe-area-inset-bottom')) || 0;
+  const controls = document.querySelector<HTMLElement>('.shared-player-bottom-surface');
+  const progress = controls?.querySelector<HTMLElement>('.apple-style-progress') ?? null;
+  progressElement.value = progress;
+  // 只取进度条在底面内的相对位置，剔除控件下移贴底的 transform；
+  // 这样重新显示控件时就知道最终边界，不会跟着尚未完成的位移动画反复跳动。
+  const progressTop =
+    controls && progress
+      ? controls.offsetTop +
+        progress.getBoundingClientRect().top -
+        controls.getBoundingClientRect().top
+      : surface.clientHeight -
+        safeBottom -
+        PLAYER_GEOMETRY.bottomGap -
+        (isLandscape.value
+          ? PLAYER_GEOMETRY.landscapeControlsHeight
+          : PLAYER_GEOMETRY.defaultControlsHeight);
+  lyricChromeBounds.value = {
+    top: safeTop + IMMERSIVE_HEADER_SLOT.topInset + IMMERSIVE_HEADER_SLOT.size + 10,
+    bottom: Math.max(0, progressTop - content.offsetTop - 8)
+  };
+}
+useResizeObserver([contentRef, lyricsSlotRef, progressElement], measureLyricsLayout);
+const lyricsZoneStyle = computed(() => {
+  if (!resizeLyrics.value && !lyricsExpanded.value && !lyricsSwipePreview.value) return undefined;
+  const rect = lyricsLayout.value;
+  if (!rect) return { visibility: 'hidden' as const };
+  const p = immersiveProgress.value;
+  const barsShown =
+    immersiveSurfaceMode.value === 'lyrics' && (surfacePinned.value || controlsShown.value);
+  const bottom = barsShown
+    ? Math.min(rect.expandedHeight, lyricChromeBounds.value.bottom)
+    : rect.expandedHeight;
+  const top = barsShown ? Math.min(lyricChromeBounds.value.top, Math.max(0, bottom - 80)) : 0;
+  const expanded = {
+    left: `${rect.expandedLeft}px`,
+    top: `${top}px`,
+    width: `${rect.expandedWidth}px`,
+    height: `${Math.max(0, bottom - top)}px`,
+    '--lyrics-expand-progress': String(p),
+    '--lyric-edge-fade': `${56 - 38 * p}px`,
+    // 控件显隐只改变外层裁切范围，AMLL 保持完整高度，避免 Resize 重排
+    // 每帧重设行弹簧目标，叠加容器位移后出现先滑过头、再回弹的抖动。
+    '--amll-viewport-min-height': `${rect.expandedHeight * (resizeLyrics.value ? p : 1)}px`
+  };
+  if (!resizeLyrics.value) return { ...expanded, ...lyricsOverlayStyle.value };
+  const lerp = (from: number, to: number) => `${(from + (to - from) * p).toFixed(2)}px`;
+  return {
+    ...expanded,
+    left: lerp(rect.left, rect.expandedLeft),
+    top: lerp(rect.top, top),
+    width: lerp(rect.width, rect.expandedWidth),
+    height: lerp(rect.height, Math.max(0, bottom - top))
+  };
 });
 
 const immersiveHeaderCollapse = useImmersiveHeaderCollapse(() => setLyricsExpanded(false));
@@ -659,25 +740,19 @@ function captureMorphRects() {
   };
 }
 
-// closing 起跳即把根布局切回封面页分栏：AMLL 以全屏浮层压扁退场（lyrics-zone
-// .expanded 独立绑定、保持到 commit），封面/信息/控件栏在预览期就以主页形态归位，
-// 不再出现「整屏居中」的杂交中间态。仅提前摘根类，lyricsExpanded 状态与手势协议不动。
+// 收起预览时让封面先归位。resize 模式始终保留封面网格，歌词独立调整真实尺寸。
 const rootLyricsExpanded = computed(
   () => lyricsExpanded.value && !(lyricsSwipePreview.value && lyricsSwipePhase.value === 'closing')
 );
 watch(
   () => [lyricsSwipePreview.value, lyricsSwipePhase.value] as const,
   ([previewing, phase]) => {
+    // 横滑起手可能挂起 AMLL 跟随，在尺寸开始变化时恢复，避免落定后再跳一次焦点行。
+    if (previewing && resizeLyrics.value) nextTick(() => scrollingLyricsRef.value?.resetFollow());
     if (previewing && phase === 'opening') captureMorphRects();
-    if (previewing && phase === 'closing') {
-      // 起跳即唤起控件栏（主页形态归位的一部分）；autoHide=false 免得慢手势中途被
-      // 3s 定时器熄灭，settle commit 的 showControls() 会重武装定时器。
-      // 关闭起始直接使用封面页稳定态缓存（stableMorphRectsSources watcher 持续刷新），
-      // 此刻根节点正在切分栏，重测只会得到过渡中的错位落点
-      playerTransition.showControls(false);
-    }
-    // 回弹（未 commit 回歌词页）：控件栏熄灭，回到歌词页常态
-    if (!previewing && lyricsExpanded.value) playerTransition.hideControls();
+    // 转场期间暂停倒计时；进入/返回/取消手势后都给完整的无操作时间。
+    // 此前结束预览就 hideControls，正常进入歌词页也绕过了 3s 计时器。
+    playerTransition.showControls(!previewing);
     if (!previewing && !lyricsExpanded.value) morphRects.value = null;
   }
 );
@@ -767,19 +842,10 @@ const stableMorphRectsSources = computed(() => [
   width.value,
   height.value
 ]);
-let zoneGeometryRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 watch(stableMorphRectsSources, () => {
+  nextTick(measureLyricsLayout);
   if (lyricsExpanded.value || lyricsSwipePreview.value) return;
   nextTick(captureMorphRects);
-  // 塌缩目标几何延迟到网格过渡(380ms)结束后重测——transition 期间量到的是起点矩形。
-  // 控件自动隐藏/旋转等封面页稳定态变化后，closing 残影必须塌向当前布局的折叠区，
-  // 否则会塌向过期 origin（观感即「居中布局」）
-  if (zoneGeometryRefreshTimer !== null) clearTimeout(zoneGeometryRefreshTimer);
-  zoneGeometryRefreshTimer = setTimeout(() => {
-    zoneGeometryRefreshTimer = null;
-    if (lyricsExpanded.value || lyricsSwipePreview.value) return;
-    captureZoneGeometry();
-  }, 420);
 });
 
 const coverUrl = computed(() =>
@@ -904,10 +970,8 @@ function commitLyricsExpanded(value: boolean) {
   lyricsExpanded.value = value;
   playerStore.setFullLyricsVisible(value);
   playerTransition.showControls();
-  // 页面切换后显式恢复 AMLL 自动跟随：页面横滑的 touch 若起手在歌词行上，
-  // 会被 AMLL 的 ScrollInteractionEngine 判为用户滚动而挂起自动对齐（概率性失联的根因），
-  // 预览期已在根节点 capture 拦截 touch，这里再兜底清一次挂起态
-  nextTick(() => scrollingLyricsRef.value?.resetFollow());
+  // 滑入模式可能刚从隐藏态激活；尺寸过渡已在起跳时恢复跟随，不在终点重复重置。
+  if (!resizeLyrics.value) nextTick(() => scrollingLyricsRef.value?.resetFollow());
 }
 
 /**
@@ -959,6 +1023,10 @@ watch(
 watch(isVisible, (visible) => {
   if (!visible) setLyricsExpanded(false);
 });
+watch(
+  () => [lyricsExpanded.value, immersiveSurfaceMode.value, isVisible.value] as const,
+  () => nextTick(measureLyricsLayout)
+);
 
 onMounted(() => {
   loadConfig();
@@ -967,16 +1035,12 @@ onMounted(() => {
   window.addEventListener('music-full-config-updated', handleConfigUpdate);
   nextTick(() => {
     captureMorphRects();
-    captureZoneGeometry();
+    measureLyricsLayout();
   });
 });
 onBeforeUnmount(() => {
   playerStore.setFullLyricsVisible(false);
   unregisterImmersiveOpener(immersiveOpener);
-  if (zoneGeometryRefreshTimer !== null) {
-    clearTimeout(zoneGeometryRefreshTimer);
-    zoneGeometryRefreshTimer = null;
-  }
   window.removeEventListener('music-full-config-updated', handleConfigUpdate);
   document.body.classList.remove('default-player-active');
   window.dispatchEvent(new Event('default-player-style-changed'));
@@ -1017,6 +1081,7 @@ onBeforeUnmount(() => {
 }
 
 .player-content {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, var(--dmv2-artwork-row, 58%)) minmax(0, 1fr);
@@ -1134,6 +1199,47 @@ onBeforeUnmount(() => {
     padding-bottom 350ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
+.lyrics-zone-slot {
+  min-width: 0;
+  min-height: 0;
+  pointer-events: none;
+}
+
+.lyrics-resize-layout .player-content,
+.lyrics-page-active .player-content {
+  /* 歌词页使用进度条上沿作为边界，可跨出封面页的控制栏占位。 */
+  overflow: visible;
+}
+
+.lyrics-resize-layout .no-artwork-zone .lyrics-zone-slot {
+  grid-area: 1 / 1 / -1 / -1;
+}
+
+.lyrics-resize-layout .lyrics-zone.expanded,
+.lyrics-page-active .lyrics-zone.expanded {
+  grid-area: auto;
+}
+
+.lyrics-resize-layout .lyrics-zone,
+.lyrics-page-active .lyrics-zone {
+  position: absolute;
+  box-sizing: border-box;
+  /* 几何直接跟随手势/弹簧；不叠加 CSS 缓动，不缩放文字。 */
+  transition: padding-bottom 350ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.lyrics-zone.chrome-transition {
+  transition:
+    top 350ms cubic-bezier(0.32, 0.72, 0, 1),
+    height 350ms cubic-bezier(0.32, 0.72, 0, 1),
+    padding-bottom 350ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* 面板的上下栏留白以整个播放器为准，不重复扣除歌词容器之外的控制栏占位。 */
+.immersive-panel {
+  position: fixed;
+}
+
 .lyrics-zone.expanded {
   grid-row: 1 / -1;
   /* 横屏单行多列:歌词展开时也要横跨全部列,否则仍被锁在右列与封面同屏 */
@@ -1161,7 +1267,7 @@ onBeforeUnmount(() => {
   place-items: center;
 }
 
-.default-player-v2.lyrics-expanded .player-content {
+.default-player-v2.lyrics-expanded:not(.lyrics-resize-layout) .player-content {
   grid-template-rows: minmax(0, 1fr);
   padding-top: 0;
   row-gap: 0;
@@ -1211,7 +1317,10 @@ onBeforeUnmount(() => {
 }
 
 .landscape .lyrics-zone {
-  padding-bottom: calc(var(--dmv2-landscape-controls-inset) + var(--safe-area-inset-bottom, 0px));
+  padding-bottom: calc(
+    (var(--dmv2-landscape-controls-inset) + var(--safe-area-inset-bottom, 0px)) *
+      (1 - var(--lyrics-expand-progress, 0))
+  );
 }
 
 .landscape .artwork-zone {
@@ -1225,7 +1334,7 @@ onBeforeUnmount(() => {
 
 /* 横屏 + 控件隐藏:预留的控制条悬浮空间释放,歌词/封面下移吃满高度 */
 .landscape.controls-docked .lyrics-zone {
-  padding-bottom: max(16px, 2%);
+  padding-bottom: calc(max(16px, 2%) * (1 - var(--lyrics-expand-progress, 0)));
 }
 
 .landscape.controls-docked .artwork-zone {
@@ -1264,7 +1373,7 @@ onBeforeUnmount(() => {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.landscape.lyrics-expanded .player-content {
+.landscape.lyrics-expanded:not(.lyrics-resize-layout) .player-content {
   grid-template-columns: minmax(0, 1fr);
   padding-top: 0;
 }
@@ -1278,7 +1387,8 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) {
   .player-content,
   .artwork-zone,
-  .lyrics-zone {
+  .lyrics-zone,
+  .lyrics-zone.chrome-transition {
     transition: opacity 160ms ease;
   }
 

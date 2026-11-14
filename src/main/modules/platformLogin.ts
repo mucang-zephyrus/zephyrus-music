@@ -16,10 +16,11 @@ import { ipcMain } from 'electron';
 import fetch from 'node-fetch';
 
 import { setPlatformCookie } from '../multiPlatformSearch';
+import { createBilibiliLoginQr, pollBilibiliLoginQr } from './bilibili';
 
 // ==================== 类型定义 ====================
 
-export type LoginPlatform = 'qq' | 'kugou';
+export type LoginPlatform = 'qq' | 'kugou' | 'bilibili';
 export type QqLoginProvider = 'qq' | 'wechat';
 
 export interface QrCreateResult {
@@ -977,6 +978,9 @@ export function initializePlatformLogin(): void {
         if (platform === 'kugou') {
           return await createKugouQrCode();
         }
+        if (platform === 'bilibili') {
+          return await createBilibiliLoginQr();
+        }
         return { error: `不支持的平台: ${platform}` };
       } catch (error: any) {
         console.error(`[platformLogin] 创建二维码失败:`, error);
@@ -1003,6 +1007,20 @@ export function initializePlatformLogin(): void {
         }
         if (platform === 'kugou') {
           return await pollKugouQrStatus(key);
+        }
+        if (platform === 'bilibili') {
+          const result = await pollBilibiliLoginQr(key);
+          if (result.status === 'success' && result.cookie) {
+            setPlatformCookie('bilibili', result.cookie);
+          }
+          return {
+            platform,
+            provider,
+            code: result.status as QrStatus,
+            message: '',
+            cookie: result.cookie || undefined,
+            userInfo: result.userInfo || undefined
+          };
         }
         return {
           platform,

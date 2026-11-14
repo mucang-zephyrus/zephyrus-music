@@ -1,5 +1,6 @@
 <template>
   <div
+    ref="artistPageRef"
     class="artist-detail-page h-full w-full bg-white dark:bg-neutral-900 transition-colors duration-500"
     :class="{ 'mobile-artist-root': isMobile }"
     :style="isMobile ? mobileArtistStyle : undefined"
@@ -7,7 +8,12 @@
     <n-scrollbar ref="scrollbarRef" class="h-full" @scroll="handleScroll">
       <div
         class="artist-detail-content w-full"
-        style="padding-top: var(--mobile-topbar-inset); padding-bottom: calc(var(--mobile-dock-content-inset, 144px) + var(--safe-area-inset-bottom, 0px) + 12px)"
+        style="
+          padding-top: var(--mobile-topbar-inset);
+          padding-bottom: calc(
+            var(--mobile-dock-content-inset, 144px) + var(--safe-area-inset-bottom, 0px) + 12px
+          );
+        "
       >
         <!-- 桌面端保留全页骨架；移动端 hero 即时渲染 + 分区骨架（歌单页同款模式） -->
         <page-loading-placeholder
@@ -125,155 +131,156 @@
 
               <!-- 数据就绪：正式分区 -->
               <template v-else>
-
-              <!-- 最新专辑大卡 -->
-              <button
-                v-if="latestAlbum"
-                type="button"
-                class="ma-latest-card"
-                @click="handleAlbumClick(latestAlbum)"
-              >
-                <img
-                  :src="getImgUrl(latestAlbum.picUrl, '300y300')"
-                  class="ma-latest-cover"
-                  referrerpolicy="no-referrer"
-                  loading="lazy"
-                  :alt="latestAlbum.name"
-                />
-                <div class="ma-latest-copy">
-                  <small>{{ formatPublishTime(latestAlbum.publishTime) }}</small>
-                  <strong>{{ latestAlbum.name }}</strong>
-                  <small v-if="latestAlbum.size">{{ latestAlbum.size }} {{ t('artist.songsCount') }}</small>
-                </div>
-                <i class="ri-arrow-right-s-line ma-latest-arrow" />
-              </button>
-
-              <!-- 热门歌曲：横滑分页卡（对齐首页推荐区，每卡 3 行） -->
-              <div v-if="hotSongsGrid.length" class="ma-section">
-                <h2
-                  class="ma-section-title"
-                  role="button"
-                  tabindex="0"
-                  @click="openArtistList('songs')"
-                  @keydown.enter.prevent="openArtistList('songs')"
+                <!-- 最新专辑大卡 -->
+                <button
+                  v-if="latestAlbum"
+                  type="button"
+                  class="ma-latest-card"
+                  @click="handleAlbumClick(latestAlbum, $event)"
                 >
-                  {{ t('artist.hotSongs') }}<i class="ri-arrow-right-s-line" />
-                </h2>
-                <div class="ma-hgrid" data-horizontal-scroll v-horizontal-wheel>
-                  <div
-                    v-for="(card, cardIndex) in hotSongCards"
-                    :key="`hot-card-${cardIndex}`"
-                    class="ma-page-card"
+                  <img
+                    :src="getImgUrl(latestAlbum.picUrl, '300y300')"
+                    class="ma-latest-cover"
+                    referrerpolicy="no-referrer"
+                    loading="lazy"
+                    :alt="latestAlbum.name"
+                  />
+                  <div class="ma-latest-copy">
+                    <small>{{ formatPublishTime(latestAlbum.publishTime) }}</small>
+                    <strong>{{ latestAlbum.name }}</strong>
+                    <small v-if="latestAlbum.size"
+                      >{{ latestAlbum.size }} {{ t('artist.songsCount') }}</small
+                    >
+                  </div>
+                  <i class="ri-arrow-right-s-line ma-latest-arrow" />
+                </button>
+
+                <!-- 热门歌曲：横滑分页卡（对齐首页推荐区，每卡 3 行） -->
+                <div v-if="hotSongsGrid.length" class="ma-section">
+                  <h2
+                    class="ma-section-title"
+                    role="button"
+                    tabindex="0"
+                    @click="openArtistList('songs')"
+                    @keydown.enter.prevent="openArtistList('songs')"
                   >
+                    {{ t('artist.hotSongs') }}<i class="ri-arrow-right-s-line" />
+                  </h2>
+                  <div class="ma-hgrid" data-horizontal-scroll v-horizontal-wheel>
+                    <div
+                      v-for="(card, cardIndex) in hotSongCards"
+                      :key="`hot-card-${cardIndex}`"
+                      class="ma-page-card"
+                    >
+                      <button
+                        v-for="song in card"
+                        :key="`hot-${song.id}`"
+                        type="button"
+                        class="ma-row"
+                        @click="handlePlay(song)"
+                      >
+                        <img
+                          :src="getImgUrl(song.al?.picUrl || song.picUrl, '200y200')"
+                          class="ma-row-cover"
+                          referrerpolicy="no-referrer"
+                          loading="lazy"
+                          :alt="song.name"
+                        />
+                        <span class="ma-row-main">
+                          <span class="ma-row-name">{{ song.name }}</span>
+                          <span class="ma-row-artist">{{
+                            song.ar?.[0]?.name || artistInfo.name
+                          }}</span>
+                        </span>
+                        <span class="ma-row-play"><i class="ri-play-fill" /></span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 专辑：单行横滑大卡 -->
+                <div v-if="albums.length" class="ma-section">
+                  <h2
+                    class="ma-section-title"
+                    role="button"
+                    tabindex="0"
+                    @click="openArtistList('albums')"
+                    @keydown.enter.prevent="openArtistList('albums')"
+                  >
+                    {{ t('artist.albums') }}<i class="ri-arrow-right-s-line" />
+                  </h2>
+                  <div class="ma-hgrid" data-horizontal-scroll v-horizontal-wheel>
                     <button
-                      v-for="song in card"
-                      :key="`hot-${song.id}`"
+                      v-for="album in albums"
+                      :key="album.id"
                       type="button"
-                      class="ma-row"
-                      @click="handlePlay(song)"
+                      class="ma-song-card ma-album-card"
+                      @click="handleAlbumClick(album, $event)"
                     >
                       <img
-                        :src="getImgUrl(song.al?.picUrl || song.picUrl, '200y200')"
-                        class="ma-row-cover"
+                        :src="getImgUrl(album.picUrl, '300y300')"
+                        class="ma-song-cover"
                         referrerpolicy="no-referrer"
                         loading="lazy"
-                        :alt="song.name"
+                        :alt="album.name"
                       />
-                      <span class="ma-row-main">
-                        <span class="ma-row-name">{{ song.name }}</span>
-                        <span class="ma-row-artist">{{
-                          song.ar?.[0]?.name || artistInfo.name
-                        }}</span>
-                      </span>
-                      <span class="ma-row-play"><i class="ri-play-fill" /></span>
+                      <strong>{{ album.name }}</strong>
+                      <small>{{ artistInfo.name }}</small>
                     </button>
                   </div>
                 </div>
-              </div>
 
-              <!-- 专辑：单行横滑大卡 -->
-              <div v-if="albums.length" class="ma-section">
-                <h2
-                  class="ma-section-title"
-                  role="button"
-                  tabindex="0"
-                  @click="openArtistList('albums')"
-                  @keydown.enter.prevent="openArtistList('albums')"
-                >
-                  {{ t('artist.albums') }}<i class="ri-arrow-right-s-line" />
-                </h2>
-                <div class="ma-hgrid" data-horizontal-scroll v-horizontal-wheel>
-                  <button
-                    v-for="album in albums"
-                    :key="album.id"
-                    type="button"
-                    class="ma-song-card ma-album-card"
-                    @click="handleAlbumClick(album)"
+                <!-- 全部歌曲：横滑分页卡（触底分页） -->
+                <div v-if="songs.length" class="ma-section">
+                  <h2
+                    class="ma-section-title"
+                    role="button"
+                    tabindex="0"
+                    @click="openArtistList('songs')"
+                    @keydown.enter.prevent="openArtistList('songs')"
                   >
-                    <img
-                      :src="getImgUrl(album.picUrl, '300y300')"
-                      class="ma-song-cover"
-                      referrerpolicy="no-referrer"
-                      loading="lazy"
-                      :alt="album.name"
-                    />
-                    <strong>{{ album.name }}</strong>
-                    <small>{{ artistInfo.name }}</small>
-                  </button>
-                </div>
-              </div>
-
-              <!-- 全部歌曲：横滑分页卡（触底分页） -->
-              <div v-if="songs.length" class="ma-section">
-                <h2
-                  class="ma-section-title"
-                  role="button"
-                  tabindex="0"
-                  @click="openArtistList('songs')"
-                  @keydown.enter.prevent="openArtistList('songs')"
-                >
-                  {{ t('artist.allSongs') }}<i class="ri-arrow-right-s-line" />
-                </h2>
-                <div
-                  ref="allSongsRailRef"
-                  class="ma-hgrid"
-                  data-horizontal-scroll
-                  v-horizontal-wheel
-                  @scroll="onAllSongsRailScroll"
-                >
+                    {{ t('artist.allSongs') }}<i class="ri-arrow-right-s-line" />
+                  </h2>
                   <div
-                    v-for="(card, cardIndex) in allSongCards"
-                    :key="`all-card-${cardIndex}`"
-                    class="ma-page-card"
+                    ref="allSongsRailRef"
+                    class="ma-hgrid"
+                    data-horizontal-scroll
+                    v-horizontal-wheel
+                    @scroll="onAllSongsRailScroll"
                   >
-                    <button
-                      v-for="song in card"
-                      :key="`all-${song.id}`"
-                      type="button"
-                      class="ma-row"
-                      @click="handlePlay(song)"
+                    <div
+                      v-for="(card, cardIndex) in allSongCards"
+                      :key="`all-card-${cardIndex}`"
+                      class="ma-page-card"
                     >
-                      <img
-                        :src="getImgUrl(song.al?.picUrl || song.picUrl, '200y200')"
-                        class="ma-row-cover"
-                        referrerpolicy="no-referrer"
-                        loading="lazy"
-                        :alt="song.name"
-                      />
-                      <span class="ma-row-main">
-                        <span class="ma-row-name">{{ song.name }}</span>
-                        <span class="ma-row-artist">{{
-                          song.ar?.[0]?.name || artistInfo.name
-                        }}</span>
-                      </span>
-                      <span class="ma-row-play"><i class="ri-play-fill" /></span>
-                    </button>
-                  </div>
-                  <div v-if="songLoading" class="ma-grid-loading">
-                    <i class="ri-loader-4-line ma-spin" />
+                      <button
+                        v-for="song in card"
+                        :key="`all-${song.id}`"
+                        type="button"
+                        class="ma-row"
+                        @click="handlePlay(song)"
+                      >
+                        <img
+                          :src="getImgUrl(song.al?.picUrl || song.picUrl, '200y200')"
+                          class="ma-row-cover"
+                          referrerpolicy="no-referrer"
+                          loading="lazy"
+                          :alt="song.name"
+                        />
+                        <span class="ma-row-main">
+                          <span class="ma-row-name">{{ song.name }}</span>
+                          <span class="ma-row-artist">{{
+                            song.ar?.[0]?.name || artistInfo.name
+                          }}</span>
+                        </span>
+                        <span class="ma-row-play"><i class="ri-play-fill" /></span>
+                      </button>
+                    </div>
+                    <div v-if="songLoading" class="ma-grid-loading">
+                      <i class="ri-loader-4-line ma-spin" />
+                    </div>
                   </div>
                 </div>
-              </div>
               </template>
             </div>
 
@@ -296,11 +303,7 @@
             展开态: 封面/名/统计/控制 纵向
             收缩态: 封面/名  控制  横向单行
           -->
-          <section
-            v-if="!isMobile && artistInfo"
-            class="hero-zone"
-            :class="{ compact: isCompact }"
-          >
+          <section v-if="!isMobile && artistInfo" class="hero-zone" :class="{ compact: isCompact }">
             <!-- 封面 -->
             <div class="cover-wrap">
               <img
@@ -388,10 +391,7 @@
           </Transition>
 
           <!-- Tab Navigation — glow风格 -->
-          <section
-            v-if="!isMobile && artistInfo"
-            class="tab-nav page-padding-x pt-4 md:pt-6"
-          >
+          <section v-if="!isMobile && artistInfo" class="tab-nav page-padding-x pt-4 md:pt-6">
             <glow-tabs
               v-model="activeTab"
               :tabs="tabs.map((tab) => ({ key: tab.value, label: tab.label }))"
@@ -462,7 +462,7 @@
                   :key="album.id"
                   class="album-card group cursor-pointer"
                   :style="{ animationDelay: calculateAnimationDelay(index, 0.03) }"
-                  @click="handleAlbumClick(album)"
+                  @click="handleAlbumClick(album, $event)"
                 >
                   <!-- Cover -->
                   <div
@@ -552,9 +552,10 @@ import {
   watch
 } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute } from 'vue-router';
+import { onBeforeRouteLeave, useRoute } from 'vue-router';
 
-import { getArtistAlbums,
+import {
+  getArtistAlbums,
   getArtistDesc,
   getArtistDetail,
   getArtistSublist,
@@ -574,17 +575,23 @@ import {
 } from '@/composables/useMobileTopbarMenu';
 import {
   beginPlaylistOpenReturn,
+  interruptPlaylistOpenTransition,
   resolvePlaylistOpen,
   usePlaylistOpenTransition
 } from '@/composables/usePlaylistOpenTransition';
 import { usePosterShare } from '@/composables/usePosterShare';
-import { usePlaylistConfirm } from '@/hooks/usePlaylistConfirm';
-import { useScrollTitle } from '@/hooks/useScrollTitle';
+import {
+  beginSharedCoverNavigation,
+  cancelSharedCoverTransition,
+  resolveSharedCoverTarget
+} from '@/composables/useSharedCoverTransition';
 import {
   ARTIST_COVER_RETURN_KEY,
-  takeArtistPrefill,
-  type ArtistPrefillProfile
+  type ArtistPrefillProfile,
+  takeArtistPrefill
 } from '@/hooks/useArtist';
+import { usePlaylistConfirm } from '@/hooks/usePlaylistConfirm';
+import { useScrollTitle } from '@/hooks/useScrollTitle';
 import router from '@/router';
 import { usePlayerStore } from '@/store';
 import { IArtist } from '@/types/artist';
@@ -613,6 +620,17 @@ const isQqArtist = computed(
 const activeTab = ref('songs');
 
 const scrollbarRef = ref<any>(null);
+const artistPageRef = ref<HTMLElement | null>(null);
+let savedScrollTop = 0;
+const savedHorizontalScroll = new Map<HTMLElement, number>();
+
+onBeforeRouteLeave(() => {
+  savedScrollTop = artistPageRef.value?.querySelector('.n-scrollbar-container')?.scrollTop ?? 0;
+  savedHorizontalScroll.clear();
+  artistPageRef.value?.querySelectorAll<HTMLElement>('.ma-hgrid').forEach((element) => {
+    savedHorizontalScroll.set(element, element.scrollLeft);
+  });
+});
 
 // Hero zone 可收缩状态
 const isCompact = ref(false);
@@ -657,11 +675,7 @@ const albums = ref<any[]>([]);
 const prefillProfile = ref<ArtistPrefillProfile | null>(null);
 
 const heroName = computed(
-  () =>
-    artistInfo.value?.name ||
-    prefillProfile.value?.name ||
-    String(route.query.name || '') ||
-    ''
+  () => artistInfo.value?.name || prefillProfile.value?.name || String(route.query.name || '') || ''
 );
 
 const heroAvatar = computed(() => {
@@ -711,6 +725,7 @@ const hexBrightness = (hex: string): number => {
 
 /** 主色 → page chrome（对齐专辑页口径）：顶栏/迷你栏表面与墨色跟随页面底色 */
 const applyArtistPageChrome = (hex: string) => {
+  if (route.name !== 'artistDetail') return;
   const ink = hexBrightness(hex) > 165 ? '#17171a' : '#ffffff';
   const inkRgb = ink === '#17171a' ? '23, 23, 26' : '255, 255, 255';
   const layout = document.getElementById('layout-main');
@@ -728,6 +743,7 @@ const applyArtistPageChrome = (hex: string) => {
 
 const clearArtistPageChrome = () => {
   const layout = document.getElementById('layout-main');
+  if (layout?.getAttribute('data-page-chrome') !== 'artist-detail') return;
   for (const key of ['--page-chrome-bg', '--page-chrome-ink', '--page-chrome-ink-rgb']) {
     layout?.style.removeProperty(key);
     document.documentElement.style.removeProperty(key);
@@ -766,7 +782,11 @@ watch(avatarUrl, async (url) => {
       b += data[i + 2];
     }
     const hex = `#${[r, g, b]
-      .map((sum) => Math.round(sum / count).toString(16).padStart(2, '0'))
+      .map((sum) =>
+        Math.round(sum / count)
+          .toString(16)
+          .padStart(2, '0')
+      )
       .join('')}`;
     artistPageColor.value = hex;
     // 亮主色 → 深墨字；暗主色 → 白字（跟随背景反白）
@@ -910,9 +930,22 @@ const isCompactLayout = ref(
 );
 
 // 导航到专辑详情
-const handleAlbumClick = async (album: any) => {
+const handleAlbumClick = async (album: any, event?: MouseEvent) => {
+  if (openTransition.isActive()) interruptPlaylistOpenTransition();
+  const card = event?.currentTarget as HTMLElement | null;
+  const image = card?.querySelector<HTMLImageElement>('img') ?? null;
+  const transitionId = beginSharedCoverNavigation({
+    source: image,
+    sourceRoute: route.fullPath,
+    targetRoute: router.resolve({
+      name: 'musicList',
+      params: { id: album.id },
+      query: { type: 'album' }
+    }).fullPath,
+    src: image?.currentSrc || image?.src || getImgUrl(album.picUrl, '500y500')
+  });
   try {
-    navigateToMusicList(router, {
+    const failure = await navigateToMusicList(router, {
       id: album.id,
       type: 'album',
       name: album.name,
@@ -922,7 +955,9 @@ const handleAlbumClick = async (album: any) => {
       },
       canRemove: false
     });
+    if (failure && transitionId != null) cancelSharedCoverTransition(transitionId);
   } catch (error) {
+    if (transitionId != null) cancelSharedCoverTransition(transitionId);
     console.error('Failed to navigate to album:', error);
     message.error(t('common.loadFailed'));
   }
@@ -1407,11 +1442,7 @@ onActivated(() => {
   // 确保当前路由是艺术家详情页
   if (route.name === 'artistDetail') {
     const currentId = route.params.id as string;
-
-    // 滚动到顶部
-    nextTick(() => {
-      scrollbarRef.value?.scrollTo(0, 0);
-    });
+    const sameArtist = previousId.value === currentId;
 
     // 首次加载或ID变化时加载数据（换歌手时刷新预填充）
     if (!previousId.value || previousId.value !== currentId) {
@@ -1420,6 +1451,16 @@ onActivated(() => {
       prefillProfile.value = takeArtistPrefill(currentId);
       loadArtistInfo();
     }
+    // Keep the same artist's vertical and horizontal scroll positions for the return flight.
+    void nextTick(() => {
+      if (sameArtist) {
+        scrollbarRef.value?.scrollTo({ top: savedScrollTop, behavior: 'instant' });
+        savedHorizontalScroll.forEach((left, element) => {
+          element.scrollLeft = left;
+        });
+      }
+      resolveSharedCoverTarget(route.fullPath);
+    });
 
     // chrome 色恢复（onDeactivated 离开时清理过；avatarUrl 未变时 watch 不会触发）
     if (artistPageColor.value) applyArtistPageChrome(artistPageColor.value);
@@ -1449,9 +1490,7 @@ onMounted(() => {
       const photo = document.querySelector<HTMLElement>('.ma-photo');
       const rect = photo?.getBoundingClientRect();
       resolvePlaylistOpen(
-        rect && rect.width > 0
-          ? { x: rect.x, y: rect.y, w: rect.width, h: rect.height }
-          : null
+        rect && rect.width > 0 ? { x: rect.x, y: rect.y, w: rect.width, h: rect.height } : null
       );
     });
   }
@@ -1460,7 +1499,7 @@ onMounted(() => {
 onDeactivated(() => {
   // 保活页返回时 onBeforeUnmount 不触发——回程动画在此处补跑，
   // 覆盖层收缩与迷你栏恢复同步进行（对齐歌单页返回时序，消除"先切页再放动画"的割裂）
-  if (enteredViaOpenTransition) {
+  if (enteredViaOpenTransition && route.name !== 'musicList') {
     beginPlaylistOpenReturn();
     // 返回飞回：带 fromKey 的入口，写 hero 矩形供来源页消费
     if (prefillProfile.value?.fromKey) {

@@ -1,4 +1,32 @@
 export default {
+  smartLyricMerge: {
+    legacySnapshot: '旧版の歌詞スナップショットを保持しています。元の歌詞を取得できた場合にのみ自動処理を再開します。',
+    notice:
+      'この歌詞には翻訳の自動結合が適用されています。誤りがある場合はここから報告してください。',
+    title: '歌詞の自動結合について報告',
+    explanation:
+      '歌詞の構造から翻訳を推定するため、意味の一致は保証できません。誤結合がある場合はこの曲で無効にできます。',
+    description: '問題の説明',
+    placeholder: 'どの原文や翻訳が誤って結合されましたか？',
+    contact: '連絡先（任意）',
+    preview: '添付情報を確認',
+    privacy:
+      '曲、歌詞の出典、アルゴリズム情報、最大3組の短い抜粋のみを添付します。歌詞全文は送信しません。送信ボタンを押すまで情報は送信されません。',
+    disable: 'この曲の自動結合を無効にする',
+    disabled: 'この曲の自動結合は無効です',
+    restoreHint:
+      'この端末の、この曲と歌詞の出典にのみ適用します。プレーヤーの「データ → 歌詞の出典」から自動処理を再開できます。',
+    cancel: '閉じる',
+    submit: '報告を送信',
+    submitting: '送信中…',
+    sent: '報告を送信しました。ありがとうございます。',
+    emailOpened: 'メールを開きました。メールアプリで送信を確定してください。',
+    failed: '送信できませんでした。もう一度お試しください。',
+    storageError: '設定を保存できません。この端末のストレージ権限を確認してください。',
+    setting: '翻訳の自動結合',
+    automatic: '自動処理は有効です',
+    restore: 'この曲の自動処理を再開'
+  },
   more: 'もっと見る',
   discover: '発見',
   homeListItem: {
@@ -228,6 +256,10 @@ export default {
     searchSongs: '楽曲を検索',
     playlistDescription: 'プレイリスト紹介',
     albumDescription: 'アルバム紹介',
+    albumCover: 'カバー',
+    showAlbumDescription: 'アルバム紹介を表示',
+    backToAlbumCover: 'アルバムカバーに戻る',
+    noAlbumDescription: 'アルバム紹介はありません',
     noSearchResults: '関連する楽曲が見つかりませんでした',
     toggleLayout: 'レイアウトを切り替え',
     switchToNormal: 'デフォルトレイアウトに切り替え',

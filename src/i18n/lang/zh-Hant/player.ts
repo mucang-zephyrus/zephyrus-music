@@ -1,4 +1,40 @@
 export default {
+  dotMatrix: {
+    shape: '點陣形狀',
+    dot: '圓點',
+    grid: '方格網',
+    climax: '高潮動畫',
+    auto: '自動輪換',
+    ripple: '同心波紋',
+    checker: '棋盤呼吸',
+    radial: '放射推進',
+    beat: '鼓點回應',
+    wordDrop: '分詞砸落',
+    dotSpacing: '點陣間距',
+    dotRadius: '圓點半徑',
+    dotFontCells: '字形格數',
+    dotIntensity: '動效強度',
+    videoUnsupported: '點陣樣式暫不支援影片匯出'
+  },
+  wordCloud: {
+    cloudFocus: '聚焦目前句子',
+    cloudEstimate: '一般 LRC 時間估算',
+    background: '背景',
+    cloudScale: '字級倍率',
+    cloudSpacing: '句間距倍率',
+    cloudVertical: '直向句子比例',
+    cloudCameraSpeed: '鏡頭速度',
+    interlude: '間奏',
+    videoUnsupported: '詞雲樣式暫不支援影片匯出',
+    backgrounds: {
+      cover: '封面模糊',
+      grid: '幾何網格線',
+      mesh: 'AMLL 網格漸層',
+      liquid: '高速流體',
+      ether: '太陽耀斑',
+      ripple: '鼓點漣漪'
+    }
+  },
   nowPlaying: '正在播放',
   playlist: '播放清單',
   lyrics: '歌詞',
@@ -114,6 +150,8 @@ export default {
   },
   // 播放器樣式
   styles: {
+    dotMatrix: '點陣',
+    wordCloud: '詞雲',
     default: '預設',
     stage: '舞臺',
     starChart: '星盤',

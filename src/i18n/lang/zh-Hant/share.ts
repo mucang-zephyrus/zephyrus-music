@@ -1,4 +1,32 @@
 export default {
+  import: {
+    title: '匯入分享連結',
+    hint: '支援網易雲音樂、QQ音樂、酷狗音樂的歌曲連結及完整分享文字。辨識後確認播放。',
+    placeholder: '在此貼上分享連結或文字',
+    pasteManually: '無法讀取剪貼簿，請在上方長按或按 Ctrl+V 貼上。',
+    identify: '辨識歌曲',
+    unsupported: '找不到支援的歌曲分享連結。',
+    failed: '暫時無法解析連結或歌曲無法使用，請重試。',
+    retry: '重試',
+    close: '關閉',
+    loading: '正在辨識…',
+    song: '歌曲',
+    album: '專輯',
+    playlist: '歌單',
+    foundSong: '發現一首分享歌曲',
+    foundAlbum: '發現一張分享專輯',
+    foundPlaylist: '發現一份分享歌單',
+    play: '播放',
+    playAll: '播放全部',
+    unknownSong: '未知歌曲',
+    openCollection: '查看完整{kind}',
+    moreTracks: '還有 {count} 首，播放後查看全部',
+    platforms: {
+      netease: '網易雲音樂',
+      qq: 'QQ音樂',
+      kugou: '酷狗音樂'
+    }
+  },
   hub: {
     title: '分享',
     image: '圖片分享',
