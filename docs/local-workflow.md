@@ -1,8 +1,6 @@
 # 本地构建与服务器发布
 
-GitHub Actions 的 CI / APK workflow 已迁到 `scripts/workflow.py`，由 npm 入口自动寻找 Python。本地运行测试、构建和签名，服务器只保存 APK 与 `latest.json`。不需要 GitHub 账号、Token 或仓库 Secrets。
-
-选择本地构建的原因：目前线上服务器只有约 4GB 内存、8GB 空闲磁盘，且运行音乐网关等服务；本地保留了发布密钥。将 Gradle、Android SDK 和签名留在本地，避免占用线上构建资源。
+使用 `scripts/workflow.py` 在本地运行测试、构建和签名，再将 APK 与 `latest.json` 上传到服务器。npm 入口会自动寻找可用的 Python。
 
 ## 环境
 
@@ -52,8 +50,8 @@ keyPassword=填写原密码
 
 ## 构建与发布 APK
 
-1. 在 `package.json` 与锁文件更新版本号，更新 `RELEASE_NOTES.md`。当前线上基线为 `1.4.1`，下一版可使用 `1.4.2`。
-2. 选择高于线上 APK 的 `versionCode`（当前基线为 11），显式传入，避免以前 workflow 总是复用默认值。
+1. 在 `package.json` 与锁文件更新版本号，更新 `RELEASE_NOTES.md`。仓库当前版本为 `1.4.1`；下方以准备发布 `1.4.2` 为例，不能直接把示例当作线上版本信息。
+2. 选择高于服务器现有 APK 的 `versionCode` 并显式传入。工程调试回退值为 11，不代表服务器始终停留在该版本。
 3. 构建会运行测试、`npm run build`、Capacitor sync 和 Gradle，验证签名、包名、版本，产出 APK 与更新清单。
 4. 发布前先运行 `--dry-run`：实际连接服务器、下载旧 APK、验证签名一致且版本递增；不替换任何发布文件。
 
@@ -78,4 +76,21 @@ APK 使用不可变的版本文件名，SHA-256 校验上传内容后，再依�
 - 若上传阶段失败，线上入口保持原状；若最后的 HTTPS 验证失败，检查已上传文件和清单后再决定是否回滚。
 - 回滚时将下载软链接与 `latest.json` 一起指回备份版本。Android 不允许普通覆盖安装降低 `versionCode`，已升级设备的修复应以更高版本重新发布。
 
-没有新增版本号的这次工作流迁移不会覆盖现有 `1.4.1` APK。
+## 产物与版本边界
+
+- `npm run build:web` 输出 `src/renderer/dist/`，只供浏览器 Web 使用。
+- `npm run build` 的渲染产物为 `out/renderer/`，与 `capacitor.config.ts` 的 `webDir` 一致，APK 工作流在此之后执行 Capacitor sync。
+- `versionName` 取自 `package.json`，`versionCode` 来自命令参数，由工作流注入 Gradle；不需要为了每次发版手动改写 Gradle 调试回退值。
+- 当前工程最低 API 为 24（Android 7.0），编译及目标 API 为 36，见 `android/variables.gradle`。
+- 文档更新、Git 提交或 Web 部署不自动生成或发布 Android APK。发布前以服务器实际包信息和预演结果为准。
+
+## 用户文档站
+
+`website/` 是独立的 VitePress 工程，不参与播放器的 Web 构建。首次安装及本地构建：
+
+```bash
+npm --prefix website ci
+npm --prefix website run build
+```
+
+产物位于 `website/.vitepress/dist/`，部署基路径为 `/zephyrus/docs/`。文档站构建不会上传服务器，也不会修改 APK 更新清单。

@@ -1,5 +1,7 @@
 # 舞台播放器（StagePlayer）协调文档
 
+> 历史记录：本文保留 2026-06-18 早期舞台开发的路径、接口与代理分工，不作为当前任务分工或实现约束。当前架构、源码路径和验证入口见 [DEV.md](./DEV.md)，本地发布流程见 [docs/local-workflow.md](./docs/local-workflow.md)。
+
 ## 项目信息
 - 项目路径：`C:\Users\Administrator\Desktop\AlgerMusicPlayer\AlgerMusicPlayer-5.1.0`
 - 源码路径：`src/renderer/`

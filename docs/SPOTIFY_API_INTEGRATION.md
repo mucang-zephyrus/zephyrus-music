@@ -1,5 +1,7 @@
 # Spotify API 登录接入计划与维护文档
 
+> 历史方案说明（2026-11-14 补充）：下文保留 2026-08-05 的调查与阶段规划，其中 API 政策、额度、工期和拟议文件结构不能当作当前状态。仓库已存在 `src/renderer/services/spotifyAuth.ts`、`spotifyApi.ts`、`store/modules/spotify.ts` 与 Android `SpotifyRedirectActivity.java`；排查应先阅读这些实现。登录、搜索、歌单和播放控制的实际可用性取决于应用配置、账号授权及后端，不代表完整曲目可直接在本应用播放。当前工程说明见 [DEV.md](../DEV.md)。
+
 > 调研日期：2026-08-05  
 > 项目：Zephyrus Player Android  
 > 文档状态：可行性分析 + 接入计划

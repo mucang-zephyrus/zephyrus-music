@@ -41,7 +41,7 @@ export default defineConfig({
         items: [
           { text: '安装与更新', link: '/guide/installation' },
           { text: '第一次使用', link: '/guide/getting-started' },
-          { text: '免费 AI 密钥领取', link: '/guide/free-api-keys' },
+          { text: 'AI 密钥与服务商', link: '/guide/free-api-keys' },
           { text: '常见问题', link: '/guide/faq' }
         ]
       },
@@ -55,7 +55,7 @@ export default defineConfig({
           { text: '高潮与逐字效果', link: '/features/climax-detection' },
           { text: '自定义效果', link: '/features/custom-effects' },
           { text: '字体与字重', link: '/features/font-import' },
-          { text: '歌词海报', link: '/features/posters' }
+          { text: '图片与视频分享', link: '/features/posters' }
         ]
       },
       {
@@ -65,12 +65,11 @@ export default defineConfig({
           { text: '样式总览', link: '/styles/overview' },
           { text: '默认', link: '/styles/default' },
           { text: '舞台', link: '/styles/stage' },
-          { text: '诡谲', link: '/styles/eerie' },
-          { text: '狂热', link: '/styles/frenzy' },
-          { text: '陈旧', link: '/styles/neon' },
-          { text: '雨夜', link: '/styles/rain' },
           { text: '星盘', link: '/styles/star-chart' },
-          { text: '烟雾', link: '/styles/smoke' }
+          { text: '词云', link: '/styles/word-cloud' },
+          { text: '点阵', link: '/styles/dot-matrix' },
+          { text: '烟雾', link: '/styles/smoke' },
+          { text: '错误', link: '/styles/error' }
         ]
       },
       {
@@ -105,7 +104,7 @@ export default defineConfig({
     lastUpdatedText: '最后更新',
     docFooter: { prev: '上一页', next: '下一页' },
     footer: {
-      message: '只维护 Android 手机体验',
+      message: 'Android 与 Web 使用文档 · 两端分别更新',
       copyright: 'Copyright © 2026 cang-dot'
     }
   }

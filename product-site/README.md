@@ -1,27 +1,40 @@
-# Zephyrus Player · 产品官网（v2）
+# Zephyrus Player 产品介绍站
 
-Vite + Vue 3 + Tailwind CSS v4 构建的单页官网。UI 组件拷贝自 [Inspira UI](https://inspira-ui.com/docs/cn)（MIT）：ParallaxFloat（光标 + 陀螺仪视差）、Marquee、BorderBeam、CardSpotlight、NumberTicker，入场编排使用 GSAP timeline。
+此目录是独立的 Vite + Vue 3 + Tailwind CSS v4 单页官网，使用 GSAP 编排动画。部分界面组件来自 Inspira UI，来源和许可按对应文件保留。
 
-- 主叙事：八种播放舞台
-- 配色：克莱因蓝 / 电光蓝 / 深蓝 + 黑白灰；大面积渐变灰阶化
-- 质感：全面磨砂（backdrop-filter 玻璃拟态，含 `prefers-reduced-transparency` 降级）
-- Hero 悬浮件为软件内真实 UI 的 HTML/CSS 实时渲染（迷你播放器 / 状态栏歌词胶囊 / 逐字歌词卡 / 样式设置卡），非截图
+播放器功能见[根 README](../README.md)，用户指南在 [website/](../website/)。官网文案维护于 `src/components/site/`。
 
-## 命令
+## 开发与构建
+
+在本目录执行：
 
 ```bash
-npm install
-npm run dev      # http://localhost:5273/zephyrus/
-npm run build    # 产物在 dist/（base=/zephyrus/）
+npm ci
+npm run dev
+npm run build
 npm run preview
 ```
 
+开发端口为 5273，部署基路径为 `/zephyrus/`，构建输出 `dist/`。端口和基路径见 `vite.config.ts`。
+
+## 目录与视觉
+
+- `src/components/site/`：首页各区块与产品文案。
+- `src/components/ui-preview/`：用 HTML／CSS 渲染的播放器、歌词和设置示意。
+- `src/components/inspira/`：引入的界面组件。
+- `public/`：构建时原样复制的公共图片。
+- `credits/`：独立静态致谢页，不参与 Vite 构建。
+
+站点使用蓝色、黑白灰与玻璃材质，部分组件支持减少透明度或运动。UI 预览为 HTML／CSS 示意。
+
+## 内容同步
+
+播放器有默认、舞台、星盘、词云、点阵、烟雾、错误七种样式。产品站部分组件仍写有旧的八种舞台文案，需要同步更新 `HeroSection`、`StagesStrip`、`StylesSection` 等组件。
+
+功能说明见 [README](../README.md)，发布步骤见[发布指南](../docs/local-workflow.md)。
+
 ## 部署
 
-`dist/` 上传至服务器 `/var/www/mucang/zephyrus/`（nginx `location /` 静态兜底，线上地址 <https://mucang.xyz/zephyrus/>）。
-`credits/` 致谢子页为独立静态目录，原样上传到 `/var/www/mucang/zephyrus/credits`，不参与构建。
+构建产物对应服务器 `/var/www/mucang/zephyrus/`，对外路径为 `/zephyrus/`。`credits/` 需独立处理；播放器 Web、用户文档和 APK 位于其他子路径，更新官网时应保留这些入口。
 
-## 备注
-
-- `postcss.config.cjs` 为空文件，用于阻断 Vite 向上查找到主仓库的 Tailwind v3 PostCSS 配置。
-- 公共图片资产在 `public/`（构建时原样拷贝，线上路径 `/zephyrus/*.png`）。
+本目录的 PostCSS 配置为 `postcss.config.cjs`。

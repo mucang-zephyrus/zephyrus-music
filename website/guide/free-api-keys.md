@@ -1,51 +1,44 @@
-# 免费密钥领取指南
+# 密钥与服务商配置
 
-歌词 AI 解析、AI 歌单、智能均衡器等 AI 功能使用**你自己的 API 密钥**，客户端直连服务商，不经任何服务器中转。本页整理各服务商的免费额度与低价档位，按需领取即可。
+AI 功能使用你配置的服务商、模型和 API 密钥。模型的可用范围、额度与费用请在服务商控制台确认。
 
-在应用内：**设置 → 基础设置 → 歌词 AI 解析**（或播放界面 → 设置 → 歌词解析），选择服务商并粘贴密钥。
+## 配置步骤
 
-## 智谱 AI（推荐，永久免费档）
+1. 在服务商控制台创建密钥，确认账号可调用目标模型。
+2. 打开应用设置中的“歌词 AI 解析”，选择服务商。
+3. 填写密钥和模型 ID；自定义服务还需填写接口基础地址。
+4. 保存后发起一次歌词分析。
 
-- 开放平台：<https://open.bigmodel.cn>
-- 注册后进入「API Keys」页面创建密钥，即可调用。
-- **GLM-4-Flash：永久免费**，中文歌词理解质量对得起价格（零）。
-- **GLM-5.3-Flash：低价快速档**，速度与质量平衡，适合高频使用。
-- 应用内配置：服务商选「智谱 AI」，粘贴密钥，模型选 `glm-4-flash`（免费）或 `glm-5.3-flash`。
+模型下拉提供常用名称，也可手动填写。鉴权失败或模型不可用时，按错误提示核对配置。
 
-## OpenRouter（一个密钥用全部厂商）
+## 智谱 AI {#zhipu}
 
-- 官网：<https://openrouter.ai>
-- 注册后在「Keys」页面创建密钥。
-- 所有带 **`:free`** 后缀的模型免费调用（如 `deepseek/deepseek-chat-v3-0324:free`、`meta-llama/llama-3.3-70b-instruct:free`），有每日次数上限，适合轻度使用。
-- 应用内配置：服务商选「OpenRouter」，模型选任意 `:free` 条目。
+在 [智谱开放平台](https://open.bigmodel.cn) 管理密钥和模型，应用服务商选择“智谱 AI”。
 
-## OpenCode Zen（免费额度）
+## DeepSeek {#deepseek}
 
-- 官网：<https://opencode.ai/zen>
-- 注册后在控制台创建 API Key，赠送免费模型额度。
-- 端点与模型名以官方文档为准；应用内预设 `opencode-v4f`。
-- 应用内配置：服务商选「OpenCode Zen」。
+在 [DeepSeek 开放平台](https://platform.deepseek.com) 管理密钥，应用选择“DeepSeek”。
 
-## GitHub Models（GitHub 账号即用）
+## OpenRouter {#openrouter}
 
-- 前提：GitHub 账号 + [Classic Personal Access Token](https://github.com/settings/tokens)（勾选 `models:read`）。
-- 免费使用 GPT-4o、DeepSeek-R1 等托管模型，有速率限制。
-- 应用内配置：服务商选「GitHub Models」，粘贴 Classic PAT。
+在 [OpenRouter](https://openrouter.ai) 管理密钥和模型。填写完整模型 ID，包括提供方前缀。
 
-## Pollinations（完全免配置）
+## OpenCode Zen {#opencodezen}
 
-- 无需任何密钥，应用内服务商选「Pollinations」即可开箱使用。
-- 缺点：无稳定性保证，不适合重度使用。
+在 [OpenCode Zen](https://opencode.ai/zen) 查看接入说明，应用选择对应服务商，填写可用的模型。
 
-## 低价付费档参考
+## GitHub Models {#github-models}
 
-| 服务商 | 模型 | 定位 |
-| --- | --- | --- |
-| 智谱 AI | GLM-5.3-Flash | 低价快速档，中文优秀 |
-| DeepSeek | DeepSeek-V4-Flash | 低价快速档，官网 <https://platform.deepseek.com> 领取密钥 |
+在 [GitHub Models](https://github.com/marketplace/models) 查看账号可访问的模型及令牌权限，应用选择对应服务商。
 
-按「少量多次」的使用频率，免费档（智谱 GLM-4-Flash / OpenRouter `:free`）通常已经够用。
+## Pollinations {#pollinations}
 
-## 隐私说明
+应用提供 Pollinations 预设，当前预设无需填写密钥。连接失败时请核对服务当前的接入要求。
 
-你的密钥只保存在设备本地（localStorage），请求由客户端直连服务商，**不经过 Zephyrus 的任何服务器**。AI 功能仅发送歌词文本与歌曲元数据，请勿提交其它敏感内容。
+## 自定义服务 {#custom}
+
+选择“自定义”，填写接口基础地址、模型及所需密钥。浏览器调用还需要接口允许跨域请求。
+
+## 本地配置与请求
+
+配置保存在当前设备，更换设备后需要重新填写。请求发送到所选服务商或自定义地址；反馈错误信息时请移除密钥与鉴权头。

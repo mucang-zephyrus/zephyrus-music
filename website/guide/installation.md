@@ -1,51 +1,42 @@
 # 安装与更新
 
-Zephyrus Player 当前只发布 Android APK。推荐从 GitHub Release 下载正式签名版本。
+Android 版通过 APK 安装，Web 版可直接在浏览器打开。两端分别更新，文档介绍开发版功能；安装包版本变更请查看更新说明。
 
-## 下载
+## 下载与要求
 
-- [GitHub Releases](https://github.com/cang-dot/zephyrus-player-android/releases)
-- [服务器最新版本直链](https://mucang.xyz/zephyrus/apks/zephyrus-player-latest.apk)
+- [下载 Android APK](https://mucang.xyz/zephyrus/apks/zephyrus-player-latest.apk)
+- [打开 Web 版](https://www.mucang.xyz/zephyrus/web/)
+- [产品介绍](https://mucang.xyz/zephyrus/)
 
-当前正式版本为 `v1.2.5`。下载文件名应类似 `zephyrus-player-v1.2.5.apk`。
+当前开发版最低支持 Android 7.0。在线搜索、歌曲和歌词加载需要网络；本地音乐需要文件授权，状态栏歌词需要悬浮窗权限。
 
-## 系统要求
+## 安装
 
-- Android 8.0 或更高版本
-- 建议至少保留 300 MB 可用空间
-- 在线搜索和歌词需要网络连接
-- 状态栏歌词需要悬浮窗权限
+1. 下载 APK，在下载管理器或文件管理器中打开。
+2. 按提示允许安装应用。
+3. 核对应用名为 Zephyrus Player，完成安装。
+4. 按需要授予通知、文件或悬浮窗权限。
 
-## 安装步骤
+同签名的新版本可以覆盖安装并保留数据。若系统提示签名冲突或版本过低，请先核对安装包来源与版本。
 
-1. 下载 APK。
-2. 在系统下载管理器中打开文件。
-3. 如果系统拦截，允许当前浏览器或文件管理器“安装未知应用”。
-4. 核对应用名为 Zephyrus Player 后完成安装。
+## 首次使用
 
-覆盖安装会保留本地设置和缓存。切勿从不明来源下载改包，正式 Release 应由项目配置的 Android 密钥签名。
+在“我的”中添加平台账号，播放歌曲后进入设置，选择样式和歌词选项。本地音乐可从歌单页的本地来源添加，状态栏歌词可在设置中搜索。
 
-## 首次启动
-
-首次启动会出现项目来源说明。进入应用后建议依次完成：
-
-1. 在“我的”中添加需要的平台账号。
-2. 在“设置 > 播放”中选择播放器样式和歌词选项。
-3. 需要状态栏歌词时，打开悬浮窗权限并运行真实预览。
-4. 本地音乐用户在歌单页切换到“本地”，选择扫描目录。
+详见 [第一次使用](/guide/getting-started)。
 
 ## 更新
 
-应用会检查 GitHub Release。更新弹窗提供正式下载链接，下载完成后由 Android 安装器覆盖安装。若自动检查失败，可以直接访问 Release 页面。
+应用检查项目服务器上的更新，提供更新说明和 APK 下载入口。自动检查失败时，可以使用上方链接下载。
 
-更新前不要清除应用数据。卸载后重装会移除本机设置、导入字体和部分缓存。
+更新时请保留应用数据。卸载或清除数据会删除本机设置、字体、登录配置和部分缓存。
 
 ## ADB 安装
 
-开发者可以连接已授权设备后执行：
+连接已授权设备，将下载的文件命名为 `zephyrus-player.apk` 后执行：
 
 ```bash
-adb install -r zephyrus-player-v1.2.5.apk
+adb install -r zephyrus-player.apk
 ```
 
-出现 `INSTALL_FAILED_VERSION_DOWNGRADE` 时，说明设备上的版本号更高。不要直接清除数据，先确认是否安装了测试版。
+出现 `INSTALL_FAILED_VERSION_DOWNGRADE` 表示设备上安装了更高版本。签名冲突则需核对是否装有其他签名的测试包。排查前先保留本机数据。

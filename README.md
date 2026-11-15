@@ -4,135 +4,90 @@
 
 # Zephyrus Player
 
-Zephyrus Player 是一款只为 Android 手机设计的音乐播放器：歌曲、歌词和播放器舞台共享同一条时间轴，常用操作围绕单手触控和可中断动画组织。它同时提供**网页版**——电脑浏览器打开即可使用同一套账号与播放能力。
+Zephyrus Player 是面向 Android 手机的音乐播放器，同时提供 Web 版。支持多平台音乐、本地文件、逐字歌词，以及七种不同风格的播放界面。
 
-[![版本](https://img.shields.io/badge/version-v1.4.1-b48b52)](https://mucang.xyz/zephyrus/apks/zephyrus-player-latest.apk)
-[![Android](https://img.shields.io/badge/Android-8.0%2B-3ddc84?logo=android&logoColor=white)](https://developer.android.com/about/versions/oreo)
-[![Web](https://img.shields.io/badge/Web-mucang.xyz%2Fzephyrus%2Fweb-4285f4?logo=googlechrome&logoColor=white)](https://mucang.xyz/zephyrus/web/)
-[![Vue](https://img.shields.io/badge/Vue_3-42b883?logo=vue.js&logoColor=white)](https://vuejs.org/)
+[![源码版本](https://img.shields.io/badge/source-1.4.1-b48b52)](./package.json)
+[![Android](https://img.shields.io/badge/minSdk-24-3ddc84?logo=android&logoColor=white)](./android/variables.gradle)
 [![许可证](https://img.shields.io/badge/license-AGPL--3.0-blue)](./LICENSE)
 
-## 下载
+[下载 Android APK](https://mucang.xyz/zephyrus/apks/zephyrus-player-latest.apk) · [打开 Web 版](https://www.mucang.xyz/zephyrus/web/) · [使用文档](https://mucang.xyz/zephyrus/docs/) · [产品官网](https://mucang.xyz/zephyrus/)
 
-- [服务器直链](https://mucang.xyz/zephyrus/apks/zephyrus-player-latest.apk)
-- [Android 产品介绍](https://mucang.xyz/zephyrus/)
-- [使用文档](https://mucang.xyz/zephyrus/docs/)
-- [致谢与开源许可](https://mucang.xyz/zephyrus/credits/)
-- [用户协议](./用户协议.md)
+> 本文介绍开发版功能。Android 安装包与 Web 分别更新，版本变更见[更新日志](./RELEASE_NOTES.md)。
 
-安装需要 Android 8.0 或更高版本。首次启动按提示授予通知、悬浮窗和本地文件访问权限；没有这些权限时，基础播放仍可使用，但对应功能会保持关闭。
+## 七种播放器样式
 
-## 网页版
+| 样式 | 主要特点                                       |
+| ---- | ---------------------------------------------- |
+| 默认 | 大封面与滚动歌词，可选极光、流体和网格渐变背景 |
+| 舞台 | 巨幅歌词、逐字砸下、错落排版与鼓点闪白         |
+| 星盘 | 旋转圆盘与分块歌词，可调整位置、大小和旋转速度 |
+| 词云 | 整曲歌词铺成画布，随演唱显现，镜头跟随当前词句 |
+| 点阵 | 圆点或方格组成歌词字形，配合节拍与高潮动画     |
+| 烟雾 | 歌曲主题色流体、响度响应、拉伸歌词与高潮暗角   |
+| 错误 | 流体、CRT 噪点、溶解歌词与高潮故障效果         |
 
-电脑浏览器打开 [mucang.xyz/zephyrus/web](https://www.mucang.xyz/zephyrus/web/) 即可直接使用，无需安装：
+每种样式分别保存背景、歌词颜色、字体、字重和专属参数。在“播放设置 → 控制 → 样式”选择自定义设置，一键还原可恢复当前样式的默认外观。
+
+错误样式包含强烈闪光，启用前请阅读光敏提示。
+
+## 歌词
+
+支持 TTML、网易云 YRC、QQ QRC、酷狗 KRC、普通与增强 LRC，可显示逐字进度、翻译和罗马音。TTML 还支持背景和声与对唱。
+
+- 在歌词来源设置中调整网易云、QQ、酷狗、社区、LRCLIB 等来源的优先级，也可临时为当前歌曲换源。
+- 自有 TTML 与 AMLL TTML 提供社区制作的逐字歌词。
+- 点击歌词跳转进度，手动校准时间偏移，选择显示翻译、罗马音或隐藏首尾制作信息。
+- 智能整理双语歌词，可按歌曲和来源关闭，并预览、反馈合并问题。
+
+## 音乐与播放
+
+支持网易云、QQ 音乐、酷狗、Zephyrus 云端和本地音乐。搜索页还提供 JOOX、Spotify、B 站等来源筛选，部分来源需要账号或相应服务支持。
+
+在“我的”中添加和切换平台账号。网易云、QQ、酷狗分享链接可粘贴到搜索页，识别歌曲后直接播放。
+
+支持播放队列、定时关闭、播放速度、智能过渡与无缝衔接。关闭后重新打开，可恢复上次歌曲和进度。
+
+动态背景可以随响度与鼓点变化。Web 在线音频的响应能力受跨域限制；iOS Web 可开启防打断模式，该模式会关闭媒体通知与锁屏控制。
+
+## 图片、视频与 AI
+
+将歌曲信息和选中的歌词制成海报，可调整布局、字体、配色、二维码和水印。
+
+视频分享可选择画面比例、时间段、720p 或 1080p，导出 MP4 或 WebM。词云、点阵暂不支持视频导出，其他样式需要设备提供可用编码器。
+
+AI 功能包括歌词解析、AI 歌单等。使用前在设置中选择服务商、填写自己的 API 密钥和模型；请求内容会发送给所选服务商，额度与费用按其规则计算。
+
+## Android 与 Web
+
+| 能力                           | Android            | Web                    |
+| ------------------------------ | ------------------ | ---------------------- |
+| 在线音乐、播放队列、歌词与样式 | 支持               | 支持                   |
+| 本地音乐                       | 授权目录后扫描     | 通过浏览器选择文件     |
+| 状态栏悬浮歌词                 | 支持，需悬浮窗权限 | 不支持                 |
+| 后台与媒体控制                 | 系统媒体通知       | 由浏览器和操作系统提供 |
+| 视频导出                       | 需要可用编码器     | 需要可用编码器         |
+
+当前开发版最低支持 Android 7.0。通知、目录访问和悬浮窗权限可按使用需要授予。
 
 <p align="center">
-  <img src="assets/web-desktop.webp" alt="Zephyrus Player 网页版桌面端" width="100%" />
+  <img src="assets/web-desktop.webp" alt="Zephyrus Player Web 桌面界面" width="100%" />
 </p>
-
-- 与 Android 端同一套网易云 / QQ 音乐 / 酷狗账号体系，歌单、收藏与播放状态互通；
-- 完整的搜索、歌单/专辑详情、播放队列与歌词展示；播放器支持封面大小、对齐、背景预设（极光 / 流体 / MD3 动态）等自定义；
-- 本地文件扫描、悬浮窗与状态栏歌词等依赖手机硬件的能力在网页版保持关闭；
-- 网页版与安卓端共用同一套部署与更新通道，功能随版本持续同步。
-
-## 主要能力
-
-### 歌词时间轴
-
-歌词按以下顺序尝试加载：
-
-1. Zephyrus TTML
-2. AMLL TTML
-3. 网易云 YRC
-4. QQ 音乐 QRC
-5. 普通 LRC
-
-TTML 可以同时携带主唱、背景、对唱、翻译和罗马音。默认播放器与独立滚动歌词使用 AMLL Vue 组件渲染，缺少逐字时间时会自然回退到行级歌词。点击歌词可定位，长按可进入歌词选择；手势、系统返回和播放界面切换不会改变音频播放状态。
-
-### 移动播放器
-
-当前版本提供默认、舞台、星盘、狂热、烟雾和错误六种样式。样式会独立保存背景、字体、歌词颜色、对齐方式和高潮效果；默认样式也支持大封面、滚动歌词和沉浸式底栏。
-
-播放设置按功能模块组织为子页导航（歌曲 / 控制两大页，控制页下分样式、布局、数据、音频、播放、工具、分享七个模块）；六种样式的可调参数（网格音频驱动、暖金强度、星场密度、流体形态等 60 余项）使用同一套参数规范，直接在样式设置中即时生效。歌词来源支持拖拽排序的请求优先级，也可仅对当前歌曲临时切换来源。
-
-「错误」样式基于 WebGL 流体：纯黑背景上以歌曲主题色高速流动，叠加 CRT 扫描线与老电视颗粒噪点；大字宋体歌词以溶解方式进出并带 RGB 色散，高潮段落触发全屏错误爆发。该样式包含高频闪光，首次启用会提供光敏性癫痫警告。
-
-### 分享
-
-分享分为「图片分享」与「视频分享」两个板块。图片分享沿用原有的歌词海报链路：摘录歌词或使用歌曲信息，选择布局、字体与配色后生成海报，再保存或分享。
-
-视频分享可以把当前播放器样式在选定时间段内的效果直接离线渲染成视频，无需手动录屏。可选项包括画面比例（16:9 / 9:16 / 3:4 / 4:3，每项带同比例预览示意）、导出时间段、720p / 1080p 清晰度，以及水印与深链二维码。全部播放器样式均支持；导出采用 WebCodecs 逐帧确定性渲染，优先输出 MP4（H.264/AAC），环境不支持时依次回退到 WebM（VP9 / VP8 + Opus），若当前设备没有可用编码器会明确提示，而不是产出损坏文件。
-
-### 主界面导航与手势
-
-四个主界面以常驻 pager 承载：横滑时当前页与相邻页跟手平移，松手按速度弹簧滑入目标页；每个界面独立记忆滚动位置。
-
-底栏与迷你栏共享一套物理手势语言：
-
-- 主界面向下滚动时，底栏收成当前页图标的圆形、迷你栏缩短右移同线；点击圆形展开，打开播放界面会记忆展开前的状态；
-- 上滑迷你栏打开播放界面：迷你栏胶囊先拖大成限高圆角矩形（顶边跟手、越界橡皮筋阻尼），松手弹簧展开全屏，歌词与特效随胶囊矩形裁切揭示，全程可中断可反向；
-- 播放全部、歌曲漫游与迷你栏播放键使用统一的加载态：收起转圈、成功对号、形变复原。
-
-### 音频与过渡
-
-- 播放中跳转进度会保持播放，暂停中跳转仍保持暂停。
-- 快速切歌只处理最新请求，旧音频的延迟事件不会重新暂停或启动当前歌曲。
-- 智能过渡支持轻量到智能的连续调节、无缝切歌和可中断的加载反馈。
-- 本地文件播放失败时只提示一次并安全推进队列，不会在同一首歌上重复循环报错。
-- **在线歌曲同样驱动音频响应**：鼓点、能量与 BPM 特征由原生引擎分析提供，本地与在线歌曲一视同仁。该能力依赖 Android 原生音频分析（网页浏览器版在线歌曲为跨域直连、无 Web Audio 图谱，暂不驱动视觉响应；网页版本地文件不受影响）。
-- **划掉后台后接着听**：正在播放的歌曲与进度以秒级粒度落盘，重新打开后恢复为同一首歌的暂停待播状态（开启自动播放时自动续播）。
-- **播放引擎自恢复**：移动端浏览器上视觉引擎异常时自动降级为实色背景并软恢复音频（进度不回跳）；连续异常的设备在下次启动时自动关闭特效，可在设置中重新开启。
-
-### 来源与账号
-
-支持网易云、QQ 音乐、酷狗和本地音乐的搜索、歌单、专辑与歌手详情。网易云与 QQ 音乐支持扫码 / Cookie 登录；跨平台歌曲可一键「匹配网易云播放」或开启自动匹配音源（失败回退原平台）。Spotify 登录受 Spotify 开发者应用白名单限制，未配置应用时会明确显示不可用状态，不会伪造登录成功。
-
-网易云分享链接可以在系统分享面板中选择 Zephyrus 直接打开对应歌曲；歌词海报二维码的中继页也支持一键唤起网易云音乐。
-
-### 歌词 AI 解析
-
-歌词设置中可以选择云端模型并查看每日积分。网关只接收歌曲元数据和歌词文本，不接收账号密码；模型列表、倍率、流式输出、Markdown 展示和纯文本复制都在同一面板完成。部署说明见 [`docs/ai-gateway-deployment.md`](./docs/ai-gateway-deployment.md)。
 
 ## 开发
 
-```bash
-npm install
-npm run dev:web
-```
-
-构建与发布已迁到本地执行，服务器负责下载与更新信息，不再依赖 GitHub Actions 或 GitHub Release。
+使用 Node.js 22+：
 
 ```bash
-npm run ci:local
-npm run workflow -- web --deploy
-npm run workflow -- doctor
-npm run release:android -- --version-code 12
-npm run release:publish -- dist/releases/1.4.2-12
+npm ci
+npm run dev:web -- --port 5199 --strictPort
 ```
 
-最后两条以新版本 `1.4.2` 为例：先修改 `package.json` / 锁文件版本并写好发布说明，再选择高于线上 APK 的 `versionCode`。构建后会验证签名并生成独立发布目录；上传会再次校验线上签名、版本号与文件摘要。工具安装、签名配置、服务器迁移和回滚步骤见 [本地构建与发布](./docs/local-workflow.md)。
-
-## 项目结构
-
-```text
-src/renderer/
-├── layout/            移动布局、Tab pager、顶栏与底栏 Dock
-├── components/        播放器样式、歌词、设置、通用组件
-├── playerStyles/      播放器样式的注册与配置
-├── composables/       手势、过渡、外观与持久化逻辑
-├── services/          音频、歌词、平台账号与原生桥接
-├── store/modules/     播放、歌词、样式、账号和过渡状态
-├── utils/             歌词解析、调度器、手势与生命周期工具
-└── views/             首页、歌单、发现、我的与二级页面
-android/               Capacitor Android 容器与原生桥接
-relay/                 歌词海报二维码中继页
-website/               VitePress 文档站
-product-site/          Android 产品介绍站
-server-ai-gateway.js   云端歌词 AI 网关
-```
+环境变量、架构和检查命令见[开发指南](./DEV.md)，Android 签名及发布步骤见[本地构建与服务器发布](./docs/local-workflow.md)。其他技术资料见[维护文档索引](./docs/README.md)。
 
 ## 致谢与许可证
 
-滚动歌词使用 [Apple Music-like Lyrics](https://github.com/amll-dev/applemusic-like-lyrics) 的 Vue 组件；「错误」样式的流体背景改编自 [vue-bits](https://github.com/DavidHDev/vue-bits) 的 LiquidEther 组件；默认样式的「网格」背景使用 Apple Music-like Lyrics 的 `MeshGradientRenderer` 渲染器，其低频驱动曲线移植自 [amll-player](https://github.com/JoyElliot/amll-player)（作者 JoyElliot 授权使用第一方代码，双方均遵循 AGPL-3.0）。本项目基于 [AlgerMusicPlayer](https://github.com/algerkong/AlgerMusicPlayer) 二次开发演进而来。以上引用项目均遵循其开源许可证，完整致谢见[致谢站](https://mucang.xyz/zephyrus/credits/)。项目整体使用 [AGPL-3.0-only](./LICENSE) 发布；第三方依赖的许可证以各自仓库为准。
+本项目基于 [AlgerMusicPlayer](https://github.com/algerkong/AlgerMusicPlayer) 持续演进，整体以 [AGPL-3.0-only](./LICENSE) 发布。
 
-使用本应用即表示同意[用户协议](./用户协议.md)。问题反馈请提交 [GitHub Issues](https://github.com/cang-dot/zephyrus-player-android/issues)，并附上 Android 版本、歌曲来源、歌词格式、播放器样式和复现步骤。
+歌词渲染使用 [Apple Music-like Lyrics](https://github.com/amll-dev/applemusic-like-lyrics)；网格背景的低频驱动曲线参考 [amll-player](https://github.com/JoyElliot/amll-player) 经作者授权的第一方代码。流体效果改编自 [vue-bits](https://github.com/DavidHDev/vue-bits) 的 LiquidEther；词云排版与镜头参考 Folia；点阵使用 Fusion Pixel Font。第三方代码、字体与歌词数据的许可说明见仓库内文件及[致谢站](https://mucang.xyz/zephyrus/credits/)。
+
+使用前请阅读[用户协议](./用户协议.md)。反馈请附上应用版本、设备系统、歌曲平台与 ID、歌词来源、播放器样式及复现步骤。
