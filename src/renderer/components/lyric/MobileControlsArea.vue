@@ -117,15 +117,15 @@
           ></div>
         </div>
       </div>
-      <!-- 悬停预览：歌词行 + 时间（桌面端 pointer:fine 专属） -->
+      <!-- 桌面鼠标悬停预览 -->
       <transition name="hover-tip-fade">
         <div
-          v-if="showHoverTooltip && (hoverLyric || hoverTimeStr)"
+          v-if="showHoverTooltip"
+          ref="hoverTooltipRef"
           class="progress-hover-tooltip"
           :style="{ left: hoverLeft }"
         >
-          <div v-if="hoverLyric" class="tooltip-lyric">{{ hoverLyric }}</div>
-          <div class="tooltip-time">{{ hoverTimeStr }}</div>
+          <lyric-hover-preview :time="hoverTime" />
         </div>
       </transition>
       <div class="time-info">
@@ -200,11 +200,12 @@
 </template>
 
 <script setup lang="ts">
-import { useMediaQuery } from '@vueuse/core';
+import { useElementBounding, useMediaQuery, useWindowSize } from '@vueuse/core';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import CoverPreviewModal from '@/components/player/CoverPreviewModal.vue';
+import LyricHoverPreview from '@/components/player/LyricHoverPreview.vue';
 import { useControlsDock } from '@/composables/useControlsDock';
 import { useCoverPreviewGesture } from '@/composables/useCoverPreviewGesture';
 import {
@@ -220,15 +221,7 @@ import {
   useImmersiveLyrics
 } from '@/composables/useImmersiveLyrics';
 import { usePlayerSurfaceFeedback } from '@/composables/usePlayerSurfaceFeedback';
-import {
-  allTime,
-  artistList,
-  getLyricTextAtTime,
-  nowTime,
-  pause,
-  play,
-  playMusic
-} from '@/hooks/MusicHook';
+import { allTime, artistList, nowTime, pause, play, playMusic } from '@/hooks/MusicHook';
 import { usePlayMode } from '@/hooks/usePlayMode';
 import { audioService } from '@/services/audioService';
 import { useListenTogetherStore } from '@/store/modules/listenTogether';
@@ -803,25 +796,37 @@ let scrubPointerId = -1;
 // ==================== 进度条悬停预览（桌面端 pointer:fine 专属） ====================
 const isPointerFine = window.matchMedia?.('(pointer: fine)').matches ?? false;
 const showHoverTooltip = ref(false);
-const hoverLyric = ref<string | null>(null);
-const hoverTimeStr = ref('');
-const hoverLeft = ref('50%');
+const hoverTime = ref(0);
+const hoverTooltipRef = ref<HTMLElement | null>(null);
+const { width: hoverTooltipWidth } = useElementBounding(hoverTooltipRef);
+const { width: viewportWidth } = useWindowSize();
+const hoverClientX = ref(0);
+const hoverTrackLeft = ref(0);
+const hoverLeft = computed(() => {
+  const halfWidth = hoverTooltipWidth.value / 2;
+  const center = Math.max(
+    halfWidth + 12,
+    Math.min(viewportWidth.value - halfWidth - 12, hoverClientX.value)
+  );
+  return `${center - hoverTrackLeft.value}px`;
+});
 
 const handleProgressHover = (e: MouseEvent) => {
   if (!isPointerFine || isScrubbing.value || allTime.value <= 0) return;
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
   const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
   const timeSec = percent * allTime.value;
-  hoverTimeStr.value = secondToMinute(timeSec);
-  hoverLyric.value = getLyricTextAtTime(timeSec);
-  // 左右钳制，避免 tooltip 溢出屏幕
-  hoverLeft.value = `${Math.min(88, Math.max(12, percent * 100))}%`;
+  hoverTime.value = timeSec;
+  hoverClientX.value = e.clientX;
+  hoverTrackLeft.value = rect.left;
   showHoverTooltip.value = true;
 };
 
 const handleProgressLeave = () => {
   showHoverTooltip.value = false;
 };
+
+watch(() => playMusic.value?.id, handleProgressLeave);
 
 const getSeekTime = (clientX: number, target: HTMLElement): number | null => {
   const rect = target.closest('.apple-style-progress')?.getBoundingClientRect();
@@ -1189,29 +1194,14 @@ const handleScrubPointerCancel = (e: PointerEvent) => {
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  max-width: min(60vw, 420px);
-  padding: 6px 10px;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  padding: 10px 12px;
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.78);
   color: #fff;
   pointer-events: none;
   white-space: nowrap;
-
-  .tooltip-lyric {
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 12px;
-    line-height: 1.4;
-    opacity: 0.92;
-  }
-
-  .tooltip-time {
-    font-size: 11px;
-    line-height: 1.2;
-    opacity: 0.6;
-    font-variant-numeric: tabular-nums;
-  }
 }
 
 .hover-tip-fade-enter-active,

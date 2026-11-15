@@ -15,9 +15,8 @@
           <div class="progress-track"></div>
           <div class="progress-fill" :style="{ width: `${progressPercentage}%` }"></div>
           <!-- 悬停歌词提示 -->
-          <div v-if="showHoverTooltip && (hoverLyric || hoverTimeStr)" class="hover-tooltip">
-            <div v-if="hoverLyric" class="hover-lyric">{{ hoverLyric }}</div>
-            <div class="hover-time">{{ hoverTimeStr }}</div>
+          <div v-if="showHoverTooltip" class="hover-tooltip">
+            <lyric-hover-preview :time="hoverTime" />
           </div>
         </div>
 
@@ -87,7 +86,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
-import { allTime, getLyricTextAtTime, nowTime, playMusic } from '@/hooks/MusicHook';
+import LyricHoverPreview from '@/components/player/LyricHoverPreview.vue';
+import { allTime, nowTime, playMusic } from '@/hooks/MusicHook';
 import { usePlayMode } from '@/hooks/usePlayMode';
 import { audioService } from '@/services/audioService';
 import { usePlayerStore } from '@/store/modules/player';
@@ -166,18 +166,17 @@ const isDragging = ref(false);
 const dragProgress = ref(0); // 拖拽时的预览进度 (0-100)
 
 // 悬停歌词预览
-const hoverLyric = ref<string | null>(null);
-const hoverTimeStr = ref('');
+const hoverTime = ref(0);
 const showHoverTooltip = ref(false);
 
 const handleProgressHover = (e: MouseEvent) => {
+  if (allTime.value <= 0) return;
   const target = e.currentTarget as HTMLElement;
   const rect = target.getBoundingClientRect();
   const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
   const timeSec = percent * allTime.value;
 
-  hoverTimeStr.value = secondToMinute(timeSec);
-  hoverLyric.value = getLyricTextAtTime(timeSec);
+  hoverTime.value = timeSec;
   showHoverTooltip.value = true;
 };
 
@@ -262,6 +261,8 @@ const handleProgressClick = (e: MouseEvent) => {
 };
 
 // 组件卸载时清理拖拽监听器
+watch(() => playMusic.value?.id, handleProgressLeave);
+
 onBeforeUnmount(() => {
   if (isDragging.value) {
     document.removeEventListener('mousemove', handleMouseMove);
@@ -478,26 +479,12 @@ onMounted(() => {
       background: #111214;
       backdrop-filter: none;
       border-radius: 8px;
-      padding: 6px 10px;
-      white-space: nowrap;
+      padding: 10px 12px;
+      width: max-content;
+      max-width: calc(100vw - 24px);
       pointer-events: none;
       z-index: 100;
       text-align: center;
-
-      .hover-lyric {
-        font-size: 12px;
-        color: #fff;
-        max-width: 200px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        margin-bottom: 2px;
-      }
-
-      .hover-time {
-        font-size: 10px;
-        color: rgba(255, 255, 255, 0.6);
-        font-family: monospace;
-      }
     }
 
     &:hover {

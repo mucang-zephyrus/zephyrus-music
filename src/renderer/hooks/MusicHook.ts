@@ -25,6 +25,7 @@ import { isElectron } from '@/utils';
 import { getTextColors } from '@/utils/linearColor';
 import { projectCreditLyrics, projectCreditTtml } from '@/utils/lyricCredits';
 import { createLyricDisplayPipeline } from '@/utils/lyricDisplayPipeline';
+import { buildLyricHoverTimeline, resolveLyricHoverPreview } from '@/utils/lyricHoverPreview';
 import { findStartedTimedLineIndex } from '@/utils/timedLyricProgress';
 import { parseLyrics } from '@/utils/yrcParser';
 
@@ -816,33 +817,27 @@ export const getLrcIndex = (time: number): number => {
   return nowIndex.value;
 };
 
-// 根据时间获取对应歌词文本（用于进度条悬停预览）
-export const getLyricTextAtTime = (timeSec: number): string | null => {
-  // TTML 逐字歌词优先：它异步到达后不回写 lrcArray，悬停预览须直读
-  // amllStore 才能随「更优歌词加载完成」实时更新（桌面进度条与移动进度条共用）。
-  // currentSource 与当前歌不匹配（切歌瞬间残留）时回退 LRC
-  try {
-    const amllStore = useAmllStore();
-    const ttml = projectCreditTtml(amllStore.ttmlLyric, lyricCreditConfig.value);
-    const source = playMusic.value ? resolveAmllSource(playMusic.value) : null;
-    const expectedSource = source ? `${source.platform}:${source.songId}` : null;
-    if (ttml?.lines.length && expectedSource && amllStore.currentSource === expectedSource) {
-      const t = timeSec + correctionTime.value;
-      for (const line of ttml.lines) {
-        if (line.isBackground) continue;
-        if (t >= line.begin && t < line.end) return line.text.trim() || null;
-      }
-      return null;
-    }
-  } catch {
-    /* pinia 未激活等极端时序：回退 LRC */
-  }
-  const index = getLrcIndex(timeSec);
-  if (index >= 0 && index < lrcArray.value.length) {
-    return displayLrcArray.value[index].text || null;
-  }
-  return null;
-};
+const hoverTimeline = computed(() => {
+  const amllStore = useAmllStore();
+  const source = playMusic?.value ? resolveAmllSource(playMusic.value) : null;
+  const expectedSource = source ? `${source.platform}:${source.songId}` : null;
+  const ttml =
+    expectedSource && amllStore.currentSource === expectedSource
+      ? amllStore.ttmlLyric
+      : null;
+  return buildLyricHoverTimeline(ttml, lrcArray.value, lrcTimeArray.value);
+});
+
+export const getLyricPreviewAtTime = (timeSec: number) =>
+  resolveLyricHoverPreview(
+    hoverTimeline.value,
+    timeSec + correctionTime.value,
+    allTime.value + correctionTime.value
+  );
+
+// Compatibility for callers that only need the first lyric string.
+export const getLyricTextAtTime = (timeSec: number): string | null =>
+  getLyricPreviewAtTime(timeSec).lines[0]?.text || null;
 
 // 获取当前播放歌词进度
 const currentLrcTiming = computed(() => {
