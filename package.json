@@ -138,7 +138,7 @@
     "jimp": "^1.6.1",
     "lint-staged": "^15.5.2",
     "lodash": "^4.17.21",
-    "marked": "^15.0.12",
+    "marked": "^18.2.0",
     "naive-ui": "^2.43.2",
     "pinia": "^3.0.4",
     "pinyin-match": "^1.2.10",
