@@ -33,7 +33,7 @@
             <div class="w-full space-y-3">
               <!-- 前往本项目 -->
               <a
-                href="https://github.com/cang-dot/zephyrus-player-android"
+                href="https://github.com/mucang-zephyrus/zephyrus-music"
                 target="_blank"
                 class="traffic-primary-btn"
               >

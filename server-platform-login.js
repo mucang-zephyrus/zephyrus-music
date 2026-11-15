@@ -67,7 +67,7 @@ router.use('/share', createShareLinkRouter());
 
 const RELEASE_NOTE_FILE = '/var/www/zephyrus/apks/latest.json';
 const RELEASE_NOTE_API =
-  'https://api.github.com/repos/cang-dot/zephyrus-player-android/releases/latest';
+  'https://api.github.com/repos/mucang-zephyrus/zephyrus-music/releases/latest';
 
 /**
  * 从 GitHub Releases 拉取最新发布信息，写入服务器 latest.json（供 App 更新检查使用）

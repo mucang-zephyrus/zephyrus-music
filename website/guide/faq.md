@@ -54,4 +54,4 @@
 
 ## 反馈问题
 
-通过应用反馈入口或 [GitHub Issues](https://github.com/cang-dot/zephyrus-player-android/issues) 提供问题信息。截图与日志中请移除 Cookie、密钥和鉴权头。
+通过应用反馈入口或 [GitHub Issues](https://github.com/mucang-zephyrus/zephyrus-music/issues) 提供问题信息。截图与日志中请移除 Cookie、密钥和鉴权头。

@@ -5,7 +5,7 @@
 - [官方网站](https://mucang.xyz/zephyrus/)
 - [Android APK](https://mucang.xyz/zephyrus/apks/zephyrus-player-latest.apk)
 - [Web 版](https://www.mucang.xyz/zephyrus/web/)
-- [源代码](https://github.com/cang-dot/zephyrus-player-android)
+- [源代码](https://github.com/mucang-zephyrus/zephyrus-music)
 
 ## 本地数据
 

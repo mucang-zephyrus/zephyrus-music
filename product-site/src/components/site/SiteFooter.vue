@@ -9,7 +9,7 @@
       <nav class="footer-links" aria-label="页脚导航">
         <a href="https://mucang.xyz/zephyrus/docs/">文档</a>
         <a href="/zephyrus/credits/">致谢与开源许可</a>
-        <a href="https://github.com/cang-dot/zephyrus-player-android">GitHub</a>
+        <a href="https://github.com/mucang-zephyrus/zephyrus-music">GitHub</a>
         <a href="https://inspira-ui.com/docs/cn" rel="noopener">组件来自 Inspira UI</a>
       </nav>
     </div>

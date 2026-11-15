@@ -17,7 +17,7 @@ import BorderBeam from '@/components/inspira/border-beam/BorderBeam.vue';
           <a class="btn-primary" href="https://mucang.xyz/zephyrus/apks/zephyrus-player-latest.apk">
             直接下载 APK
           </a>
-          <a class="btn-ghost" href="https://github.com/cang-dot/zephyrus-player-android">
+          <a class="btn-ghost" href="https://github.com/mucang-zephyrus/zephyrus-music">
             查看源代码
           </a>
         </div>

@@ -31,7 +31,7 @@ export default defineConfig({
             text: '下载 Android APK',
             link: 'https://mucang.xyz/zephyrus/apks/zephyrus-player-latest.apk'
           },
-          { text: 'GitHub 仓库', link: 'https://github.com/cang-dot/zephyrus-player-android' }
+          { text: 'GitHub 仓库', link: 'https://github.com/mucang-zephyrus/zephyrus-music' }
         ]
       }
     ],
@@ -92,9 +92,9 @@ export default defineConfig({
       }
     ],
     search: { provider: 'local' },
-    socialLinks: [{ icon: 'github', link: 'https://github.com/cang-dot/zephyrus-player-android' }],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/mucang-zephyrus/zephyrus-music' }],
     editLink: {
-      pattern: 'https://github.com/cang-dot/zephyrus-player-android/edit/main/website/:path',
+      pattern: 'https://github.com/mucang-zephyrus/zephyrus-music/edit/main/website/:path',
       text: '在 GitHub 上改进此页'
     },
     outline: { label: '本页内容', level: [2, 3] },

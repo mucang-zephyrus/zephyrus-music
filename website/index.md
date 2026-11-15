@@ -87,6 +87,6 @@ titleTemplate: false
   <p>记录歌曲名、来源平台、歌词格式、播放器样式、横竖屏状态和复现步骤。歌词问题先确认来源与时间校准，状态栏歌词先确认悬浮窗权限和系统电池限制。</p>
   <div class="docs-actions">
     <a class="docs-action docs-action--primary" href="/zephyrus/docs/guide/faq">打开故障排查</a>
-    <a class="docs-action" href="https://github.com/cang-dot/zephyrus-player-android/issues">提交 GitHub Issue</a>
+    <a class="docs-action" href="https://github.com/mucang-zephyrus/zephyrus-music/issues">提交 GitHub Issue</a>
   </div>
 </section>

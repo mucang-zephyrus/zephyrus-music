@@ -10,7 +10,7 @@ Zephyrus Player 是面向 Android 手机的音乐播放器，同时提供 Web �
 [![Android](https://img.shields.io/badge/minSdk-24-3ddc84?logo=android&logoColor=white)](./android/variables.gradle)
 [![许可证](https://img.shields.io/badge/license-AGPL--3.0-blue)](./LICENSE)
 
-[下载 Android APK](https://mucang.xyz/zephyrus/apks/zephyrus-player-latest.apk) · [打开 Web 版](https://www.mucang.xyz/zephyrus/web/) · [使用文档](https://mucang.xyz/zephyrus/docs/) · [产品官网](https://mucang.xyz/zephyrus/)
+[下载 Android APK](https://mucang.xyz/zephyrus/apks/zephyrus-player-latest.apk) · [打开 Web 版](https://www.mucang.xyz/zephyrus/web/) · [使用文档](https://mucang.xyz/zephyrus/docs/) · [产品官网](https://mucang.xyz/zephyrus/) · [源码仓库](https://github.com/mucang-zephyrus/zephyrus-music)
 
 > 本文介绍开发版功能。Android 安装包与 Web 分别更新，版本变更见[更新日志](./RELEASE_NOTES.md)。
 
@@ -78,6 +78,8 @@ AI 功能包括歌词解析、AI 歌单等。使用前在设置中选择服务�
 使用 Node.js 22+：
 
 ```bash
+git clone https://github.com/mucang-zephyrus/zephyrus-music.git
+cd zephyrus-music
 npm ci
 npm run dev:web -- --port 5199 --strictPort
 ```
