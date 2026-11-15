@@ -105,7 +105,7 @@ export default defineConfig({
     docFooter: { prev: '上一页', next: '下一页' },
     footer: {
       message: 'Android 与 Web 使用文档 · 两端分别更新',
-      copyright: 'Copyright © 2026 cang-dot'
+      copyright: 'Copyright © 2026 mucang-zephyrus'
     }
   }
 });

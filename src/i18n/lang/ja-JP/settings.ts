@@ -352,7 +352,7 @@ export default {
     websiteDesc: 'Zephyrus Player の紹介、ダウンロード、ドキュメントを表示します',
     visitWebsite: 'サイトを開く',
     author: '作者',
-    authorDesc: '原作者：algerkong　修改：cang-dot',
+    authorDesc: '原作者：algerkong　修改：mucang-zephyrus',
     messages: {
       checkError: '更新確認に失敗しました。後でもう一度お試しください'
     }

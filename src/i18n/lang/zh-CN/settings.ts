@@ -349,7 +349,7 @@ export default {
     websiteDesc: '查看 Zephyrus Player 产品介绍、下载与文档',
     visitWebsite: '打开官网',
     author: '作者',
-    authorDesc: '原作者：algerkong　修改：cang-dot',
+    authorDesc: '原作者：algerkong　修改：mucang-zephyrus',
     messages: {
       checkError: '检查更新失败，请稍后重试'
     }

@@ -353,7 +353,7 @@ export default {
     websiteDesc: 'Zephyrus Player 소개, 다운로드 및 문서를 확인합니다',
     visitWebsite: '웹사이트 열기',
     author: '작성자',
-    authorDesc: '原作者：algerkong　修改：cang-dot',
+    authorDesc: '原作者：algerkong　修改：mucang-zephyrus',
     messages: {
       checkError: '업데이트 확인 실패, 나중에 다시 시도하세요'
     }

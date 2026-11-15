@@ -180,14 +180,13 @@ import config from '../../../../../package.json';
 import readmeText from '../../../../../README.md?raw';
 import userAgreementText from '../../../../../用户协议.md?raw';
 import { APP_UPDATE_STATUS, hasAvailableAppUpdate } from '../../../../shared/appUpdate';
-import { SETTINGS_DATA_KEY, SETTINGS_MESSAGE_KEY } from '../keys';
+import { SETTINGS_MESSAGE_KEY } from '../keys';
 import SBtn from '../SBtn.vue';
 import SettingItem from '../SettingItem.vue';
 import SettingSection from '../SettingSection.vue';
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore();
-const setData = inject(SETTINGS_DATA_KEY)!;
 const message = inject(SETTINGS_MESSAGE_KEY)!;
 
 const checking = ref(false);
@@ -297,11 +296,11 @@ const openManualUpdatePage = async () => {
     return;
   }
 
-  window.open(updateInfo.value.releaseInfo?.html_url || setData.value.authorUrl);
+  window.open(updateInfo.value.releaseInfo?.html_url || config.homepage);
 };
 
 const openAuthor = () => {
-  window.open(setData.value.authorUrl);
+  window.open(config.homepage);
 };
 
 const openWebsite = () => {

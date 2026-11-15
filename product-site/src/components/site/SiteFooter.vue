@@ -5,7 +5,7 @@
         <img src="/zephyrus-mark.png" alt="" />
         <span>Zephyrus Player</span>
       </div>
-      <span class="footer-copy">© 2026 cang-dot</span>
+      <span class="footer-copy">© 2026 mucang-zephyrus</span>
       <nav class="footer-links" aria-label="页脚导航">
         <a href="https://mucang.xyz/zephyrus/docs/">文档</a>
         <a href="/zephyrus/credits/">致谢与开源许可</a>

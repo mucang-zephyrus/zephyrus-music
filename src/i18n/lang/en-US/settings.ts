@@ -353,7 +353,7 @@ export default {
     websiteDesc: 'View the Zephyrus Player overview, downloads, and documentation',
     visitWebsite: 'Open Website',
     author: 'Author',
-    authorDesc: 'Original: algerkong　Modified by: cang-dot',
+    authorDesc: 'Original: algerkong　Modified by: mucang-zephyrus',
     messages: {
       checkError: 'Failed to check for updates, please try again later'
     }

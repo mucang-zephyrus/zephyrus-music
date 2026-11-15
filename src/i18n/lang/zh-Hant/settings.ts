@@ -345,7 +345,7 @@ export default {
     websiteDesc: '查看 Zephyrus Player 產品介紹、下載與文件',
     visitWebsite: '開啟官網',
     author: '作者',
-    authorDesc: '原作者：algerkong　修改：cang-dot',
+    authorDesc: '原作者：algerkong　修改：mucang-zephyrus',
     messages: {
       checkError: '檢查更新失敗，請稍後重試'
     }
