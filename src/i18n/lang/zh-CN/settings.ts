@@ -346,7 +346,7 @@ export default {
     manualUpdate: '官网更新',
     gotoGithub: '前往 Github',
     website: '官方网站',
-    websiteDesc: '查看 Zephyrus Player 产品介绍、下载与文档',
+    websiteDesc: '查看 Zephyrus Music 产品介绍、下载与文档',
     visitWebsite: '打开官网',
     author: '作者',
     authorDesc: '原作者：algerkong　修改：mucang-zephyrus',

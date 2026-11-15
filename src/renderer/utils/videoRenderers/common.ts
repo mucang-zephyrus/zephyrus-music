@@ -341,7 +341,7 @@ export function drawWatermark(c: VideoFrameContext): void {
   ctx.textAlign = 'left';
   ctx.textBaseline = 'bottom';
   ctx.fillStyle = c.skin.theme === 'light' ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.5)';
-  ctx.fillText('Zephyrus Player', pad, height - pad);
+  ctx.fillText('Zephyrus Music', pad, height - pad);
   ctx.restore();
 
   if (c.qrImage) {

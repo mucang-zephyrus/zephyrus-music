@@ -350,7 +350,7 @@ export default {
     manualUpdate: '수동 업데이트',
     gotoGithub: 'Github로 이동',
     website: '공식 웹사이트',
-    websiteDesc: 'Zephyrus Player 소개, 다운로드 및 문서를 확인합니다',
+    websiteDesc: 'Zephyrus Music 소개, 다운로드 및 문서를 확인합니다',
     visitWebsite: '웹사이트 열기',
     author: '작성자',
     authorDesc: '原作者：algerkong　修改：mucang-zephyrus',

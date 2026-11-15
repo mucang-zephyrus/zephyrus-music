@@ -1,6 +1,6 @@
 ---
 layout: page
-title: Zephyrus Player Android 文档
+title: Zephyrus Music Android 文档
 titleTemplate: false
 ---
 
@@ -11,7 +11,7 @@ titleTemplate: false
   <div class="docs-hero__veil" aria-hidden="true"></div>
   <img class="docs-hero__mark" src="/zephyrus-mark.png" alt="" aria-hidden="true" />
   <div class="docs-hero__content">
-    <p class="docs-kicker">ZEPHYRUS PLAYER · ANDROID</p>
+    <p class="docs-kicker">ZEPHYRUS MUSIC · ANDROID</p>
     <h1>让歌词成为<br>播放界面本身</h1>
     <p class="docs-hero__lead">从安装、账号和音乐来源，到多来源逐字歌词、七种播放器样式、状态栏悬浮歌词与故障排查。</p>
     <div class="docs-actions">
@@ -66,7 +66,7 @@ titleTemplate: false
 
 <section class="docs-mobile">
   <figure>
-    <img src="/zephyrus-home.png" alt="Zephyrus Player Android 首页" />
+    <img src="/zephyrus-home.png" alt="Zephyrus Music Android 首页" />
     <figcaption>Android 首页与底部播放栏</figcaption>
   </figure>
   <div class="docs-mobile__copy">

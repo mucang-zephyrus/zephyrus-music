@@ -1,7 +1,7 @@
 {
-  "name": "Zephyrus Player",
+  "name": "Zephyrus Music",
   "short_name": "Zephyrus",
-  "description": "ZephyrusPlayer 音乐播放器 Web 版",
+  "description": "ZephyrusMusic 音乐播放器 Web 版",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

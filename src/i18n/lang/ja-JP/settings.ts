@@ -349,7 +349,7 @@ export default {
     manualUpdate: '手動更新',
     gotoGithub: 'Githubへ',
     website: '公式サイト',
-    websiteDesc: 'Zephyrus Player の紹介、ダウンロード、ドキュメントを表示します',
+    websiteDesc: 'Zephyrus Music の紹介、ダウンロード、ドキュメントを表示します',
     visitWebsite: 'サイトを開く',
     author: '作者',
     authorDesc: '原作者：algerkong　修改：mucang-zephyrus',

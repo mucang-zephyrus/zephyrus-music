@@ -342,7 +342,7 @@ export default {
     manualUpdate: '官網更新',
     gotoGithub: '前往 Github',
     website: '官方網站',
-    websiteDesc: '查看 Zephyrus Player 產品介紹、下載與文件',
+    websiteDesc: '查看 Zephyrus Music 產品介紹、下載與文件',
     visitWebsite: '開啟官網',
     author: '作者',
     authorDesc: '原作者：algerkong　修改：mucang-zephyrus',

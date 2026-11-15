@@ -1027,7 +1027,7 @@ function drawWatermark(
     ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
-    ctx.fillText('Zephyrus Player', 30, H - 30);
+    ctx.fillText('Zephyrus Music', 30, H - 30);
   }
 
   ctx.restore();

@@ -3,7 +3,7 @@
   "private": true,
   "version": "2.0.0",
   "type": "module",
-  "description": "Zephyrus Player Android 产品官网（Vite + Vue + Tailwind v4 + Inspira UI 组件）",
+  "description": "Zephyrus Music Android 产品官网（Vite + Vue + Tailwind v4 + Inspira UI 组件）",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

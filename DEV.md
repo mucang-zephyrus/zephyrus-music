@@ -1,4 +1,4 @@
-# Zephyrus Player 开发指南
+# Zephyrus Music 开发指南
 
 本指南介绍 Android、Web 及 Electron 入口的开发环境、代码结构和检查方法。
 

@@ -1,4 +1,4 @@
-# Zephyrus Player 产品介绍站
+# Zephyrus Music 产品介绍站
 
 此目录是独立的 Vite + Vue 3 + Tailwind CSS v4 单页官网，使用 GSAP 编排动画。部分界面组件来自 Inspira UI，来源和许可按对应文件保留。
 

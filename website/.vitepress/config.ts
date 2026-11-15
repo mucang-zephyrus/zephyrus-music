@@ -3,8 +3,8 @@ import { defineConfig } from 'vitepress';
 export default defineConfig({
   lang: 'zh-CN',
   title: 'Zephyrus Docs',
-  titleTemplate: ':title · Zephyrus Player',
-  description: 'Zephyrus Player Android 安装、逐字歌词、播放器样式、账号与故障排查文档',
+  titleTemplate: ':title · Zephyrus Music',
+  description: 'Zephyrus Music Android 安装、逐字歌词、播放器样式、账号与故障排查文档',
   base: '/zephyrus/docs/',
   cleanUrls: true,
   lastUpdated: true,
@@ -12,7 +12,7 @@ export default defineConfig({
     ['meta', { name: 'theme-color', content: '#090b09' }],
     ['meta', { name: 'color-scheme', content: 'light dark' }],
     ['link', { rel: 'icon', type: 'image/png', href: '/zephyrus/docs/zephyrus-icon.png' }],
-    ['meta', { property: 'og:site_name', content: 'Zephyrus Player Android 文档' }],
+    ['meta', { property: 'og:site_name', content: 'Zephyrus Music Android 文档' }],
     ['meta', { property: 'og:type', content: 'website' }]
   ],
   themeConfig: {

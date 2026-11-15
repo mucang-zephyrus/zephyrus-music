@@ -1,5 +1,6 @@
 import { electronApp, is, optimizer } from '@electron-toolkit/utils';
 import { app, BrowserWindow, clipboard, ipcMain, nativeImage, session } from 'electron';
+import { mkdirSync } from 'fs';
 import { join } from 'path';
 
 import type { Language } from '../i18n/main';
@@ -23,6 +24,12 @@ import { setupUpdateHandlers } from './modules/update';
 import { createMainWindow, initializeWindowManager, setAppQuitting } from './modules/window';
 import { initWindowSizeManager } from './modules/window-size';
 import { startMusicApi } from './server';
+
+// 更名后继续读取原安装的设置、登录状态和缓存。
+const userDataPath = join(app.getPath('appData'), 'ZephyrusPlayer');
+mkdirSync(userDataPath, { recursive: true });
+app.setPath('userData', userDataPath);
+app.setPath('sessionData', userDataPath);
 
 // 忽略自签名证书验证（仅开发环境启用，生产环境必须保持证书校验）
 if (is.dev) {

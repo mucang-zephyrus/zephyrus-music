@@ -59,7 +59,7 @@ public class MediaNotificationManager {
     private boolean isRegistered = false;
 
     // 当前媒体信息缓存
-    private String currentTitle = "Zephyrus Player";
+    private String currentTitle = "Zephyrus Music";
     private String currentArtist = "";
     private String currentAlbum = "";
     private boolean currentIsPlaying = false;
@@ -101,7 +101,7 @@ public class MediaNotificationManager {
 
     @SuppressWarnings("deprecation")
     private void initMediaSession() {
-        mediaSession = new MediaSession(context, "ZephyrusPlayer");
+        mediaSession = new MediaSession(context, "ZephyrusMusic");
         mediaSession.setFlags(
                 MediaSession.FLAG_HANDLES_MEDIA_BUTTONS |
                 MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
@@ -277,7 +277,7 @@ public class MediaNotificationManager {
             conn.setInstanceFollowRedirects(true);
             conn.setConnectTimeout(8000);
             conn.setReadTimeout(8000);
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android) ZephyrusPlayer/1.2");
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android) ZephyrusMusic/1.2");
             conn.setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
             if (urlStr.contains("music.126.net")) {
                 conn.setRequestProperty("Referer", "https://music.163.com/");
@@ -391,7 +391,7 @@ public class MediaNotificationManager {
      * 显示空闲通知（未在播放时）
      */
     public void showIdleNotification() {
-        currentTitle = "Zephyrus Player";
+        currentTitle = "Zephyrus Music";
         currentArtist = "播放器运行中";
         currentAlbum = "";
         currentIsPlaying = false;

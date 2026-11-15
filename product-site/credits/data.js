@@ -9,7 +9,7 @@ window.CREDITS = [
     license: 'MIT', licenseType: 'mit', color: '#6C5CE7',
     logo: './logos/algerkong.png',
     tagline: '本项目的二次开发母体',
-    desc: 'Zephyrus Player 基于 AlgerMusicPlayer 深度二次开发：播放器架构、歌曲行组件体系、免责声明与整体产品形态都由它演化而来。应用内「关于」页保留了原作者署名。',
+    desc: 'Zephyrus Music 基于 AlgerMusicPlayer 深度二次开发：播放器架构、歌曲行组件体系、免责声明与整体产品形态都由它演化而来。应用内「关于」页保留了原作者署名。',
     url: 'https://github.com/algerkong/AlgerMusicPlayer'
   },
   {

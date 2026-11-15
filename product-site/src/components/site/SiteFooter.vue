@@ -3,7 +3,7 @@
     <div class="site-shell footer-row">
       <div class="footer-brand">
         <img src="/zephyrus-mark.png" alt="" />
-        <span>Zephyrus Player</span>
+        <span>Zephyrus Music</span>
       </div>
       <span class="footer-copy">© 2026 mucang-zephyrus</span>
       <nav class="footer-links" aria-label="页脚导航">

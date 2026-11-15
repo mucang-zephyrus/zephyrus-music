@@ -20,7 +20,7 @@ onBeforeUnmount(() => {
 <template>
   <header class="site-header" :class="{ 'is-scrolled': scrolled }">
     <div class="site-shell header-row">
-      <a class="brand" href="#top" aria-label="Zephyrus Player 首页">
+      <a class="brand" href="#top" aria-label="Zephyrus Music 首页">
         <img src="/zephyrus-mark.png" alt="" />
         <span>Zephyrus</span>
       </a>

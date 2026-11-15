@@ -1,7 +1,7 @@
 {
-  "name": "ZephyrusPlayer",
-  "version": "1.4.1",
-  "description": "Zephyrus Player",
+  "name": "ZephyrusMusic",
+  "version": "1.4.2",
+  "description": "Zephyrus Music",
   "author": "Zephyrus <WEISTUDIOWEI@126.com>",
   "license": "AGPL-3.0-only",
   "main": "./out/main/index.js",
@@ -164,7 +164,7 @@
   },
   "build": {
     "appId": "com.zephyrus.player",
-    "productName": "ZephyrusPlayer",
+    "productName": "ZephyrusMusic",
     "publish": [
       {
         "provider": "github",
@@ -194,7 +194,7 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "ZephyrusPlayer needs access to the microphone for audio visualization.",
+        "NSMicrophoneUsageDescription": "ZephyrusMusic needs access to the microphone for audio visualization.",
         "NSCameraUsageDescription": "Application requests access to the device's camera.",
         "NSDocumentsFolderUsageDescription": "Application requests access to the user's Documents folder.",
         "NSDownloadsFolderUsageDescription": "Application requests access to the user's Downloads folder."
@@ -203,7 +203,7 @@
       "identity": null,
       "type": "distribution",
       "binaries": [
-        "Contents/MacOS/ZephyrusPlayer"
+        "Contents/MacOS/ZephyrusMusic"
       ]
     },
     "win": {
@@ -257,10 +257,10 @@
       "uninstallerIcon": "resources/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "ZephyrusPlayer",
+      "shortcutName": "ZephyrusMusic",
       "include": "build/installer.nsh",
       "deleteAppDataOnUninstall": true,
-      "uninstallDisplayName": "ZephyrusPlayer"
+      "uninstallDisplayName": "ZephyrusMusic"
     }
   },
   "pnpm": {

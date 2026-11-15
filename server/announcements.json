@@ -1,5 +1,13 @@
 [
   {
+    "id": "announce-20261116-repository-migration",
+    "date": "2026-11-16",
+    "title": "项目更名与仓库迁移",
+    "body": "由于原 GitHub 账号无法登录，项目重新建立了源码仓库，地址为 mucang-zephyrus/zephyrus-music。应用名称同步调整为 Zephyrus Music，v1.4.2 正在准备发布。后续源码和版本动态请关注新仓库。",
+    "buttonText": "前往新仓库",
+    "action": { "type": "external", "url": "https://github.com/mucang-zephyrus/zephyrus-music" }
+  },
+  {
     "id": "announce-20261112-netease-api",
     "date": "2026-11-12",
     "title": "网易云服务公告",

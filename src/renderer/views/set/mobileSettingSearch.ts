@@ -164,7 +164,7 @@ export const MOBILE_SETTING_SEARCH_DEFINITIONS: readonly MobileSettingSearchDefi
   },
   { tabId: 'about', title: '用户协议', desc: '查看用户协议' },
   { tabId: 'about', title: '开源协议', desc: '查看开源协议' },
-  { tabId: 'about', title: '应用介绍', desc: '了解 Zephyrus Player' },
+  { tabId: 'about', title: '应用介绍', desc: '了解 Zephyrus Music' },
   { tabId: 'about', title: '使用文档', desc: '查看完整使用文档' },
   { tabId: 'about', title: '意见反馈', desc: '提交问题或功能建议' }
 ];

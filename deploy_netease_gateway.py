@@ -100,12 +100,12 @@ def publish_announcement(ssh):
             file.write((json.dumps(merged, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
         sftp.chmod(remote + ".next", 0o644)
         sftp.posix_rename(remote + ".next", remote)
-    verify = r'''
+    verify = f'''
 import json,urllib.request
-with urllib.request.urlopen('https://www.mucang.xyz/server-music/announcements.json?t=20261112',timeout=20) as r:
+with urllib.request.urlopen('https://www.mucang.xyz/server-music/announcements.json?t={int(time.time())}',timeout=20) as r:
  data=json.load(r)
- assert data[0]['id']=='announce-20261112-netease-api'
- print(json.dumps({'announcement':data[0]['id'],'http':r.status,'retained':len(data)-1}))
+ assert data[0]['id']=={new['id']!r}
+ print(json.dumps({{'announcement':data[0]['id'],'http':r.status,'retained':len(data)-1}}))
 '''
     run(ssh, "python3 -c " + shlex.quote(verify))
 

@@ -86,7 +86,7 @@ export async function shareCanvasImage(canvas: HTMLCanvasElement): Promise<boole
 
         // 分享文件
         await Share.share({
-          title: 'Zephyrus Player',
+          title: 'Zephyrus Music',
           text: '分享歌词海报',
           url: fileResult.uri
         });
@@ -104,7 +104,7 @@ export async function shareCanvasImage(canvas: HTMLCanvasElement): Promise<boole
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
-          title: 'Zephyrus Player',
+          title: 'Zephyrus Music',
           text: '分享歌词海报',
           files: [file]
         });
@@ -226,7 +226,7 @@ export async function shareVideoFile(
           directory: Directory.Cache
         });
         await Share.share({
-          title: 'Zephyrus Player',
+          title: 'Zephyrus Music',
           text: '分享播放器效果视频',
           url: fileResult.uri
         });
@@ -240,7 +240,7 @@ export async function shareVideoFile(
     const file = new File([blob], fileName, { type: mimeType });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({
-        title: 'Zephyrus Player',
+        title: 'Zephyrus Music',
         text: '分享播放器效果视频',
         files: [file]
       });

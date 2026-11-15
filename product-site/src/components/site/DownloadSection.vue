@@ -8,7 +8,7 @@ import BorderBeam from '@/components/inspira/border-beam/BorderBeam.vue';
       <div v-reveal class="download-card glass">
         <BorderBeam :size="240" :duration="12000" />
         <img class="download-mark" src="/zephyrus-mark.png" alt="" aria-hidden="true" />
-        <h2 class="section-title">下载 Zephyrus Player。</h2>
+        <h2 class="section-title">下载 Zephyrus Music。</h2>
         <p class="section-body download-body">
           为 Android 设计的逐字歌词播放器。Android 8.0 及以上，签名发行版，完全开源；Web
           与桌面端可在浏览器或本地运行。

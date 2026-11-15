@@ -15,13 +15,13 @@
             <div class="w-16 h-16 rounded-2xl overflow-hidden mb-5 shadow-lg">
               <img
                 src="@/assets/icon.png"
-                alt="Zephyrus Player"
+                alt="Zephyrus Music"
                 class="w-full h-full object-cover"
               />
             </div>
 
             <!-- 标题 -->
-            <h2 class="text-xl font-bold text-white mb-2">感谢使用 Zephyrus Player</h2>
+            <h2 class="text-xl font-bold text-white mb-2">感谢使用 Zephyrus Music</h2>
             <p class="text-sm text-white/50 leading-relaxed mb-6">
               本项目基于
               <span class="text-[var(--accent-color)] font-medium">AlgerMusicPlayer</span>

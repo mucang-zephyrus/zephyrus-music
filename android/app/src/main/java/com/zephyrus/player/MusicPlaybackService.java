@@ -135,7 +135,7 @@ public class MusicPlaybackService extends Service {
         }
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("Zephyrus Player")
+                .setContentTitle("Zephyrus Music")
                 .setContentText("播放器运行中")
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentIntent(pendingIntent)

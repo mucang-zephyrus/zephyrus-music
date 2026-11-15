@@ -350,7 +350,7 @@ export default {
     manualUpdate: 'Manual Update',
     gotoGithub: 'Go to Github',
     website: 'Official Website',
-    websiteDesc: 'View the Zephyrus Player overview, downloads, and documentation',
+    websiteDesc: 'View the Zephyrus Music overview, downloads, and documentation',
     visitWebsite: 'Open Website',
     author: 'Author',
     authorDesc: 'Original: algerkong　Modified by: mucang-zephyrus',

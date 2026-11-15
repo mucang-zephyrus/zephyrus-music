@@ -76,7 +76,7 @@
     />
     <setting-item
       title="应用介绍"
-      description="了解 Zephyrus Player"
+      description="了解 Zephyrus Music"
       clickable
       @click="openModal('应用介绍', readmeText)"
     />
@@ -337,7 +337,7 @@ async function submitFeedbackAction() {
       type: feedbackType.value,
       content: feedbackContent.value.trim(),
       contact: feedbackContact.value.trim() || undefined,
-      appVersion: config.version || '1.4.1',
+      appVersion: config.version,
       device: navigator.userAgent || 'unknown',
       osVersion: navigator.platform || 'unknown'
     });

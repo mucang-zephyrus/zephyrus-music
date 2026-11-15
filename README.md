@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="assets/banner-magazine.webp" alt="Zephyrus Player" width="100%" />
+  <img src="assets/banner-magazine.webp" alt="Zephyrus Music" width="100%" />
 </p>
 
-# Zephyrus Player
+# Zephyrus Music
 
-Zephyrus Player 是面向 Android 手机的音乐播放器，同时提供 Web 版。支持多平台音乐、本地文件、逐字歌词，以及七种不同风格的播放界面。
+Zephyrus Music 是面向 Android 手机的音乐播放器，同时提供 Web 版。支持多平台音乐、本地文件、逐字歌词，以及七种不同风格的播放界面。
 
-[![源码版本](https://img.shields.io/badge/source-1.4.1-b48b52)](./package.json)
+[![源码版本](https://img.shields.io/badge/source-1.4.2-b48b52)](./package.json)
 [![Android](https://img.shields.io/badge/minSdk-24-3ddc84?logo=android&logoColor=white)](./android/variables.gradle)
 [![许可证](https://img.shields.io/badge/license-AGPL--3.0-blue)](./LICENSE)
 
@@ -70,7 +70,7 @@ AI 功能包括歌词解析、AI 歌单等。使用前在设置中选择服务�
 当前开发版最低支持 Android 7.0。通知、目录访问和悬浮窗权限可按使用需要授予。
 
 <p align="center">
-  <img src="assets/web-desktop.webp" alt="Zephyrus Player Web 桌面界面" width="100%" />
+  <img src="assets/web-desktop.webp" alt="Zephyrus Music Web 桌面界面" width="100%" />
 </p>
 
 ## 开发
