@@ -8,6 +8,7 @@ import i18n from '@/../i18n/renderer';
 import { isLocalSong, useLocalMusic } from '@/hooks/useLocalMusic';
 import { useSongDetail } from '@/hooks/usePlayerHooks';
 import { isAndroidNative } from '@/services/androidNative';
+import { minifySongForPlaylist } from '@/services/playbackSnapshot';
 import { isIosSafari, preloadService } from '@/services/preloadService';
 import type { SongResult } from '@/types/music';
 import { getImgUrl } from '@/utils';
@@ -26,19 +27,9 @@ const getMessage = () => {
 
 /**
  * 精简 SongResult 对象，只保留持久化必要字段
- * 排除大体积字段：lyric, song, playMusicUrl, backgroundColor, primaryColor
+ * 保留曲目身份与云端直链，排除歌词、歌曲详情和封面取色。
  */
-const minifySong = (s: SongResult) => ({
-  id: s.id,
-  name: s.name,
-  picUrl: s.picUrl,
-  ar: s.ar?.map((a) => ({ id: a.id, name: a.name })),
-  al: s.al,
-  source: s.source,
-  dt: s.dt
-});
-
-const minifySongList = (list: SongResult[] | undefined) => list?.map(minifySong) ?? [];
+const minifySongList = (list: SongResult[] | undefined) => list?.map(minifySongForPlaylist) ?? [];
 
 /**
  * 防抖 localStorage 包装，降低写入频率
@@ -176,9 +167,8 @@ export const usePlaylistStore = defineStore(
             }
             // 触发 DSP 自动高潮预分析（有缓存/禁用/不可达时内部直接跳过）
             try {
-              const { ensureAutoClimax, isAutoClimaxEnabled, shouldPreanalyze } = await import(
-                '@/services/autoClimaxAnalyzer'
-              );
+              const { ensureAutoClimax, isAutoClimaxEnabled, shouldPreanalyze } =
+                await import('@/services/autoClimaxAnalyzer');
               if (isAutoClimaxEnabled() && shouldPreanalyze()) {
                 void ensureAutoClimax(
                   String(nextSong.id),

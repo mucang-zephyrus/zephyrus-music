@@ -1,7 +1,7 @@
 /** Current AMLL TTML lyric state. */
 
 import { defineStore } from 'pinia';
-import { computed, ref, watch } from 'vue';
+import { computed, onScopeDispose, ref, watch } from 'vue';
 
 import { getAmllLyricForSong, resolveAmllSource } from '@/api/amllLyrics';
 import type { TtmlLyric } from '@/services/ttmlParser';
@@ -14,38 +14,55 @@ export const useAmllStore = defineStore('amll', () => {
   const error = ref<string | null>(null);
   const currentSource = ref<string | null>(null);
   let requestId = 0;
+  let currentResource: string | null = null;
+  let pendingLoad: Promise<void> | null = null;
 
-  async function loadForSong(song: Parameters<typeof resolveAmllSource>[0] | null | undefined) {
+  function loadForSong(
+    song: Parameters<typeof getAmllLyricForSong>[0] | null | undefined
+  ): Promise<void> {
     const source = song ? resolveAmllSource(song) : null;
     const sourceKey = source ? `${source.platform}:${source.songId}` : null;
+    const resourceKey = sourceKey ? `${sourceKey}:${song?.lyricsUrl || ''}` : null;
+    if (resourceKey && resourceKey === currentResource) {
+      if (pendingLoad) return pendingLoad;
+      if (ttmlLyric.value) return Promise.resolve();
+    }
     requestId += 1;
     const activeRequest = requestId;
+    currentResource = resourceKey;
 
     if (!source) {
       ttmlLyric.value = null;
       currentSource.value = null;
       error.value = null;
       loading.value = false;
-      return;
+      pendingLoad = null;
+      return Promise.resolve();
     }
-    if (sourceKey === currentSource.value && ttmlLyric.value) return;
 
     loading.value = true;
     error.value = null;
     currentSource.value = sourceKey;
     ttmlLyric.value = null;
-    try {
-      const result = await getAmllLyricForSong(song!);
-      if (activeRequest !== requestId) return;
-      ttmlLyric.value = result;
-      if (!result) error.value = 'AMLL TTML lyric not found';
-    } catch (loadError) {
-      if (activeRequest !== requestId) return;
-      ttmlLyric.value = null;
-      error.value = loadError instanceof Error ? loadError.message : 'Failed to load AMLL lyric';
-    } finally {
-      if (activeRequest === requestId) loading.value = false;
-    }
+    const task = getAmllLyricForSong(song!)
+      .then((result) => {
+        if (activeRequest !== requestId) return;
+        ttmlLyric.value = result;
+        if (!result) error.value = 'AMLL TTML lyric not found';
+      })
+      .catch((loadError) => {
+        if (activeRequest !== requestId) return;
+        ttmlLyric.value = null;
+        error.value = loadError instanceof Error ? loadError.message : 'Failed to load AMLL lyric';
+      })
+      .finally(() => {
+        if (activeRequest === requestId) {
+          loading.value = false;
+          pendingLoad = null;
+        }
+      });
+    pendingLoad = task;
+    return task;
   }
 
   function clear() {
@@ -54,19 +71,30 @@ export const useAmllStore = defineStore('amll', () => {
     currentSource.value = null;
     loading.value = false;
     error.value = null;
+    currentResource = null;
+    pendingLoad = null;
   }
 
   const hasTtml = computed(() => Boolean(ttmlLyric.value?.lines.length));
   const playerStore = usePlayerStore();
 
   watch(
-    () => playerStore.currentSong,
-    (song) => {
+    [() => playerStore.currentSong, () => playerStore.currentSong?.lyricsUrl],
+    () => {
+      const song = playerStore.currentSong;
       if (!song) clear();
       else void loadForSong(song);
     },
     { immediate: true }
   );
+
+  const retryUnavailable = () => {
+    if (playerStore.currentSong && !ttmlLyric.value && !loading.value) {
+      void loadForSong(playerStore.currentSong);
+    }
+  };
+  window.addEventListener('online', retryUnavailable);
+  onScopeDispose(() => window.removeEventListener('online', retryUnavailable));
 
   return {
     ttmlLyric,

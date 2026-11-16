@@ -29,9 +29,19 @@ export function minifySongForSnapshot(s: SongResult): SongResult {
     al: s.al,
     source: s.source,
     platform: s.platform,
+    platformId: s.platformId,
+    lyricsUrl: s.lyricsUrl,
     dt: s.dt,
     playMusicUrl: s.playMusicUrl
   } as SongResult;
+}
+
+export function minifySongForPlaylist(song: SongResult): SongResult {
+  const minified = minifySongForSnapshot(song);
+  if (song.platform !== 'server' && !String(song.id).startsWith('server:')) {
+    delete minified.playMusicUrl;
+  }
+  return minified;
 }
 
 /**
@@ -80,9 +90,7 @@ export function markSessionSnapshotSong(song: SongResult | null | undefined) {
   try {
     const previous = readPlayerSessionSnapshot();
     const progress =
-      previous && String(previous.songId) === String(song.id)
-        ? Number(previous.progress) || 0
-        : 0;
+      previous && String(previous.songId) === String(song.id) ? Number(previous.progress) || 0 : 0;
     const payload = JSON.stringify({
       songId: song.id,
       progress,

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   markSessionSnapshotSong,
+  minifySongForPlaylist,
   minifySongForSnapshot,
   readPlayerSessionSnapshot,
   writePlayerSessionSnapshot
@@ -66,6 +67,32 @@ describe('playbackSnapshot', () => {
     expect(readPlayerSessionSnapshot()).toBe(null);
   });
 
+  it('保留云歌曲恢复歌词需要的平台 ID 与歌词地址', () => {
+    const cloud = {
+      ...baseSong,
+      id: 'server:one',
+      platform: 'server',
+      platformId: 'one',
+      playMusicUrl: 'https://songs.example/one.mp3',
+      lyricsUrl: 'https://songs.example/one.ttml'
+    } as SongResult;
+    writePlayerSessionSnapshot(cloud, 12);
+    expect(readPlayerSessionSnapshot()?.song).toMatchObject({
+      platform: 'server',
+      platformId: 'one',
+      lyricsUrl: cloud.lyricsUrl
+    });
+    expect(JSON.parse(JSON.stringify(minifySongForPlaylist(cloud)))).toMatchObject({
+      platform: 'server',
+      platformId: 'one',
+      lyricsUrl: cloud.lyricsUrl,
+      playMusicUrl: cloud.playMusicUrl
+    });
+    expect(
+      minifySongForPlaylist({ ...baseSong, playMusicUrl: 'https://temporary.example/audio' })
+    ).not.toHaveProperty('playMusicUrl');
+  });
+
   it('markSessionSnapshotSong 只标记身份，绝不动 playProgress（进度恢复语义）', () => {
     // 心跳已写 B 的真实进度
     writePlayerSessionSnapshot(baseSong, 96.5);
@@ -85,8 +112,6 @@ describe('playbackSnapshot', () => {
     writePlayerSessionSnapshot(songC, 33);
     markSessionSnapshotSong(songC);
     expect(readPlayerSessionSnapshot()?.progress).toBe(33);
-    expect(localStorage.getItem('playProgress')).toBe(
-      JSON.stringify({ songId: 77, progress: 33 })
-    );
+    expect(localStorage.getItem('playProgress')).toBe(JSON.stringify({ songId: 77, progress: 33 }));
   });
 });

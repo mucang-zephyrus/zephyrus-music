@@ -2,6 +2,9 @@
 
 import { parseTtml, type TtmlLyric } from '@/services/ttmlParser';
 import type { SongResult } from '@/types/music';
+import { resolveServerSongId } from '@/utils/serverSongIdentity';
+
+import { fetchLyricText, withLyricCacheTimeout } from './lyricResource';
 
 export type AmllPlatform = 'netease' | 'qq' | 'spotify' | 'appleMusic' | 'server';
 
@@ -32,8 +35,9 @@ const STORE_NAME = 'amll-ttml';
 const DB_VERSION = 2;
 const CACHE_SCHEMA_VERSION = 3;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const OWNED_SOURCE_TIMEOUT_MS = 2500;
+const OWNED_SOURCE_TIMEOUT_MS = 8000;
 const FALLBACK_SOURCE_TIMEOUT_MS = 8000;
+const FALLBACK_CACHE_TTL_MS = 60_000;
 
 const PLATFORM_FOLDERS: Record<AmllPlatform, string> = {
   netease: 'ncm-lyrics',
@@ -44,6 +48,7 @@ const PLATFORM_FOLDERS: Record<AmllPlatform, string> = {
 };
 
 let dbInstance: IDBDatabase | null = null;
+const pendingLyrics = new Map<string, Promise<TtmlLyric | null>>();
 
 function normalizePlatform(platform?: string): AmllPlatform | null {
   const value = String(platform || '').toLowerCase();
@@ -61,6 +66,8 @@ function normalizePlatform(platform?: string): AmllPlatform | null {
 export function resolveAmllSource(
   song: Pick<SongResult, 'id' | 'platform' | 'platformId'>
 ): AmllSongSource | null {
+  const serverId = resolveServerSongId(song);
+  if (serverId) return { platform: 'server', songId: serverId };
   const platform = normalizePlatform(song.platform || 'netease');
   if (!platform) return null;
   const songId = platform === 'netease' ? song.platformId || song.id : song.platformId;
@@ -79,10 +86,16 @@ function openDb(): Promise<IDBDatabase> {
       if (!database.objectStoreNames.contains(STORE_NAME)) database.createObjectStore(STORE_NAME);
     };
     request.onsuccess = () => {
-      dbInstance = request.result;
+      const database = request.result;
+      dbInstance = database;
+      database.onversionchange = () => {
+        database.close();
+        if (dbInstance === database) dbInstance = null;
+      };
       resolve(dbInstance);
     };
     request.onerror = () => reject(request.error || new Error('Failed to open lyric cache'));
+    request.onblocked = () => reject(new Error('Lyric cache blocked by another tab'));
   });
 }
 
@@ -125,21 +138,6 @@ async function setCached(key: string, value: TtmlLyric): Promise<void> {
   }
 }
 
-async function fetchText(url: string, timeoutMs: number): Promise<string | null> {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-    if (!response.ok) return null;
-    const text = await response.text();
-    return text.includes('<tt') ? text : null;
-  } catch {
-    return null;
-  } finally {
-    window.clearTimeout(timeout);
-  }
-}
-
 function sourceUrls(source: AmllSongSource): TtmlEndpoint[] {
   const folder = PLATFORM_FOLDERS[source.platform];
   const id = encodeURIComponent(source.songId);
@@ -166,46 +164,60 @@ function cacheKeyFor(source: AmllSongSource): string {
   return `v3:${scope}:${source.platform}:${source.songId}`;
 }
 
-
-/** 内容嗅探:是否为 TTML XML(供直链歌词判断格式) */
-function isTtmlContent(content: string): boolean {
-  const head = content.trimStart().slice(0, 400).toLowerCase();
-  return head.startsWith('<?xml') || head.includes('<tt ') || head.includes('<tt>') || head.includes('xmlns=');
-}
-
-export async function getAmllLyric(
+export function getAmllLyric(
   songId: string | number,
   platform: string = 'netease',
   directUrl?: string
 ): Promise<TtmlLyric | null> {
   const normalized = normalizePlatform(platform);
-  if (!normalized) return null;
+  if (!normalized) return Promise.resolve(null);
   const source: AmllSongSource = { platform: normalized, songId: String(songId) };
+  const key = `${cacheKeyFor(source)}:${directUrl || ''}`;
+  const pending = pendingLyrics.get(key);
+  if (pending) return pending;
+  const task = loadAmllLyric(source, directUrl).finally(() => pendingLyrics.delete(key));
+  pendingLyrics.set(key, task);
+  return task;
+}
+
+async function loadAmllLyric(
+  source: AmllSongSource,
+  directUrl?: string
+): Promise<TtmlLyric | null> {
   const cacheKey = cacheKeyFor(source);
-  const cached = await getCached(cacheKey);
-  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) return cached.lyric;
+  const entry = await withLyricCacheTimeout(getCached(cacheKey), null);
+  const cached =
+    source.platform !== 'server' || !directUrl || entry?.lyric.source === directUrl ? entry : null;
+  const cacheTtl =
+    source.platform !== 'server' &&
+    ZEPHYRUS_DB_BASE &&
+    !cached?.lyric.source?.startsWith(`${ZEPHYRUS_DB_BASE}/`)
+      ? FALLBACK_CACHE_TTL_MS
+      : CACHE_TTL_MS;
+  if (cached && Date.now() - cached.cachedAt < cacheTtl) return cached.lyric;
 
   // server 平台：TTML 源是 songs.json 里的 lyricsUrl 直链（不走 AMLL DB 端点）
-  if (normalized === 'server') {
-    if (!directUrl) return null;
-    const xml = await fetchText(directUrl, FALLBACK_SOURCE_TIMEOUT_MS);
-    if (!xml || !isTtmlContent(xml)) return null;
-    const parsed = parseTtml(xml);
-    if (!parsed || parsed.lines.length === 0) return null;
+  if (source.platform === 'server') {
+    if (!directUrl) return cached?.lyric || null;
+    // LRC cloud files belong to the provider lyric channel.
+    if (/\.lrc(?:[?#]|$)/i.test(directUrl)) return null;
+    const xml = await fetchLyricText(directUrl);
+    const parsed = xml ? parseTtml(xml) : null;
+    if (!parsed?.lines.length) return cached?.lyric || null;
     parsed.source = directUrl;
-    await setCached(cacheKey, parsed);
+    await withLyricCacheTimeout(setCached(cacheKey, parsed), undefined);
     return parsed;
   }
 
   const endpoints = sourceUrls(source);
   const ownedEndpoint = ZEPHYRUS_DB_BASE ? endpoints.shift() : undefined;
   if (ownedEndpoint) {
-    const xml = await fetchText(ownedEndpoint.url, ownedEndpoint.timeoutMs);
+    const xml = await fetchLyricText(ownedEndpoint.url, ownedEndpoint.timeoutMs);
     if (xml) {
       const parsed = parseTtml(xml);
       if (parsed?.lines.length) {
         parsed.source = ownedEndpoint.url;
-        await setCached(cacheKey, parsed);
+        await withLyricCacheTimeout(setCached(cacheKey, parsed), undefined);
         return parsed;
       }
     }
@@ -214,7 +226,7 @@ export async function getAmllLyric(
   const fallbackResults = await Promise.all(
     endpoints.map(async (endpoint) => ({
       endpoint,
-      xml: await fetchText(endpoint.url, endpoint.timeoutMs)
+      xml: await fetchLyricText(endpoint.url, endpoint.timeoutMs, false)
     }))
   );
   for (const { endpoint, xml } of fallbackResults) {
@@ -222,7 +234,7 @@ export async function getAmllLyric(
     const parsed = parseTtml(xml);
     if (!parsed || parsed.lines.length === 0) continue;
     parsed.source = endpoint.url;
-    await setCached(cacheKey, parsed);
+    await withLyricCacheTimeout(setCached(cacheKey, parsed), undefined);
     return parsed;
   }
   return cached?.lyric || null;
@@ -233,12 +245,17 @@ export async function getAmllLyricForSong(
 ): Promise<TtmlLyric | null> {
   const source = resolveAmllSource(song);
   if (!source) return null;
-  const directUrl =
-    source.platform === 'server' ? (song as { lyricsUrl?: string }).lyricsUrl : undefined;
+  let directUrl = source.platform === 'server' ? song.lyricsUrl : undefined;
+  if (source.platform === 'server' && !directUrl) {
+    const { getServerSongMetadata } = await import('./serverSongs');
+    directUrl = (await getServerSongMetadata(source.songId).catch(() => null))?.lyricsUrl;
+  }
   return getAmllLyric(source.songId, source.platform, directUrl);
 }
 
-export function preloadAmllLyric(song: Pick<SongResult, 'id' | 'platform' | 'platformId'>): void {
+export function preloadAmllLyric(
+  song: Pick<SongResult, 'id' | 'platform' | 'platformId' | 'lyricsUrl'>
+): void {
   void getAmllLyricForSong(song).catch(() => undefined);
 }
 

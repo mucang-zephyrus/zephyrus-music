@@ -2,6 +2,9 @@ import PinyinMatch from 'pinyin-match';
 
 import { type ClimaxSegment, normalizeClimaxSegments } from '@/api/climax';
 import type { Artist, SongResult } from '@/types/music';
+import { resolveServerSongId } from '@/utils/serverSongIdentity';
+
+import { fetchLyricText } from './lyricResource';
 
 /**
  * Zephyrus 云端歌曲 API
@@ -41,23 +44,31 @@ export function isServerSongResult(item: { id?: unknown; platform?: string }): b
   return item?.platform === 'server' || String(item?.id || '').startsWith('server:');
 }
 
-/** 内存缓存(带 TTL):过期后经 ETag 协商重新拉取,保证新上传的歌曲能被搜索到 */
+/** 云端歌曲列表在内存中缓存一分钟。 */
 let cachedSongs: ServerSong[] | null = null;
 let cachedAt = 0;
+let pendingSongs: Promise<ServerSong[]> | null = null;
 const CACHE_TTL_MS = 60_000;
 
 /**
- * 加载云端歌曲列表(内存缓存 60s,过期后 no-cache 协商刷新)
+ * 加载云端歌曲列表，过期后刷新。
  */
 export async function loadServerSongs(): Promise<ServerSong[]> {
   if (cachedSongs && Date.now() - cachedAt < CACHE_TTL_MS) return cachedSongs;
+  if (pendingSongs) return pendingSongs;
+  pendingSongs = fetchServerSongs().finally(() => {
+    pendingSongs = null;
+  });
+  return pendingSongs;
+}
 
+async function fetchServerSongs(): Promise<ServerSong[]> {
   try {
-    // no-cache:强制 ETag 协商(songs.json 未变时 304,代价极低);
-    // 时间戳参数兜底绕过无 Cache-Control 头时的启发式 HTTP 缓存
-    const res = await fetch(`${SONGS_JSON_URL}?t=${Date.now()}`, { cache: 'no-cache' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    // 时间戳绕过缺少 Cache-Control 时的列表缓存。
+    const text = await fetchLyricText(`${SONGS_JSON_URL}?t=${Date.now()}`);
+    if (!text) throw new Error('Cloud song list unavailable');
+    const data = JSON.parse(text);
+    if (!Array.isArray(data.songs)) throw new Error('Invalid cloud song list');
     const songs = (data.songs || []) as Array<
       Omit<ServerSong, 'climax'> & { climax?: ClimaxSegment | ClimaxSegment[] }
     >;
@@ -330,21 +341,12 @@ export function serverSongToSongResult(song: ServerSong): SongResult {
 export async function getServerSongDetail(
   songId: string
 ): Promise<ServerSong & { lyricsText?: string; lyricsUrl?: string }> {
-  const all = await loadServerSongs();
-  const song = all.find((s) => s.id === songId);
-  if (!song) throw new Error(`Song not found: ${songId}`);
+  const song = await getServerSongMetadata(songId);
 
   // 懒加载歌词文本
   let lyricsText: string | undefined;
   if (song.lyricsUrl) {
-    try {
-      const res = await fetch(song.lyricsUrl);
-      if (res.ok) {
-        lyricsText = await res.text();
-      }
-    } catch {
-      // 歌词加载失败不阻塞播放
-    }
+    lyricsText = (await fetchLyricText(song.lyricsUrl)) || undefined;
   }
 
   return {
@@ -355,6 +357,14 @@ export async function getServerSongDetail(
     // 不再根据 LRC 重复句推断额外的副歌时段。
     climax: normalizeClimaxSegments(song.climax, song.duration)
   };
+}
+
+/** Recover older saved entries which only retained the namespaced song ID. */
+export async function getServerSongMetadata(songId: string): Promise<ServerSong> {
+  const id = resolveServerSongId({ id: songId, platform: 'server' });
+  const song = (await loadServerSongs()).find((item) => String(item.id) === id);
+  if (!song) throw new Error(`Song not found: ${songId}`);
+  return song;
 }
 
 /**

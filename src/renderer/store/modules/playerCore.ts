@@ -21,6 +21,7 @@ import type { AudioOutputDevice } from '@/types/audio';
 import type { Platform, SongResult } from '@/types/music';
 import { getImgUrl } from '@/utils';
 import { getImageLinearBackground } from '@/utils/linearColor';
+import { resolveServerSongId } from '@/utils/serverSongIdentity';
 
 import { BACKGROUND_HEALTH_DEGRADED_EVENT, useBackgroundHealthStore } from './backgroundHealth';
 import { usePlayHistoryStore } from './playHistory';
@@ -365,22 +366,10 @@ export const usePlayerCoreStore = defineStore(
       // 本地歌曲：使用专属逻辑加载歌词（不走网易云 API）
       const loadLyrics = async () => {
         // 云端托管歌曲：从服务器加载歌词
-        if (music.platform === 'server' && music.platformId) {
+        if (resolveServerSongId(music)) {
           try {
-            const { getServerSongDetail } = await import('@/api/serverSongs');
-            const detail = await getServerSongDetail(music.platformId);
-            // TTML 歌词(逐字):交给 AMLL 链路(amllStore.watch(currentSong) 自动
-            // 经 server 平台的 lyricsUrl 直链加载),不写入 music.lyric
-            if (detail.lyricsUrl?.toLowerCase().endsWith('.ttml')) {
-              return { lrcTimeArray: [], lrcArray: [], hasWordByWord: false };
-            }
-            if (detail.lyricsText) {
-              const { parseLyricContent } = await import('@/utils/localMusicUtils');
-              const parsed = parseLyricContent(detail.lyricsText, detail.lyricsUrl);
-              if (parsed && parsed.lrcTimeArray.length > 0) {
-                return parsed;
-              }
-            }
+            const { loadServerLyric } = await import('@/api/serverLyrics');
+            return await loadServerLyric(music);
           } catch (e) {
             console.warn('[云端歌曲] 歌词加载失败:', e);
           }
@@ -779,7 +768,7 @@ export const usePlayerCoreStore = defineStore(
 
           // 本地音乐和云端歌曲不需要重新获取 URL，保留原始路径
           const isLocalMusic = playMusic.value.playMusicUrl?.startsWith('local://');
-          const isServerMusic = playMusic.value.platform === 'server';
+          const isServerMusic = Boolean(resolveServerSongId(playMusic.value));
 
           await handlePlayMusic(
             {

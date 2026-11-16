@@ -16,6 +16,7 @@ import { getImgUrl, isElectron } from '@/utils';
 import { normalizeAudioUrl } from '@/utils/audioUrl';
 import { getImageLinearBackground } from '@/utils/linearColor';
 import { isUsableLyric } from '@/utils/lyricValidation';
+import { resolveServerSongId } from '@/utils/serverSongIdentity';
 import { mergeAuxiliaryLyrics, parseTimedLyrics } from '@/utils/timedLyrics';
 
 const { message } = createDiscreteApi(['message']);
@@ -751,7 +752,20 @@ export const useSongDetail = () => {
     }
 
     // 云端托管歌曲：已有直链 URL，跳过网易云 URL 获取
-    if (playMusic.platform === 'server' && playMusic.playMusicUrl) {
+    const serverId = resolveServerSongId(playMusic);
+    if (serverId) {
+      if (!playMusic.platformId || !playMusic.playMusicUrl || !playMusic.lyricsUrl) {
+        const { getServerSongMetadata } = await import('@/api/serverSongs');
+        const metadata = await getServerSongMetadata(serverId).catch(() => null);
+        playMusic = {
+          ...playMusic,
+          platform: 'server',
+          platformId: serverId,
+          playMusicUrl: playMusic.playMusicUrl || metadata?.audioUrl,
+          lyricsUrl: metadata?.lyricsUrl || playMusic.lyricsUrl
+        };
+      }
+      if (!playMusic.playMusicUrl) throw new Error('Cloud song audio URL unavailable');
       playMusic.createdAt = Date.now();
       // 云端歌曲不会过期（设为 1 年后）
       playMusic.expiredAt = playMusic.createdAt + 365 * 24 * 3600 * 1000;
