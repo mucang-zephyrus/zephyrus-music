@@ -127,6 +127,7 @@ import {
   ttmlLyricsToAmll
 } from '@/utils/amllLyricAdapter';
 import { ensureFontLoaded, getFontFamily } from '@/utils/fontLoader';
+import { formatLyricsForCopy } from '@/utils/lyricCopy';
 import { acquirePlayerResource } from '@/utils/playerResourceDiagnostics';
 
 let scrollingLyricsInstanceId = 0;
@@ -625,9 +626,7 @@ function selectedLyrics(): SelectedLyric[] {
 }
 
 function handleCopyLyrics() {
-  const text = selectedLyrics()
-    .flatMap((line) => [line.text, line.trText].filter(Boolean))
-    .join('\n');
+  const text = formatLyricsForCopy(amllLines.value, selectedSet.value);
   void navigator.clipboard?.writeText(text);
   exitSelectMode();
 }
