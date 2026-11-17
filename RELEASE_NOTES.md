@@ -5,6 +5,7 @@
 ### 名称与仓库
 
 - 应用更名为 Zephyrus Music，更新应用名称、通知、分享水印、官网和文档中的名称。
+- 更换应用 Logo，网页图标使用圆角样式。
 - 原 GitHub 账号无法登录，源码迁移至 [mucang-zephyrus/zephyrus-music](https://github.com/mucang-zephyrus/zephyrus-music)。应用内源码、协议和桌面更新入口同步调整。
 
 ### 播放器与歌词

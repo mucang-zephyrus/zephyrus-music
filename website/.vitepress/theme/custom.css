@@ -68,13 +68,9 @@ body {
 }
 
 .VPNavBarTitle img.logo {
-  width: 42px;
+  width: 24px;
   height: 24px;
   object-fit: contain;
-}
-
-.dark .VPNavBarTitle img.logo {
-  filter: invert(1);
 }
 
 .DocSearch-Button,
@@ -145,7 +141,6 @@ body {
   left: -5%;
   width: min(940px, 68%);
   opacity: 0.11;
-  filter: invert(1);
   transform: rotate(-6deg);
 }
 
