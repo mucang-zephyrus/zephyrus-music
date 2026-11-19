@@ -1,5 +1,11 @@
 export default {
-  impact: { rough: '粗糙化邊緣', distress: '隨機斑駁強度', fill: '歌詞填滿螢幕' },
+  impact: {
+    rough: '粗糙化邊緣',
+    distress: '隨機斑駁強度',
+    fill: '歌詞填滿螢幕',
+    uppercase: '英文強制全部大寫',
+    wholeLine: '強制顯示整句歌詞'
+  },
   dotMatrix: {
     shape: '點陣形狀',
     dot: '圓點',

@@ -1,5 +1,11 @@
 export default {
-  impact: { rough: '거친 가장자리', distress: '잉크 얼룩 강도', fill: '가사로 화면 채우기' },
+  impact: {
+    rough: '거친 가장자리',
+    distress: '잉크 얼룩 강도',
+    fill: '가사로 화면 채우기',
+    uppercase: '영문 가사를 모두 대문자로 표시',
+    wholeLine: '가사를 항상 한 줄씩 표시'
+  },
   dotMatrix: {
     shape: '셀 모양',
     dot: '원형 도트',

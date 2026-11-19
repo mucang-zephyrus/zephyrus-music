@@ -1,5 +1,11 @@
 export default {
-  impact: { rough: '輪郭を粗くする', distress: 'かすれの強さ', fill: '歌詞を画面いっぱいに表示' },
+  impact: {
+    rough: '輪郭を粗くする',
+    distress: 'かすれの強さ',
+    fill: '歌詞を画面いっぱいに表示',
+    uppercase: '英字をすべて大文字にする',
+    wholeLine: '常に歌詞を行単位で表示'
+  },
   dotMatrix: {
     shape: 'セルの形',
     dot: '丸いドット',

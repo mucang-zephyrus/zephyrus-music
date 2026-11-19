@@ -28,6 +28,7 @@ export interface CloudInput {
   translation?: string;
   roman?: string;
   background?: boolean;
+  duet?: boolean;
   primary?: boolean;
   parent?: number;
 }

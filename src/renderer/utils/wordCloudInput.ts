@@ -31,6 +31,7 @@ export function providerCloudInputs(
       end: blankEnd ?? (explicit ? begin + line.duration! / 1000 : undefined),
       reliableEnd: blankEnd !== undefined || explicit,
       background: line.isBG === true && !line.isDuet,
+      duet: line.isDuet === true,
       translation: line.trText,
       roman: line.romaText
     };
@@ -48,6 +49,7 @@ export function ttmlCloudInputs(lyric: TtmlLyric): CloudInput[] {
       end: line.end,
       reliableEnd: line.end > line.begin,
       primary: Boolean(lyric.primaryAgent && line.agent === lyric.primaryAgent),
+      duet: line.isBackground,
       words: lyric.timingMode === 'word' ? line.words.map((word) => ({ ...word })) : undefined,
       translation: line.translations[0]?.text,
       roman: line.romanizations[0]?.text

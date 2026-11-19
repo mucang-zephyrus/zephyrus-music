@@ -6,7 +6,17 @@
       :data-phase="phase"
       :data-landed="frame?.landed || 0"
     ></canvas>
-    <p class="sr-only">{{ frame?.line.text }}</p>
+    <p class="sr-only">
+      {{ displayText(frame?.line.text || '') }}
+      <span v-for="line in centerLyrics" :key="line.key" :data-impact-field="line.field">{{
+        displayText(line.text)
+      }}</span>
+    </p>
+    <div v-if="bottomLyrics.length" ref="subtitles" class="impact-subtitles">
+      <p v-for="line in bottomLyrics" :key="line.key" :data-impact-field="line.field">
+        {{ displayText(line.text) }}
+      </p>
+    </div>
   </div>
 </template>
 
@@ -19,12 +29,15 @@ import type { PlayerStyleCustomConfig } from '@/types/playerStyle';
 import { loadFontById } from '@/utils/fontLoader';
 import { drawCracks, drawGlass, drawShards, glassPalette, printGlyph } from '@/utils/impactGlass';
 import {
+  buildImpactAccompaniment,
   buildImpactTimeline,
   clampUnit,
   glassGeometry,
+  impactAccompanimentAt,
   impactFrame,
   type ImpactLine,
-  impactShatters
+  impactShatters,
+  impactText
 } from '@/utils/impactTimeline';
 import type { CloudInput } from '@/utils/wordCloud';
 
@@ -44,9 +57,17 @@ const props = defineProps<{
 const surface = ref<HTMLElement>();
 const output = ref<HTMLCanvasElement>();
 const { width, height } = useElementSize(surface, { width: 0, height: 0 }, { box: 'border-box' });
+const subtitles = ref<HTMLElement>();
+const { height: subtitleHeight } = useElementSize(subtitles);
 const fontReady = ref(false);
-const timeline = computed(() => buildImpactTimeline(props.inputs));
+const timeline = computed(() => buildImpactTimeline(props.inputs, props.config.impactWholeLine));
 const frame = computed(() => impactFrame(timeline.value, props.time, props.reduced));
+const accompaniment = computed(() => buildImpactAccompaniment(props.inputs));
+const activeLyrics = computed(() => impactAccompanimentAt(accompaniment.value, props.time));
+const fillsScreen = computed(() => Boolean(props.config.impactFill));
+const centerLyrics = computed(() => (fillsScreen.value && frame.value ? activeLyrics.value : []));
+const bottomLyrics = computed(() => (centerLyrics.value.length ? [] : activeLyrics.value));
+const displayText = (text: string) => impactText(text, props.config.impactUppercase === true);
 const phase = computed(() => {
   if (!frame.value) return 'glass';
   if (!frame.value.line.words.length) return 'static';
@@ -77,19 +98,44 @@ function updateInset() {
   if (surface.value) inset = parseFloat(getComputedStyle(surface.value).paddingTop) || 20;
 }
 
+interface InkRow {
+  top: number;
+  height: number;
+  stacked: boolean;
+}
+
+function lyricRows(accompaniments: number, hasSubtitles: boolean) {
+  const h = height.value;
+  const footer = hasSubtitles ? Math.min(h * 0.24, subtitleHeight.value) + 8 : 0;
+  const available = Math.max(h * 0.29, h - 2 * (inset + footer));
+  const count = accompaniments + 1;
+  const gap = count > 1 ? Math.min(12, available / (4 * count)) : 0;
+  const rowHeight = (available - gap * (count - 1)) / count;
+  return Array.from(
+    { length: count },
+    (_, i): InkRow => ({
+      top: (h - available) / 2 + i * (rowHeight + gap),
+      height: rowHeight,
+      stacked: count > 1
+    })
+  );
+}
+
 function drawInk(
   ctx: CanvasRenderingContext2D,
   text: string,
   key: string,
   alpha: number,
   outline: boolean,
+  row: InkRow,
   scale = 1
 ) {
-  const cacheKey = `${key}:${outline}`;
+  const ink = displayText(text);
+  const cacheKey = `${key}:${outline}:${ink}`;
   let glyph = glyphs.get(cacheKey);
   if (!glyph) {
     glyph = printGlyph(
-      text,
+      ink,
       palette.value.ink,
       key,
       Number(props.config.impactDistress ?? 35) / 100,
@@ -100,8 +146,7 @@ function drawInk(
     glyphs.set(cacheKey, glyph);
   }
   const maxWidth = Math.max(1, width.value - 2 * Math.max(20, width.value * 0.045));
-  // Keep the scene centered when the controls appear, including on a short horizontal screen.
-  const maxHeight = Math.max(height.value * 0.29, height.value - 2 * inset);
+  const maxHeight = row.height;
   let drawWidth = maxWidth;
   let drawHeight = maxHeight;
   if (!props.config.impactFill) {
@@ -117,10 +162,15 @@ function drawInk(
   drawHeight *= scale;
   ctx.save();
   ctx.globalAlpha = alpha;
+  if (row.stacked && scale > 1) {
+    ctx.beginPath();
+    ctx.rect(0, row.top, width.value, row.height);
+    ctx.clip();
+  }
   ctx.drawImage(
     glyph,
     (width.value - drawWidth) / 2,
-    (height.value - drawHeight) / 2,
+    row.top + (row.height - drawHeight) / 2,
     drawWidth,
     drawHeight
   );
@@ -132,7 +182,8 @@ function drawImpressions(
   line: ImpactLine,
   cracks: ReturnType<typeof glassGeometry>['cracks'],
   landed: number,
-  hitAge: number
+  hitAge: number,
+  row: InkRow
 ) {
   if (!landed) return;
   const shattered = landed === line.words.length;
@@ -140,11 +191,11 @@ function drawImpressions(
   const firstVisible = Math.max(0, landed - 16);
   for (let index = 0; index < landed; index++) {
     const opacity = index === landed - 1 ? 0.86 : index < firstVisible ? 0.14 : 0.28;
-    drawInk(ctx, line.words[index].text, `${line.key}:${index}`, opacity, true);
+    drawInk(ctx, line.words[index].text, `${line.key}:${index}`, opacity, true, row);
   }
   const alpha = props.reduced ? 0.86 : Math.max(0, (shattered ? 0.85 : 1) * (1 - hitAge / 0.18));
   if (alpha > 0)
-    drawInk(ctx, line.words[landed - 1].text, `${line.key}:${landed - 1}`, alpha, false);
+    drawInk(ctx, line.words[landed - 1].text, `${line.key}:${landed - 1}`, alpha, false, row);
 }
 
 function applyShock(ctx: CanvasRenderingContext2D, age: number, strength: number) {
@@ -190,13 +241,14 @@ function render() {
 
   ctx.setTransform(pixelW / w, 0, 0, pixelH / h, 0, 0);
   paintGlass(ctx);
+  const rows = lyricRows(centerLyrics.value.length, Boolean(bottomLyrics.value.length));
   if (current && !current.shattered && geometry.value) {
     const { line, landed, active, hitAge } = current;
     ctx.save();
     if (applyShock(ctx, hitAge, 6)) paintGlass(ctx);
-    if (!line.words.length) drawInk(ctx, line.text, line.key, 1, false);
+    if (!line.words.length) drawInk(ctx, line.text, line.key, 1, false, rows[0]);
     else {
-      drawImpressions(ctx, line, geometry.value.cracks, landed, hitAge);
+      drawImpressions(ctx, line, geometry.value.cracks, landed, hitAge, rows[0]);
       if (!props.reduced && active >= landed) {
         const word = line.words[active];
         const t = clampUnit((props.time - word.begin) / (word.hit - word.begin));
@@ -206,6 +258,7 @@ function render() {
           `${line.key}:${active}`,
           0.3 + t * 0.7,
           false,
+          rows[0],
           1 + 1.35 * (1 - t) ** 2
         );
       }
@@ -219,12 +272,20 @@ function render() {
     const { cracks, shards } =
       line === current?.line && geometry.value ? geometry.value : geometryFor(line);
     paintGlass(glass);
-    drawImpressions(glass, line, cracks, line.words.length, age);
+    const hitLyrics = impactAccompanimentAt(accompaniment.value, props.time - age);
+    const shardRows = lyricRows(
+      fillsScreen.value ? hitLyrics.length : 0,
+      !fillsScreen.value && Boolean(hitLyrics.length)
+    );
+    drawImpressions(glass, line, cracks, line.words.length, age, shardRows[0]);
     ctx.save();
     applyShock(ctx, age, 10);
     drawShards(ctx, texture, shards, w, h, age, props.reduced);
     ctx.restore();
   }
+  centerLyrics.value.forEach((line, index) => {
+    drawInk(ctx, line.text, line.key, 0.88, false, rows[index + 1]);
+  });
 }
 
 function schedule() {
@@ -256,6 +317,8 @@ watch(
     width,
     height,
     frame,
+    activeLyrics,
+    subtitleHeight,
     fontReady,
     () => props.time,
     () => props.playing,
@@ -263,7 +326,10 @@ watch(
     () => props.climax,
     () => props.reduced,
     () => props.theme,
-    () => props.config,
+    () => props.config.impactDistress,
+    () => props.config.impactRough,
+    () => props.config.impactFill,
+    () => props.config.impactUppercase,
     () => props.controls
   ],
   schedule,
@@ -297,16 +363,36 @@ onUnmounted(() => {
   inset: 0;
   overflow: hidden;
   box-sizing: border-box;
-  padding-top: max(24px, var(--safe-area-inset-top, env(safe-area-inset-top)));
+  --impact-inset: max(24px, var(--safe-area-inset-top, env(safe-area-inset-top)));
+  padding-top: var(--impact-inset);
   background: #050911;
 }
 .impact-controls-visible {
-  padding-top: min(31vh, calc(156px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom))));
+  --impact-inset: min(
+    31vh,
+    calc(156px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom)))
+  );
 }
 .impact-scene canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+}
+.impact-subtitles {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: max(7%, var(--impact-inset));
+  max-height: 24%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-align: center;
+  font-size: clamp(12px, 1.4vw, 18px);
+  color: #f4f7ff;
+  text-shadow: 0 1px 4px #050911;
+}
+.impact-subtitles p {
+  margin: 4px 0;
 }
 </style>

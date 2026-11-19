@@ -70,7 +70,7 @@ const STYLE_SPECIFIC_DEFAULTS: Record<MobilePlayerStyleKey, Record<string, unkno
     cloudEstimate: true,
     cloudBackground: 'cover'
   },
-  impact: { impactRough: true, impactFill: false },
+  impact: { impactRough: true, impactFill: false, impactUppercase: false, impactWholeLine: false },
   dotMatrix: {
     dotShape: 'dot',
     dotClimax: 'auto',
@@ -412,6 +412,8 @@ export function resolvePlayerStyleConfig(
   if (styleKey === 'impact') {
     config.impactRough = config.impactRough !== false;
     config.impactFill = config.impactFill === true;
+    config.impactUppercase = config.impactUppercase === true;
+    config.impactWholeLine = config.impactWholeLine === true;
     config.useCustomBackground = false;
     config.builtinFontId = undefined;
     config.customFontFamily = undefined;

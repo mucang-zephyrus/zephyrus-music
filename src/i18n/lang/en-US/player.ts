@@ -1,5 +1,11 @@
 export default {
-  impact: { rough: 'Rough edges', distress: 'Random ink wear', fill: 'Fill screen with lyrics' },
+  impact: {
+    rough: 'Rough edges',
+    distress: 'Random ink wear',
+    fill: 'Fill screen with lyrics',
+    uppercase: 'Force English lyrics to uppercase',
+    wholeLine: 'Always show full lyric lines'
+  },
   dotMatrix: {
     shape: 'Cell shape',
     dot: 'Dots',

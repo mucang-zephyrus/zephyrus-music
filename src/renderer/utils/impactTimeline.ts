@@ -14,9 +14,47 @@ export interface ImpactLine {
   words: ImpactWord[];
 }
 
-export function buildImpactTimeline(inputs: readonly CloudInput[]): ImpactLine[] {
+const hasImpactTime = (line: CloudInput) => Number.isFinite(line.begin) && line.begin >= 0;
+
+export function impactText(text: string, uppercase: boolean) {
+  return uppercase ? text.replace(/\p{Script=Latin}+/gu, (letters) => letters.toUpperCase()) : text;
+}
+
+export function buildImpactAccompaniment(inputs: readonly CloudInput[]) {
+  const fields = ['background', 'duet'] as const;
+  return fields
+    .flatMap((field) => {
+      const lines = inputs
+        .map((line, index) => ({ line, index }))
+        .filter(({ line }) => line[field] && hasImpactTime(line))
+        .sort((a, b) => a.line.begin - b.line.begin);
+      return lines.map(({ line, index }, position) => {
+        const wordEnd = Math.max(line.begin, ...(line.words ?? []).map((word) => word.end));
+        const next = lines.slice(position + 1).find((item) => item.line.begin > line.begin);
+        const end =
+          line.reliableEnd && line.end != null && line.end > line.begin
+            ? line.end
+            : wordEnd > line.begin
+              ? wordEnd
+              : (next?.line.begin ?? Infinity);
+        return { key: `${field}:${index}`, field, text: line.text.trim(), begin: line.begin, end };
+      });
+    })
+    .filter((line) => line.text);
+}
+
+export type ImpactAccompaniment = ReturnType<typeof buildImpactAccompaniment>;
+
+export function impactAccompanimentAt(lines: ImpactAccompaniment, time: number) {
+  return lines.filter((line) => line.begin <= time && time < line.end);
+}
+
+export function buildImpactTimeline(
+  inputs: readonly CloudInput[],
+  wholeLine = false
+): ImpactLine[] {
   const lines = inputs
-    .filter((line) => !line.background && Number.isFinite(line.begin) && line.begin >= 0)
+    .filter((line) => !line.background && !line.duet && hasImpactTime(line))
     .sort((a, b) => a.begin - b.begin);
   return lines.map((line, index) => {
     const following = lines[index + 1]?.begin ?? Infinity;
@@ -24,7 +62,7 @@ export function buildImpactTimeline(inputs: readonly CloudInput[]): ImpactLine[]
       line.reliableEnd && line.end != null && line.end > line.begin
         ? Math.min(line.end, following)
         : following;
-    const words = (line.words || [])
+    const words = (wholeLine ? [] : (line.words ?? []))
       .filter((word) => word.text.trim() && Number.isFinite(word.begin) && word.begin < end)
       .map((word) => ({ text: word.text.trim(), begin: Math.max(word.begin, line.begin) }))
       .sort((a, b) => a.begin - b.begin);

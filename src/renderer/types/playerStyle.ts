@@ -30,6 +30,8 @@ export interface PlayerStyleCustomConfig {
   impactRough?: boolean;
   impactDistress?: number;
   impactFill?: boolean;
+  impactUppercase?: boolean;
+  impactWholeLine?: boolean;
   dotShape?: 'dot' | 'grid';
   dotClimax?: 'auto' | 'ripple' | 'checker' | 'radial';
   dotBeat?: boolean;

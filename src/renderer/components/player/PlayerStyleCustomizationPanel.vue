@@ -94,6 +94,14 @@
           <span>{{ tr('player.impact.fill', '歌词填满屏幕') }}</span>
           <input v-model="local.impactFill" type="checkbox" />
         </label>
+        <label class="setting-row">
+          <span>{{ tr('player.impact.uppercase', '英文强制全部大写') }}</span>
+          <input v-model="local.impactUppercase" type="checkbox" />
+        </label>
+        <label class="setting-row">
+          <span>{{ tr('player.impact.wholeLine', '强制显示整句歌词') }}</span>
+          <input v-model="local.impactWholeLine" type="checkbox" />
+        </label>
       </template>
       <template v-if="styleKey === 'dotMatrix'">
         <label class="setting-row">

@@ -1,5 +1,11 @@
 export default {
-  impact: { rough: '粗糙化边缘', distress: '随机斑驳强度', fill: '歌词填满屏幕' },
+  impact: {
+    rough: '粗糙化边缘',
+    distress: '随机斑驳强度',
+    fill: '歌词填满屏幕',
+    uppercase: '英文强制全部大写',
+    wholeLine: '强制显示整句歌词'
+  },
   dotMatrix: {
     shape: '点阵形状',
     dot: '圆点',
