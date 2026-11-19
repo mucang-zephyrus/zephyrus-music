@@ -65,6 +65,22 @@ export function impactFrame(lines: readonly ImpactLine[], time: number, reduced:
   return { line, active, landed, hitAge, shattered: landed > 0 && landed === line.words.length };
 }
 
+export const SHARD_LIFETIME = 0.7;
+
+export function impactShatters(lines: readonly ImpactLine[], time: number, reduced: boolean) {
+  const shatters: { line: ImpactLine; age: number }[] = [];
+  const latest = lastStarted(lines, time, (line) => line.begin);
+  for (let index = latest; index >= 0; index--) {
+    const line = lines[index];
+    if (line.end <= time - SHARD_LIFETIME) break;
+    const finalWord = line.words.at(-1);
+    if (!line.text || !finalWord) continue;
+    const age = time - (reduced ? finalWord.begin : finalWord.hit);
+    if (age >= 0 && age < SHARD_LIFETIME) shatters.push({ line, age });
+  }
+  return shatters.reverse();
+}
+
 export function impactRandom(value: string) {
   let seed = 2166136261;
   for (let i = 0; i < value.length; i++) seed = Math.imul(seed ^ value.charCodeAt(i), 16777619);

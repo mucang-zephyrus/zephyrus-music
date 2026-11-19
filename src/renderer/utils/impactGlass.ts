@@ -1,6 +1,12 @@
 import tinycolor from 'tinycolor2';
 
-import { clampUnit, glassGeometry, type GlassPoint, impactRandom } from './impactTimeline';
+import {
+  clampUnit,
+  glassGeometry,
+  type GlassPoint,
+  impactRandom,
+  SHARD_LIFETIME
+} from './impactTimeline';
 
 export function glassPalette(color: string) {
   const theme = tinycolor(color);
@@ -164,8 +170,9 @@ export function drawShards(
   age: number,
   reduced: boolean
 ) {
-  const part = reduced ? 0.25 : clampUnit(age / 0.7);
-  const travel = 1 - (1 - part) ** 2;
+  const part = reduced ? 0.25 : clampUnit(age / SHARD_LIFETIME);
+  const travel = 1 - 0.965 * (1 - part) ** 2;
+  const opacity = reduced ? 0.7 : (1 - part) ** 1.35;
   for (let index = 0; index < shards.length; index++) {
     const points = shards[index];
     const [x, y] = points[Math.floor(points.length / 2)];
@@ -182,7 +189,7 @@ export function drawShards(
     ctx.translate(-anchorX, -anchorY);
     trace(ctx, points, true);
     ctx.clip();
-    ctx.globalAlpha = 1 - part * 0.49;
+    ctx.globalAlpha = opacity;
     ctx.drawImage(texture, 0, 0, width, height);
     ctx.strokeStyle = 'rgba(214, 236, 255, 0.42)';
     ctx.lineWidth = 1.65;

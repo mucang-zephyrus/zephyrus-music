@@ -18,7 +18,14 @@ import { drumDetector } from '@/services/drumDetector';
 import type { PlayerStyleCustomConfig } from '@/types/playerStyle';
 import { loadFontById } from '@/utils/fontLoader';
 import { drawCracks, drawGlass, drawShards, glassPalette, printGlyph } from '@/utils/impactGlass';
-import { buildImpactTimeline, clampUnit, glassGeometry, impactFrame } from '@/utils/impactTimeline';
+import {
+  buildImpactTimeline,
+  clampUnit,
+  glassGeometry,
+  impactFrame,
+  type ImpactLine,
+  impactShatters
+} from '@/utils/impactTimeline';
 import type { CloudInput } from '@/utils/wordCloud';
 
 const props = defineProps<{
@@ -45,9 +52,14 @@ const phase = computed(() => {
   if (!frame.value.line.words.length) return 'static';
   return frame.value.shattered ? 'shattered' : 'impact';
 });
-const geometry = computed(() =>
-  glassGeometry(width.value, height.value, `${props.songKey}:${frame.value?.line.key}`)
-);
+function geometryFor(line: ImpactLine) {
+  return glassGeometry(width.value, height.value, `${props.songKey}:${line.key}`);
+}
+
+const geometry = computed(() => {
+  const line = frame.value?.line;
+  return line ? geometryFor(line) : undefined;
+});
 const palette = computed(() => glassPalette(props.theme));
 const glyphs = new Map<string, HTMLCanvasElement>();
 let texture: HTMLCanvasElement | undefined;
@@ -115,6 +127,33 @@ function drawInk(
   ctx.restore();
 }
 
+function drawImpressions(
+  ctx: CanvasRenderingContext2D,
+  line: ImpactLine,
+  cracks: ReturnType<typeof glassGeometry>['cracks'],
+  landed: number,
+  hitAge: number
+) {
+  if (!landed) return;
+  const shattered = landed === line.words.length;
+  drawCracks(ctx, cracks, landed / line.words.length, shattered);
+  const firstVisible = Math.max(0, landed - 16);
+  for (let index = 0; index < landed; index++) {
+    const opacity = index === landed - 1 ? 0.86 : index < firstVisible ? 0.14 : 0.28;
+    drawInk(ctx, line.words[index].text, `${line.key}:${index}`, opacity, true);
+  }
+  const alpha = props.reduced ? 0.86 : Math.max(0, (shattered ? 0.85 : 1) * (1 - hitAge / 0.18));
+  if (alpha > 0)
+    drawInk(ctx, line.words[landed - 1].text, `${line.key}:${landed - 1}`, alpha, false);
+}
+
+function applyShock(ctx: CanvasRenderingContext2D, age: number, strength: number) {
+  if (props.reduced || age >= 0.15) return false;
+  const shock = Math.exp(-age * 26) * strength;
+  ctx.translate(Math.cos(age * 124) * shock, Math.sin(age * 171) * shock * 0.68);
+  return true;
+}
+
 function render() {
   const canvas = output.value;
   const w = width.value;
@@ -145,45 +184,24 @@ function render() {
   const age = props.time - lastBeat;
   const beat = !props.reduced && age >= 0 && age < 0.32 ? beatPower * Math.exp(-age / 0.075) : 0;
   const current = frame.value;
-  const { cracks, shards } = geometry.value;
-  for (const context of [ctx, glass]) {
-    context.setTransform(scale, 0, 0, scale, 0, 0);
-    context.clearRect(0, 0, w + 1, h + 1);
-  }
-  drawGlass(glass, w, h, palette.value, climaxMix, beat, props.reduced ? 0 : props.time);
-  if (current) {
-    const { line, landed, shattered, active, hitAge } = current;
-    if (!line.words.length) drawInk(glass, line.text, line.key, 1, false);
+  const lightTime = props.reduced ? 0 : props.time;
+  const paintGlass = (context: CanvasRenderingContext2D) =>
+    drawGlass(context, w, h, palette.value, climaxMix, beat, lightTime);
+
+  ctx.setTransform(pixelW / w, 0, 0, pixelH / h, 0, 0);
+  paintGlass(ctx);
+  if (current && !current.shattered && geometry.value) {
+    const { line, landed, active, hitAge } = current;
+    ctx.save();
+    if (applyShock(ctx, hitAge, 6)) paintGlass(ctx);
+    if (!line.words.length) drawInk(ctx, line.text, line.key, 1, false);
     else {
-      if (landed) drawCracks(glass, cracks, landed / line.words.length, shattered);
-      const firstVisible = Math.max(0, landed - 16);
-      if (firstVisible) {
-        // Keep the earlier impressions in the glass texture while limiting the opacity of older layers.
-        for (let index = 0; index < firstVisible; index++) {
-          drawInk(glass, line.words[index].text, `${line.key}:${index}`, 0.14, true);
-        }
-      }
-      for (let index = firstVisible; index < landed; index++) {
-        drawInk(
-          glass,
-          line.words[index].text,
-          `${line.key}:${index}`,
-          index === landed - 1 ? 0.86 : 0.28,
-          true
-        );
-      }
-      if (landed) {
-        const alpha = props.reduced
-          ? 0.86
-          : Math.max(0, (shattered ? 0.85 : 1) * (1 - hitAge / 0.18));
-        if (alpha > 0)
-          drawInk(glass, line.words[landed - 1].text, `${line.key}:${landed - 1}`, alpha, false);
-      }
+      drawImpressions(ctx, line, geometry.value.cracks, landed, hitAge);
       if (!props.reduced && active >= landed) {
         const word = line.words[active];
         const t = clampUnit((props.time - word.begin) / (word.hit - word.begin));
         drawInk(
-          glass,
+          ctx,
           word.text,
           `${line.key}:${active}`,
           0.3 + t * 0.7,
@@ -192,13 +210,21 @@ function render() {
         );
       }
     }
+    ctx.restore();
   }
-  const hitAge = current?.hitAge ?? Infinity;
-  const shock =
-    !props.reduced && hitAge < 0.15 ? Math.exp(-hitAge * 26) * (current?.shattered ? 10 : 6) : 0;
-  if (shock) ctx.translate(Math.cos(hitAge * 124) * shock, Math.sin(hitAge * 171) * shock * 0.68);
-  if (current?.shattered) drawShards(ctx, texture, shards, w, h, hitAge, props.reduced);
-  else ctx.drawImage(texture, 0, 0, w, h);
+
+  // Old shards stay over the intact pane until their playback-time fade finishes.
+  glass.setTransform(pixelW / w, 0, 0, pixelH / h, 0, 0);
+  for (const { line, age } of impactShatters(timeline.value, props.time, props.reduced)) {
+    const { cracks, shards } =
+      line === current?.line && geometry.value ? geometry.value : geometryFor(line);
+    paintGlass(glass);
+    drawImpressions(glass, line, cracks, line.words.length, age);
+    ctx.save();
+    applyShock(ctx, age, 10);
+    drawShards(ctx, texture, shards, w, h, age, props.reduced);
+    ctx.restore();
+  }
 }
 
 function schedule() {
