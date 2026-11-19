@@ -1,4 +1,5 @@
 export default {
+  impact: { rough: '粗糙化边缘', distress: '随机斑驳强度', fill: '歌词填满屏幕' },
   dotMatrix: {
     shape: '点阵形状',
     dot: '圆点',
@@ -150,6 +151,7 @@ export default {
   },
   // 播放器样式
   styles: {
+    impact: '冲击',
     dotMatrix: '点阵',
     wordCloud: '词云',
     default: '默认',

@@ -4,6 +4,7 @@ import './stage';
 import './starChart';
 import './wordCloud';
 import './dotMatrix';
+import './impact';
 import './smoke';
 import './error';
 

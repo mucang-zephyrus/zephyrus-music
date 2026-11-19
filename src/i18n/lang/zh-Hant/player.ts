@@ -1,4 +1,5 @@
 export default {
+  impact: { rough: '粗糙化邊緣', distress: '隨機斑駁強度', fill: '歌詞填滿螢幕' },
   dotMatrix: {
     shape: '點陣形狀',
     dot: '圓點',
@@ -150,6 +151,7 @@ export default {
   },
   // 播放器樣式
   styles: {
+    impact: '衝擊',
     dotMatrix: '點陣',
     wordCloud: '詞雲',
     default: '預設',

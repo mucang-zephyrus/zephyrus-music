@@ -1,4 +1,5 @@
 export default {
+  impact: { rough: 'Rough edges', distress: 'Random ink wear', fill: 'Fill screen with lyrics' },
   dotMatrix: {
     shape: 'Cell shape',
     dot: 'Dots',
@@ -151,6 +152,7 @@ export default {
   },
   // Player styles
   styles: {
+    impact: 'Impact',
     dotMatrix: 'Dot Matrix',
     wordCloud: 'Word cloud',
     default: 'Default',

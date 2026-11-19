@@ -25,6 +25,7 @@ import { computed, markRaw, onMounted, onUnmounted, ref, watch } from 'vue';
 import DefaultMobilePlayerV2 from '@/components/lyric/DefaultMobilePlayerV2.vue';
 import DotMatrixPlayer from '@/components/lyric/DotMatrixPlayer.vue';
 import ErrorMobilePlayer from '@/components/lyric/ErrorMobilePlayer.vue';
+import ImpactPlayer from '@/components/lyric/ImpactPlayer.vue';
 import MusicFull from '@/components/lyric/MusicFull.vue';
 import SmokeMobilePlayer from '@/components/lyric/SmokeMobilePlayer.vue';
 import StageMobilePlayer from '@/components/lyric/StageMobilePlayer.vue';
@@ -106,6 +107,7 @@ const mobileStyleComponents: Record<string, any> = {
   starChart: markRaw(StarChartPlayer),
   wordCloud: markRaw(WordCloudPlayer),
   dotMatrix: markRaw(DotMatrixPlayer),
+  impact: markRaw(ImpactPlayer),
   smoke: markRaw(SmokeMobilePlayer),
   error: markRaw(ErrorMobilePlayer)
 };

@@ -2498,6 +2498,12 @@ const playerStyles = computed<
     color: '#555555'
   },
   {
+    key: 'impact' as const,
+    label: tr('player.styles.impact', '冲击'),
+    icon: 'ri-flashlight-line',
+    color: '#789cca'
+  },
+  {
     key: 'smoke' as const,
     label: tr('player.styles.smoke', '烟雾'),
     icon: 'ri-cloudy-line',

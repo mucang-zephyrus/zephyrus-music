@@ -1,4 +1,5 @@
 export default {
+  impact: { rough: '거친 가장자리', distress: '잉크 얼룩 강도', fill: '가사로 화면 채우기' },
   dotMatrix: {
     shape: '셀 모양',
     dot: '원형 도트',
@@ -151,6 +152,7 @@ export default {
   },
   // 플레이어 스타일
   styles: {
+    impact: '충격',
     dotMatrix: '도트 매트릭스',
     wordCloud: '워드 클라우드',
     default: '기본',

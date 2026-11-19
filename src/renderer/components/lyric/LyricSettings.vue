@@ -562,7 +562,7 @@ onMounted(async () => {
 const playerStyles = computed(() => {
   return getAllStyles()
     .filter((s) => {
-      if (s.key === 'default') return true;
+      if (s.key === 'default' || s.key === 'impact') return true;
       if (s.key === 'stage') return isFeatureEnabled('stage-style');
       if (s.key === 'starChart') return isFeatureEnabled('star-chart-style');
       if (s.key === 'wordCloud') return isFeatureEnabled('wordCloud-style');
@@ -956,6 +956,11 @@ defineExpose({
   position: relative;
   overflow: hidden;
 }
+.preview-impact {
+  background: linear-gradient(137deg, #637e9c, #101925 42%, #080c15 62%, #416484);
+  box-shadow: inset 0 0 0 1px #bccde1;
+}
+
 .preview-dotMatrix {
   background:
     radial-gradient(circle, #aaa 1.1px, transparent 1.2px) 0 0 / 6px 6px,

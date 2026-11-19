@@ -1,0 +1,286 @@
+<template>
+  <div ref="surface" class="impact-scene" :class="{ 'impact-controls-visible': controls }">
+    <canvas
+      ref="output"
+      aria-hidden="true"
+      :data-phase="phase"
+      :data-landed="frame?.landed || 0"
+    ></canvas>
+    <p class="sr-only">{{ frame?.line.text }}</p>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { useElementSize } from '@vueuse/core';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+
+import { drumDetector } from '@/services/drumDetector';
+import type { PlayerStyleCustomConfig } from '@/types/playerStyle';
+import { loadFontById } from '@/utils/fontLoader';
+import { drawCracks, drawGlass, drawShards, glassPalette, printGlyph } from '@/utils/impactGlass';
+import { buildImpactTimeline, clampUnit, glassGeometry, impactFrame } from '@/utils/impactTimeline';
+import type { CloudInput } from '@/utils/wordCloud';
+
+const props = defineProps<{
+  active: boolean;
+  playing: boolean;
+  controls: boolean;
+  time: number;
+  songKey: string;
+  theme: string;
+  climax: boolean;
+  reduced: boolean;
+  config: PlayerStyleCustomConfig;
+  inputs: CloudInput[];
+}>();
+
+const surface = ref<HTMLElement>();
+const output = ref<HTMLCanvasElement>();
+const { width, height } = useElementSize(surface, { width: 0, height: 0 }, { box: 'border-box' });
+const fontReady = ref(false);
+const timeline = computed(() => buildImpactTimeline(props.inputs));
+const frame = computed(() => impactFrame(timeline.value, props.time, props.reduced));
+const phase = computed(() => {
+  if (!frame.value) return 'glass';
+  if (!frame.value.line.words.length) return 'static';
+  return frame.value.shattered ? 'shattered' : 'impact';
+});
+const geometry = computed(() =>
+  glassGeometry(width.value, height.value, `${props.songKey}:${frame.value?.line.key}`)
+);
+const palette = computed(() => glassPalette(props.theme));
+const glyphs = new Map<string, HTMLCanvasElement>();
+let texture: HTMLCanvasElement | undefined;
+let textureContext: CanvasRenderingContext2D | null | undefined;
+let unsubscribe: (() => void) | undefined;
+let lastBeat = -Infinity;
+let beatPower = 0;
+let lastTime = -Infinity;
+let lastClimax = false;
+let climaxMix = 0;
+let raf = 0;
+let inset = 20;
+
+function updateInset() {
+  if (surface.value) inset = parseFloat(getComputedStyle(surface.value).paddingTop) || 20;
+}
+
+function drawInk(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  key: string,
+  alpha: number,
+  outline: boolean,
+  scale = 1
+) {
+  const cacheKey = `${key}:${outline}`;
+  let glyph = glyphs.get(cacheKey);
+  if (!glyph) {
+    glyph = printGlyph(
+      text,
+      palette.value.ink,
+      key,
+      Number(props.config.impactDistress ?? 35) / 100,
+      props.config.impactRough !== false,
+      outline
+    );
+    if (glyphs.size >= 36) glyphs.delete(glyphs.keys().next().value!);
+    glyphs.set(cacheKey, glyph);
+  }
+  const maxWidth = Math.max(1, width.value - 2 * Math.max(20, width.value * 0.045));
+  // Keep the scene centered when the controls appear, including on a short horizontal screen.
+  const maxHeight = Math.max(height.value * 0.29, height.value - 2 * inset);
+  let drawWidth = maxWidth;
+  let drawHeight = maxHeight;
+  if (!props.config.impactFill) {
+    const fit = Math.min(
+      (maxWidth * 0.92) / glyph.width,
+      (maxHeight * 0.6) / glyph.height,
+      Math.min(width.value * 0.24, height.value * 0.27, 220) / glyph.height
+    );
+    drawWidth = glyph.width * fit;
+    drawHeight = glyph.height * fit;
+  }
+  drawWidth *= scale;
+  drawHeight *= scale;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(
+    glyph,
+    (width.value - drawWidth) / 2,
+    (height.value - drawHeight) / 2,
+    drawWidth,
+    drawHeight
+  );
+  ctx.restore();
+}
+
+function render() {
+  const canvas = output.value;
+  const w = width.value;
+  const h = height.value;
+  if (!props.active || !canvas || w < 12 || h < 12 || !texture || !textureContext) return;
+  const scale = Math.min(window.devicePixelRatio || 1, 1.5, Math.sqrt(1600000 / (w * h)));
+  const pixelW = Math.round(w * scale);
+  const pixelH = Math.round(h * scale);
+  if (canvas.width !== pixelW || canvas.height !== pixelH) {
+    canvas.width = texture.width = pixelW;
+    canvas.height = texture.height = pixelH;
+  }
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const glass = textureContext;
+  const delta = props.time - lastTime;
+  const discontinuity = delta < -0.015 || delta > 0.3;
+  if (discontinuity && lastBeat !== props.time) lastBeat = -Infinity;
+  const targetClimax = Number(props.climax);
+  if (discontinuity || props.reduced || !props.playing) climaxMix = targetClimax;
+  else if (delta > 0 || lastClimax !== props.climax) {
+    const fraction = 1 - Math.exp(-Math.max(0.014, delta) / 0.11);
+    climaxMix += (targetClimax - climaxMix) * fraction;
+    if (Math.abs(targetClimax - climaxMix) < 0.01) climaxMix = targetClimax;
+  }
+  lastClimax = props.climax;
+  lastTime = props.time;
+  const age = props.time - lastBeat;
+  const beat = !props.reduced && age >= 0 && age < 0.32 ? beatPower * Math.exp(-age / 0.075) : 0;
+  const current = frame.value;
+  const { cracks, shards } = geometry.value;
+  for (const context of [ctx, glass]) {
+    context.setTransform(scale, 0, 0, scale, 0, 0);
+    context.clearRect(0, 0, w + 1, h + 1);
+  }
+  drawGlass(glass, w, h, palette.value, climaxMix, beat, props.reduced ? 0 : props.time);
+  if (current) {
+    const { line, landed, shattered, active, hitAge } = current;
+    if (!line.words.length) drawInk(glass, line.text, line.key, 1, false);
+    else {
+      if (landed) drawCracks(glass, cracks, landed / line.words.length, shattered);
+      const firstVisible = Math.max(0, landed - 16);
+      if (firstVisible) {
+        // Keep the earlier impressions in the glass texture while limiting the opacity of older layers.
+        for (let index = 0; index < firstVisible; index++) {
+          drawInk(glass, line.words[index].text, `${line.key}:${index}`, 0.14, true);
+        }
+      }
+      for (let index = firstVisible; index < landed; index++) {
+        drawInk(
+          glass,
+          line.words[index].text,
+          `${line.key}:${index}`,
+          index === landed - 1 ? 0.86 : 0.28,
+          true
+        );
+      }
+      if (landed) {
+        const alpha = props.reduced
+          ? 0.86
+          : Math.max(0, (shattered ? 0.85 : 1) * (1 - hitAge / 0.18));
+        if (alpha > 0)
+          drawInk(glass, line.words[landed - 1].text, `${line.key}:${landed - 1}`, alpha, false);
+      }
+      if (!props.reduced && active >= landed) {
+        const word = line.words[active];
+        const t = clampUnit((props.time - word.begin) / (word.hit - word.begin));
+        drawInk(
+          glass,
+          word.text,
+          `${line.key}:${active}`,
+          0.3 + t * 0.7,
+          false,
+          1 + 1.35 * (1 - t) ** 2
+        );
+      }
+    }
+  }
+  const hitAge = current?.hitAge ?? Infinity;
+  const shock =
+    !props.reduced && hitAge < 0.15 ? Math.exp(-hitAge * 26) * (current?.shattered ? 10 : 6) : 0;
+  if (shock) ctx.translate(Math.cos(hitAge * 124) * shock, Math.sin(hitAge * 171) * shock * 0.68);
+  if (current?.shattered) drawShards(ctx, texture, shards, w, h, hitAge, props.reduced);
+  else ctx.drawImage(texture, 0, 0, w, h);
+}
+
+function schedule() {
+  if (props.active && !raf)
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      render();
+    });
+}
+
+watch([() => props.songKey, () => props.active], () => {
+  lastBeat = -Infinity;
+  lastTime = -Infinity;
+  glyphs.clear();
+});
+watch(
+  [
+    () => props.theme,
+    () => props.config.impactDistress,
+    () => props.config.impactRough,
+    fontReady,
+    () => frame.value?.line.key
+  ],
+  () => glyphs.clear()
+);
+watch([width, height, () => props.controls], updateInset, { flush: 'post' });
+watch(
+  [
+    width,
+    height,
+    frame,
+    fontReady,
+    () => props.time,
+    () => props.playing,
+    () => props.active,
+    () => props.climax,
+    () => props.reduced,
+    () => props.theme,
+    () => props.config,
+    () => props.controls
+  ],
+  schedule,
+  { flush: 'post' }
+);
+
+onMounted(() => {
+  texture = document.createElement('canvas');
+  textureContext = texture.getContext('2d');
+  unsubscribe = drumDetector.onBeat((info) => {
+    if (!props.active || !props.playing || props.reduced) return;
+    lastBeat = props.time;
+    beatPower = Math.min(1, 0.25 + info.kickEnergy * 0.8 + (info.isStrong ? 0.2 : 0));
+    schedule();
+  });
+  void loadFontById('noto-serif-sc').then(() => {
+    fontReady.value = true;
+  });
+  updateInset();
+  schedule();
+});
+onUnmounted(() => {
+  unsubscribe?.();
+  cancelAnimationFrame(raf);
+});
+</script>
+
+<style scoped>
+.impact-scene {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding-top: max(24px, var(--safe-area-inset-top, env(safe-area-inset-top)));
+  background: #050911;
+}
+.impact-controls-visible {
+  padding-top: min(31vh, calc(156px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom))));
+}
+.impact-scene canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+</style>

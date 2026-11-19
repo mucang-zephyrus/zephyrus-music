@@ -18,6 +18,7 @@ const ORIGINAL_STYLE_BACKGROUNDS: Record<string, string> = {
   starChart: '#050505',
   wordCloud: '#101215',
   dotMatrix: '#ffffff',
+  impact: '#050911',
   frenzy: '#f5f5f5',
   eerie: '',
   neon: '#1a1814',

@@ -23,6 +23,7 @@ const STYLE_LYRIC_COLORS: Record<MobilePlayerStyleKey, string> = {
   starChart: '#ffffff',
   wordCloud: '#ffffff',
   dotMatrix: '#181818',
+  impact: '#ffffff',
   frenzy: '#171717',
   smoke: '#e9f7f2',
   error: '#ffffff'
@@ -69,6 +70,7 @@ const STYLE_SPECIFIC_DEFAULTS: Record<MobilePlayerStyleKey, Record<string, unkno
     cloudEstimate: true,
     cloudBackground: 'cover'
   },
+  impact: { impactRough: true, impactFill: false },
   dotMatrix: {
     dotShape: 'dot',
     dotClimax: 'auto',
@@ -406,6 +408,13 @@ export function resolvePlayerStyleConfig(
       )
     )
       config.cloudBackground = 'cover';
+  }
+  if (styleKey === 'impact') {
+    config.impactRough = config.impactRough !== false;
+    config.impactFill = config.impactFill === true;
+    config.useCustomBackground = false;
+    config.builtinFontId = undefined;
+    config.customFontFamily = undefined;
   }
   if (styleKey === 'dotMatrix') {
     config.dotShape = config.dotShape === 'grid' ? 'grid' : 'dot';

@@ -4,6 +4,7 @@ export const MOBILE_PLAYER_STYLE_KEYS = [
   'starChart',
   'wordCloud',
   'dotMatrix',
+  'impact',
   'smoke',
   'error'
 ] as const;
@@ -26,6 +27,9 @@ export interface PlayerStyleClimaxColors {
 }
 
 export interface PlayerStyleCustomConfig {
+  impactRough?: boolean;
+  impactDistress?: number;
+  impactFill?: boolean;
   dotShape?: 'dot' | 'grid';
   dotClimax?: 'auto' | 'ripple' | 'checker' | 'radial';
   dotBeat?: boolean;

@@ -1,4 +1,5 @@
 export default {
+  impact: { rough: '輪郭を粗くする', distress: 'かすれの強さ', fill: '歌詞を画面いっぱいに表示' },
   dotMatrix: {
     shape: 'セルの形',
     dot: '丸いドット',
@@ -153,6 +154,7 @@ export default {
   },
   // プレイヤースタイル
   styles: {
+    impact: 'インパクト',
     dotMatrix: 'ドットマトリクス',
     wordCloud: 'ワードクラウド',
     default: 'デフォルト',

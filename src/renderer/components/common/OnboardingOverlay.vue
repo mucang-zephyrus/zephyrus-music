@@ -512,6 +512,7 @@ import AccountLoginMorph from '@/components/login/AccountLoginMorph.vue';
 import DefaultMobilePlayerV2 from '@/components/lyric/DefaultMobilePlayerV2.vue';
 import DotMatrixPlayer from '@/components/lyric/DotMatrixPlayer.vue';
 import ErrorMobilePlayer from '@/components/lyric/ErrorMobilePlayer.vue';
+import ImpactPlayer from '@/components/lyric/ImpactPlayer.vue';
 import SmokeMobilePlayer from '@/components/lyric/SmokeMobilePlayer.vue';
 import StageMobilePlayer from '@/components/lyric/StageMobilePlayer.vue';
 import StarChartPlayer from '@/components/lyric/StarChartPlayer.vue';
@@ -949,6 +950,7 @@ const mobileStyleComponents: Partial<Record<MobilePlayerStyleKey, any>> = {
   starChart: markRaw(StarChartPlayer),
   wordCloud: markRaw(WordCloudPlayer),
   dotMatrix: markRaw(DotMatrixPlayer),
+  impact: markRaw(ImpactPlayer),
   smoke: markRaw(SmokeMobilePlayer),
   error: markRaw(ErrorMobilePlayer)
 };

@@ -63,6 +63,20 @@
           :reduced="reduceMotion"
           :style="lyricsUnderlayStyle"
         />
+        <impact-scene
+          v-else-if="visualStyle === 'impact'"
+          :inputs="cloudPlayback.inputs.value"
+          :time="cloudPlayback.time.value"
+          :playing="playerStore.isPlaying"
+          :active="sceneActive"
+          :controls="controlsVisible && !overlayMode"
+          :song-key="cloudSong.key"
+          :theme="themeColor"
+          :climax="styleEngine.isInClimax"
+          :reduced="reduceMotion"
+          :config="styleCfg"
+          :style="lyricsUnderlayStyle"
+        />
         <word-cloud-scene
           v-else
           :inputs="cloudPlayback.inputs.value"
@@ -193,6 +207,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import MobileCommentsOverlay from '@/components/comment/MobileCommentsOverlay.vue';
 import DotMatrixScene from '@/components/lyric/DotMatrixScene.vue';
+import ImpactScene from '@/components/lyric/ImpactScene.vue';
 import LyricImmersiveHeader from '@/components/lyric/LyricImmersiveHeader.vue';
 import MobileControlsArea from '@/components/lyric/MobileControlsArea.vue';
 import MobileScrollingLyrics from '@/components/lyric/MobileScrollingLyrics.vue';
@@ -227,7 +242,7 @@ const props = defineProps({
   background: { type: String, default: '' },
   overlayMode: { type: Boolean, default: false },
   // These canvas styles share controls, gestures, and immersive panels.
-  visualStyle: { type: String as () => 'wordCloud' | 'dotMatrix', default: 'wordCloud' }
+  visualStyle: { type: String as () => 'wordCloud' | 'dotMatrix' | 'impact', default: 'wordCloud' }
 });
 
 const emit = defineEmits(['update:modelValue']);
@@ -319,6 +334,16 @@ const {
   customFontActive
 } = usePlayerStyleAppearance(props.visualStyle);
 const cloudPlayback = useWordCloudPlayback();
+
+if (props.visualStyle === 'impact') {
+  watch(
+    () => [props.modelValue, playerStore.currentSong?.id] as const,
+    ([visible, songId]) => {
+      if (visible && songId) void styleEngine.loadClimaxData(String(songId));
+    },
+    { immediate: true }
+  );
+}
 
 watch(
   () => playerStore.fullLyricsVisible,

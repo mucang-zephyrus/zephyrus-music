@@ -28,7 +28,7 @@
     <div v-if="local.mode === 'custom'" class="panel-content">
       <div class="section-label">{{ tr('player.styleCustomization.appearance', '外观') }}</div>
 
-      <label v-if="!['wordCloud', 'dotMatrix'].includes(styleKey)" class="setting-row">
+      <label v-if="!['wordCloud', 'dotMatrix', 'impact'].includes(styleKey)" class="setting-row">
         <span>{{ tr('player.styleCustomization.lyricColor', '基础歌词颜色') }}</span>
         <AppColorPicker v-model="local.lyricColor" />
       </label>
@@ -53,7 +53,7 @@
         </label>
       </template>
 
-      <div class="setting-row">
+      <div v-if="styleKey !== 'impact'" class="setting-row">
         <span>{{ tr('player.styleCustomization.font', '字体') }}</span>
         <div class="font-actions">
           <morphing-font-selector
@@ -72,13 +72,29 @@
         </div>
       </div>
 
-      <label v-if="customFontSelected" class="range-row">
+      <label v-if="customFontSelected && styleKey !== 'impact'" class="range-row">
         <span
           >{{ tr('player.styleCustomization.fontWeight', '字体粗细') }} {{ local.fontWeight }}</span
         >
         <input v-model.number="local.fontWeight" type="range" min="100" max="900" step="50" />
       </label>
 
+      <template v-if="styleKey === 'impact'">
+        <label class="setting-row">
+          <span>{{ tr('player.impact.rough', '粗糙化边缘') }}</span>
+          <input v-model="local.impactRough" type="checkbox" />
+        </label>
+        <label class="range-row">
+          <span
+            >{{ tr('player.impact.distress', '随机斑驳强度') }} {{ local.impactDistress }}%</span
+          >
+          <input v-model.number="local.impactDistress" type="range" min="0" max="100" step="1" />
+        </label>
+        <label class="setting-row">
+          <span>{{ tr('player.impact.fill', '歌词填满屏幕') }}</span>
+          <input v-model="local.impactFill" type="checkbox" />
+        </label>
+      </template>
       <template v-if="styleKey === 'dotMatrix'">
         <label class="setting-row">
           <span>{{ tr('player.dotMatrix.shape', '点阵形状') }}</span>
@@ -131,7 +147,7 @@
           </select>
         </label>
       </template>
-      <label v-if="!['wordCloud', 'dotMatrix'].includes(styleKey)" class="setting-row">
+      <label v-if="!['wordCloud', 'dotMatrix', 'impact'].includes(styleKey)" class="setting-row">
         <span>{{ tr('player.styleCustomization.customBackground', '自定义背景') }}</span>
         <button
           type="button"
@@ -376,7 +392,7 @@
       </template>
 
       <div
-        v-if="local.useCustomBackground && !['wordCloud', 'dotMatrix'].includes(styleKey)"
+        v-if="local.useCustomBackground && !['wordCloud', 'dotMatrix', 'impact'].includes(styleKey)"
         class="nested-settings"
       >
         <div class="segmented-control three-options">
@@ -443,10 +459,10 @@
         </div>
       </div>
 
-      <div v-if="!['wordCloud', 'dotMatrix'].includes(styleKey)" class="section-label">
+      <div v-if="!['wordCloud', 'dotMatrix', 'impact'].includes(styleKey)" class="section-label">
         {{ tr('player.styleCustomization.climaxColor', '高潮配色') }}
       </div>
-      <label v-if="!['wordCloud', 'dotMatrix'].includes(styleKey)" class="setting-row">
+      <label v-if="!['wordCloud', 'dotMatrix', 'impact'].includes(styleKey)" class="setting-row">
         <span>{{ tr('player.styleCustomization.useThemeColor', '高潮使用歌曲主题色') }}</span>
         <button
           type="button"
@@ -460,7 +476,7 @@
         </button>
       </label>
       <label
-        v-if="!['wordCloud', 'dotMatrix'].includes(styleKey) && local.climaxUseThemeColor"
+        v-if="!['wordCloud', 'dotMatrix', 'impact'].includes(styleKey) && local.climaxUseThemeColor"
         class="setting-row"
       >
         <span>{{ tr('player.styleCustomization.splitColors', '部件独立配色') }}</span>
@@ -478,7 +494,7 @@
 
       <div
         v-if="
-          !['wordCloud', 'dotMatrix'].includes(styleKey) &&
+          !['wordCloud', 'dotMatrix', 'impact'].includes(styleKey) &&
           local.climaxUseThemeColor &&
           local.climaxSplitColors
         "
@@ -577,7 +593,7 @@
         </button>
       </label>
 
-      <div v-if="hasStyleSpecificSettings" class="advanced-params">
+      <div v-if="hasStyleSpecificSettings && styleKey !== 'impact'" class="advanced-params">
         <button
           type="button"
           class="advanced-params-toggle"
