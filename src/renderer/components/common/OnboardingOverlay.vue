@@ -1012,6 +1012,12 @@ const playerStyleOptions = computed<
     color: '#555555'
   },
   {
+    key: 'impact',
+    label: tr('player.styles.impact', '冲击'),
+    icon: 'ri-flashlight-line',
+    color: '#69bcff'
+  },
+  {
     key: 'smoke',
     label: tr('player.styles.smoke', '烟雾'),
     icon: 'ri-cloudy-line',
