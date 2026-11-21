@@ -4,7 +4,8 @@ export default {
     distress: '잉크 얼룩 강도',
     fill: '가사로 화면 채우기',
     uppercase: '영문 가사를 모두 대문자로 표시',
-    wholeLine: '가사를 항상 한 줄씩 표시'
+    wholeLine: '가사를 항상 한 줄씩 표시',
+    swapArtistLanguages: '아티스트 이름의 중국어와 영어 위치 바꾸기'
   },
   dotMatrix: {
     shape: '셀 모양',

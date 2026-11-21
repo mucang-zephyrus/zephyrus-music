@@ -4,10 +4,11 @@
       ref="output"
       aria-hidden="true"
       :data-phase="phase"
+      :data-card="scene.card"
       :data-landed="frame?.landed || 0"
     ></canvas>
     <p class="sr-only">
-      {{ displayText(frame?.line.text || '') }}
+      {{ displayText(cardLabel || frame?.line.text || '') }}
       <span v-for="line in centerLyrics" :key="line.key" :data-impact-field="line.field">{{
         displayText(line.text)
       }}</span>
@@ -26,15 +27,18 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import { drumDetector } from '@/services/drumDetector';
 import type { PlayerStyleCustomConfig } from '@/types/playerStyle';
+import { impactArtistCredit } from '@/utils/impactArtist';
 import { loadFontById } from '@/utils/fontLoader';
 import { drawCracks, drawGlass, drawShards, glassPalette, printGlyph } from '@/utils/impactGlass';
 import {
   buildImpactAccompaniment,
   buildImpactTimeline,
+  buildImpactVocalRanges,
   clampUnit,
   glassGeometry,
   impactAccompanimentAt,
   impactFrame,
+  impactSceneAt,
   type ImpactLine,
   impactShatters,
   impactText
@@ -47,6 +51,10 @@ const props = defineProps<{
   controls: boolean;
   time: number;
   songKey: string;
+  title: string;
+  artists: string[];
+  duration: number;
+  font: string;
   theme: string;
   climax: boolean;
   reduced: boolean;
@@ -64,12 +72,34 @@ const timeline = computed(() => buildImpactTimeline(props.inputs, props.config.i
 const frame = computed(() => impactFrame(timeline.value, props.time, props.reduced));
 const accompaniment = computed(() => buildImpactAccompaniment(props.inputs));
 const activeLyrics = computed(() => impactAccompanimentAt(accompaniment.value, props.time));
+const vocalRanges = computed(() => buildImpactVocalRanges(timeline.value, accompaniment.value));
+const artist = computed(() =>
+  impactArtistCredit(props.artists, props.config.impactSwapArtistLanguages === true)
+);
+const scene = computed(() =>
+  impactSceneAt(
+    vocalRanges.value,
+    props.time,
+    Boolean(artist.value.main),
+    props.reduced,
+    props.duration
+  )
+);
+const cardLabel = computed(() => {
+  if (scene.value.card === 'title') return props.title;
+  if (scene.value.card === 'artist')
+    return [artist.value.main, artist.value.outline].filter(Boolean).join(' / ');
+  return '';
+});
+const customInkFont = computed(() =>
+  props.font ? `${props.config.fontWeight || 900} 160px ${props.font}` : undefined
+);
 const fillsScreen = computed(() => Boolean(props.config.impactFill));
 const centerLyrics = computed(() => (fillsScreen.value && frame.value ? activeLyrics.value : []));
 const bottomLyrics = computed(() => (centerLyrics.value.length ? [] : activeLyrics.value));
 const displayText = (text: string) => impactText(text, props.config.impactUppercase === true);
 const phase = computed(() => {
-  if (!frame.value) return 'glass';
+  if (!frame.value) return scene.value.phase;
   if (!frame.value.line.words.length) return 'static';
   return frame.value.shattered ? 'shattered' : 'impact';
 });
@@ -128,10 +158,11 @@ function drawInk(
   alpha: number,
   outline: boolean,
   row: InkRow,
-  scale = 1
+  scale = 1,
+  cardOutline = false
 ) {
   const ink = displayText(text);
-  const cacheKey = `${key}:${outline}:${ink}`;
+  const cacheKey = `${key}:${outline}:${ink}:${customInkFont.value || ''}`;
   let glyph = glyphs.get(cacheKey);
   if (!glyph) {
     glyph = printGlyph(
@@ -140,7 +171,9 @@ function drawInk(
       key,
       Number(props.config.impactDistress ?? 35) / 100,
       props.config.impactRough !== false,
-      outline
+      outline,
+      customInkFont.value,
+      cardOutline ? 2.6 : undefined
     );
     if (glyphs.size >= 36) glyphs.delete(glyphs.keys().next().value!);
     glyphs.set(cacheKey, glyph);
@@ -236,8 +269,9 @@ function render() {
   const beat = !props.reduced && age >= 0 && age < 0.32 ? beatPower * Math.exp(-age / 0.075) : 0;
   const current = frame.value;
   const lightTime = props.reduced ? 0 : props.time;
+  const { card, opacity, edgeLight } = scene.value;
   const paintGlass = (context: CanvasRenderingContext2D) =>
-    drawGlass(context, w, h, palette.value, climaxMix, beat, lightTime);
+    drawGlass(context, w, h, palette.value, climaxMix, Math.max(beat, edgeLight), lightTime);
 
   ctx.setTransform(pixelW / w, 0, 0, pixelH / h, 0, 0);
   paintGlass(ctx);
@@ -264,6 +298,25 @@ function render() {
       }
     }
     ctx.restore();
+  } else if (!current && !activeLyrics.value.length) {
+    if (card === 'title' && props.title) {
+      drawInk(ctx, props.title, `${props.songKey}:title`, opacity, false, rows[0]);
+    } else if (card === 'artist') {
+      const { main, outline } = artist.value;
+      drawInk(ctx, main, `${props.songKey}:artist`, opacity, false, rows[0]);
+      if (outline) {
+        drawInk(
+          ctx,
+          outline,
+          `${props.songKey}:artist:outline`,
+          opacity * 0.58,
+          true,
+          rows[0],
+          0.83,
+          true
+        );
+      }
+    }
   }
 
   // Old shards stay over the intact pane until their playback-time fade finishes.
@@ -289,7 +342,7 @@ function render() {
 }
 
 function schedule() {
-  if (props.active && !raf)
+  if (props.active && output.value && !raf)
     raf = requestAnimationFrame(() => {
       raf = 0;
       render();
@@ -312,12 +365,28 @@ watch(
   () => glyphs.clear()
 );
 watch([width, height, () => props.controls], updateInset, { flush: 'post' });
+watch(() => props.config.customFontData, refreshGlyphs);
+watch(
+  () => props.config.builtinFontId,
+  (fontId) => {
+    if (fontId) void loadFontById(fontId).then(refreshGlyphs);
+  },
+  { immediate: true }
+);
+function refreshGlyphs() {
+  glyphs.clear();
+  schedule();
+}
 watch(
   [
     width,
     height,
     frame,
     activeLyrics,
+    scene,
+    artist,
+    customInkFont,
+    () => props.title,
     subtitleHeight,
     fontReady,
     () => props.time,
@@ -337,6 +406,7 @@ watch(
 );
 
 onMounted(() => {
+  document.fonts.addEventListener('loadingdone', refreshGlyphs);
   texture = document.createElement('canvas');
   textureContext = texture.getContext('2d');
   unsubscribe = drumDetector.onBeat((info) => {
@@ -352,6 +422,7 @@ onMounted(() => {
   schedule();
 });
 onUnmounted(() => {
+  document.fonts.removeEventListener('loadingdone', refreshGlyphs);
   unsubscribe?.();
   cancelAnimationFrame(raf);
 });

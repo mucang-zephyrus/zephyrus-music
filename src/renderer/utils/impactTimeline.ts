@@ -20,27 +20,33 @@ export function impactText(text: string, uppercase: boolean) {
   return uppercase ? text.replace(/\p{Script=Latin}+/gu, (letters) => letters.toUpperCase()) : text;
 }
 
+function impactLineEnd(line: CloudInput, fallback: number) {
+  if (line.reliableEnd && line.end != null && Number.isFinite(line.end) && line.end > line.begin)
+    return line.end;
+  const wordEnd = Math.max(
+    line.begin,
+    ...(line.words ?? [])
+      .filter((word) => word.text.trim() && Number.isFinite(word.end) && word.end > word.begin)
+      .map((word) => word.end)
+  );
+  return wordEnd > line.begin ? wordEnd : fallback;
+}
+
 export function buildImpactAccompaniment(inputs: readonly CloudInput[]) {
-  const fields = ['background', 'duet'] as const;
-  return fields
-    .flatMap((field) => {
-      const lines = inputs
-        .map((line, index) => ({ line, index }))
-        .filter(({ line }) => line[field] && hasImpactTime(line))
-        .sort((a, b) => a.line.begin - b.line.begin);
-      return lines.map(({ line, index }, position) => {
-        const wordEnd = Math.max(line.begin, ...(line.words ?? []).map((word) => word.end));
-        const next = lines.slice(position + 1).find((item) => item.line.begin > line.begin);
-        const end =
-          line.reliableEnd && line.end != null && line.end > line.begin
-            ? line.end
-            : wordEnd > line.begin
-              ? wordEnd
-              : (next?.line.begin ?? Infinity);
-        return { key: `${field}:${index}`, field, text: line.text.trim(), begin: line.begin, end };
-      });
+  const timed = inputs
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => hasImpactTime(line))
+    .sort((a, b) => a.line.begin - b.line.begin);
+  return timed
+    .flatMap(({ line, index }) => {
+      const field = line.background ? 'background' : line.duet ? 'duet' : undefined;
+      const text = line.text.trim();
+      if (!field || !text) return [];
+      const next = timed.find((item) => item.line.begin > line.begin);
+      const end = impactLineEnd(line, next?.line.begin ?? Infinity);
+      return [{ key: `${field}:${index}`, field, text, begin: line.begin, end }];
     })
-    .filter((line) => line.text);
+    .sort((a, b) => Number(a.field === 'duet') - Number(b.field === 'duet'));
 }
 
 export type ImpactAccompaniment = ReturnType<typeof buildImpactAccompaniment>;
@@ -56,29 +62,30 @@ export function buildImpactTimeline(
   const lines = inputs
     .filter((line) => !line.background && !line.duet && hasImpactTime(line))
     .sort((a, b) => a.begin - b.begin);
-  return lines.map((line, index) => {
-    const following = lines[index + 1]?.begin ?? Infinity;
-    const end =
-      line.reliableEnd && line.end != null && line.end > line.begin
-        ? Math.min(line.end, following)
-        : following;
-    const words = (wholeLine ? [] : (line.words ?? []))
-      .filter((word) => word.text.trim() && Number.isFinite(word.begin) && word.begin < end)
-      .map((word) => ({ text: word.text.trim(), begin: Math.max(word.begin, line.begin) }))
-      .sort((a, b) => a.begin - b.begin);
-    return {
-      key: `${index}:${line.begin}`,
-      text: line.text.trim(),
-      begin: line.begin,
-      end,
-      words: words.map((word, wordIndex) => ({
-        ...word,
-        hit:
-          word.begin +
-          Math.min(0.09, (Math.min(end, words[wordIndex + 1]?.begin ?? end) - word.begin) * 0.65)
-      }))
-    };
-  });
+  const markers = [...new Set(lines.map((line) => line.begin))];
+  const followingMarkers = new Map(markers.map((begin, index) => [begin, markers[index + 1]]));
+  return lines
+    .filter((line) => line.text.trim())
+    .map((line, index) => {
+      const following = followingMarkers.get(line.begin) ?? Infinity;
+      const end = Math.min(impactLineEnd(line, following), following);
+      const words = (wholeLine ? [] : (line.words ?? []))
+        .filter((word) => word.text.trim() && Number.isFinite(word.begin) && word.begin < end)
+        .map((word) => ({ text: word.text.trim(), begin: Math.max(word.begin, line.begin) }))
+        .sort((a, b) => a.begin - b.begin);
+      return {
+        key: `${index}:${line.begin}`,
+        text: line.text.trim(),
+        begin: line.begin,
+        end,
+        words: words.map((word, wordIndex) => ({
+          ...word,
+          hit:
+            word.begin +
+            Math.min(0.09, (Math.min(end, words[wordIndex + 1]?.begin ?? end) - word.begin) * 0.65)
+        }))
+      };
+    });
 }
 
 function lastStarted<T>(entries: readonly T[], time: number, start: (entry: T) => number) {
@@ -90,6 +97,73 @@ function lastStarted<T>(entries: readonly T[], time: number, start: (entry: T) =
     else right = middle;
   }
   return left - 1;
+}
+
+interface VocalRange {
+  begin: number;
+  end: number;
+}
+
+export function buildImpactVocalRanges(
+  timeline: readonly ImpactLine[],
+  accompaniment: ImpactAccompaniment
+) {
+  const ranges: VocalRange[] = [];
+  for (const { begin, end } of [...timeline, ...accompaniment].sort((a, b) => a.begin - b.begin)) {
+    if (end <= begin) continue;
+    const previous = ranges.at(-1);
+    if (previous && begin <= previous.end) previous.end = Math.max(previous.end, end);
+    else ranges.push({ begin, end });
+  }
+  return ranges;
+}
+
+export function impactSceneAt(
+  ranges: readonly VocalRange[],
+  time: number,
+  hasArtist: boolean,
+  reduced: boolean,
+  duration: number
+) {
+  const index = lastStarted(ranges, time, (range) => range.begin);
+  const previous = ranges[index];
+  const next = ranges[index + 1];
+  const still = { opacity: 1, edgeLight: 0 };
+  if (previous && time < previous.end) return { phase: 'vocals', card: null, ...still } as const;
+  if (!previous && next) {
+    const midpoint = next.begin / 2;
+    const twoCards = hasArtist && next.begin >= 2;
+    const distance = Math.abs(time - midpoint);
+    const blend = twoCards && !reduced ? 1 - clampUnit(distance / 0.22) : 0;
+    return {
+      phase: 'intro',
+      card: twoCards && time >= midpoint ? 'artist' : 'title',
+      opacity: 1 - 0.92 * blend,
+      edgeLight: 0.32 * blend
+    } as const;
+  }
+  if (previous && next) {
+    const gap = next.begin - previous.end;
+    if (gap < 2 - 1e-6) return { phase: 'interlude', card: null, ...still } as const;
+    const distance = Math.min(time - previous.end, next.begin - time);
+    return {
+      phase: 'interlude',
+      card: 'title',
+      ...still,
+      opacity: reduced ? 1 : 0.18 + 0.82 * clampUnit(distance / 0.22)
+    } as const;
+  }
+  if (previous) {
+    const remaining = duration - previous.end;
+    const fade = remaining > 0 ? Math.min(remaining, 0.22) : 0.22;
+    return {
+      phase: 'outro',
+      card: 'title',
+      ...still,
+      opacity: reduced ? 1 : 0.18 + 0.82 * clampUnit((time - previous.end) / fade)
+    } as const;
+  }
+  return { phase: 'instrumental', card: 'title', ...still } as const;
 }
 
 export function impactFrame(lines: readonly ImpactLine[], time: number, reduced: boolean) {

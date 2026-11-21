@@ -53,7 +53,7 @@
         </label>
       </template>
 
-      <div v-if="styleKey !== 'impact'" class="setting-row">
+      <div class="setting-row">
         <span>{{ tr('player.styleCustomization.font', '字体') }}</span>
         <div class="font-actions">
           <morphing-font-selector
@@ -72,7 +72,7 @@
         </div>
       </div>
 
-      <label v-if="customFontSelected && styleKey !== 'impact'" class="range-row">
+      <label v-if="customFontSelected" class="range-row">
         <span
           >{{ tr('player.styleCustomization.fontWeight', '字体粗细') }} {{ local.fontWeight }}</span
         >
@@ -101,6 +101,10 @@
         <label class="setting-row">
           <span>{{ tr('player.impact.wholeLine', '强制显示整句歌词') }}</span>
           <input v-model="local.impactWholeLine" type="checkbox" />
+        </label>
+        <label class="setting-row">
+          <span>{{ tr('player.impact.swapArtistLanguages', '互换中英文位置') }}</span>
+          <input v-model="local.impactSwapArtistLanguages" type="checkbox" />
         </label>
       </template>
       <template v-if="styleKey === 'dotMatrix'">

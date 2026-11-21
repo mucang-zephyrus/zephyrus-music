@@ -4,7 +4,8 @@ export default {
     distress: 'Random ink wear',
     fill: 'Fill screen with lyrics',
     uppercase: 'Force English lyrics to uppercase',
-    wholeLine: 'Always show full lyric lines'
+    wholeLine: 'Always show full lyric lines',
+    swapArtistLanguages: 'Swap Chinese and English artist names'
   },
   dotMatrix: {
     shape: 'Cell shape',

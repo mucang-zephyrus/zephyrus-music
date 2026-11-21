@@ -4,7 +4,8 @@ export default {
     distress: 'かすれの強さ',
     fill: '歌詞を画面いっぱいに表示',
     uppercase: '英字をすべて大文字にする',
-    wholeLine: '常に歌詞を行単位で表示'
+    wholeLine: '常に歌詞を行単位で表示',
+    swapArtistLanguages: 'アーティスト名の中国語と英語を入れ替える'
   },
   dotMatrix: {
     shape: 'セルの形',

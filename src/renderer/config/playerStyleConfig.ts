@@ -70,7 +70,13 @@ const STYLE_SPECIFIC_DEFAULTS: Record<MobilePlayerStyleKey, Record<string, unkno
     cloudEstimate: true,
     cloudBackground: 'cover'
   },
-  impact: { impactRough: true, impactFill: false, impactUppercase: false, impactWholeLine: false },
+  impact: {
+    impactRough: true,
+    impactFill: false,
+    impactUppercase: false,
+    impactWholeLine: false,
+    impactSwapArtistLanguages: false
+  },
   dotMatrix: {
     dotShape: 'dot',
     dotClimax: 'auto',
@@ -414,9 +420,8 @@ export function resolvePlayerStyleConfig(
     config.impactFill = config.impactFill === true;
     config.impactUppercase = config.impactUppercase === true;
     config.impactWholeLine = config.impactWholeLine === true;
+    config.impactSwapArtistLanguages = config.impactSwapArtistLanguages === true;
     config.useCustomBackground = false;
-    config.builtinFontId = undefined;
-    config.customFontFamily = undefined;
   }
   if (styleKey === 'dotMatrix') {
     config.dotShape = config.dotShape === 'grid' ? 'grid' : 'dot';

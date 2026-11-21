@@ -206,11 +206,13 @@ export function printGlyph(
   seed: string,
   distress: number,
   rough: boolean,
-  outline: boolean
+  outline: boolean,
+  font = INK_FONT,
+  outlineWidth = 1.85
 ) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d')!;
-  ctx.font = INK_FONT;
+  ctx.font = font;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   const metrics = ctx.measureText(text);
@@ -223,13 +225,13 @@ export function printGlyph(
   canvas.height = Math.ceil(glyphHeight * rasterScale + pad * 2);
   ctx.translate(pad, pad);
   ctx.scale(rasterScale, rasterScale);
-  ctx.font = INK_FONT;
+  ctx.font = font;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   ctx.lineJoin = 'round';
   if (outline) {
     ctx.strokeStyle = color;
-    ctx.lineWidth = 1.85;
+    ctx.lineWidth = outlineWidth;
     ctx.strokeText(text, metrics.actualBoundingBoxLeft, metrics.actualBoundingBoxAscent);
   } else {
     ctx.fillStyle = color;
@@ -269,7 +271,7 @@ export function printGlyph(
     contour.width = canvas.width;
     contour.height = canvas.height;
     const edge = contour.getContext('2d')!;
-    edge.font = `${INK_FONT}`;
+    edge.font = font;
     edge.setTransform(rasterScale, 0, 0, rasterScale, pad, pad);
     edge.lineWidth = 3.25 / rasterScale;
     edge.strokeText(text, metrics.actualBoundingBoxLeft, metrics.actualBoundingBoxAscent);

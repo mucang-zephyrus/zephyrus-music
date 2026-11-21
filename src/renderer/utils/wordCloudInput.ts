@@ -24,12 +24,18 @@ export function providerCloudInputs(
           }))
         : undefined;
     const explicit = format !== 'lrc' && format !== 'none' && (line.duration ?? 0) > 0;
+    const explicitEnd = explicit ? begin + line.duration! / 1000 : undefined;
+    const hasWordEnd = words?.some((word) => word.text.trim() && word.end > word.begin);
+    const end =
+      explicitEnd != null && blankEnd != null
+        ? Math.min(explicitEnd, blankEnd)
+        : (explicitEnd ?? (hasWordEnd ? undefined : blankEnd));
     return {
       text: line.text,
       begin,
       words,
-      end: blankEnd ?? (explicit ? begin + line.duration! / 1000 : undefined),
-      reliableEnd: blankEnd !== undefined || explicit,
+      end,
+      reliableEnd: end !== undefined,
       background: line.isBG === true && !line.isDuet,
       duet: line.isDuet === true,
       translation: line.trText,

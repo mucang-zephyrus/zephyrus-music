@@ -4,7 +4,8 @@ export default {
     distress: '隨機斑駁強度',
     fill: '歌詞填滿螢幕',
     uppercase: '英文強制全部大寫',
-    wholeLine: '強制顯示整句歌詞'
+    wholeLine: '強制顯示整句歌詞',
+    swapArtistLanguages: '互換中英文位置'
   },
   dotMatrix: {
     shape: '點陣形狀',

@@ -65,6 +65,10 @@
         />
         <impact-scene
           v-else-if="visualStyle === 'impact'"
+          :title="playMusic?.name || ''"
+          :artists="trackArtists"
+          :duration="allTime"
+          :font="selectedFontFamily"
           :inputs="cloudPlayback.inputs.value"
           :time="cloudPlayback.time.value"
           :playing="playerStore.isPlaying"
@@ -379,9 +383,12 @@ const coverUrl = computed(
   () =>
     playMusic.value?.picUrl || playMusic.value?.al?.picUrl || playMusic.value?.album?.picUrl || ''
 );
+const trackArtists = computed(() =>
+  (playMusic.value?.ar || playMusic.value?.artists || []).map((artist) => artist.name)
+);
 const cloudSong = computed(() => ({
   title: playMusic.value?.name || 'Zephyrus',
-  artist: (playMusic.value?.ar || playMusic.value?.artists || []).map((a) => a.name).join(' / '),
+  artist: trackArtists.value.join(' / '),
   album: playMusic.value?.al?.name || playMusic.value?.album?.name || '',
   key: `${playMusic.value?.platform || 'netease'}:${playMusic.value?.id || ''}`
 }));
