@@ -66,7 +66,7 @@
     "jieba-wasm": "^2.4.0",
     "jsencrypt": "^3.5.4",
     "kugoumusicapi": "https://codeload.github.com/MakcRe/KuGouMusicApi/tar.gz/refs/tags/v1.6.0",
-    "mediabunny": "^1.56.1",
+    "mediabunny": "^1.65.2",
     "music-metadata": "^11.10.3",
     "node-fetch": "^2.7.0",
     "ogl": "^1.0.11",
