@@ -1,6 +1,6 @@
-# 网易云备用请求方式
+# 网易云 Enhanced 网关
 
-设置 → 播放设置 → 网易云 API 请求方式提供 Alger（原有方式）和 Enhanced（xeapi）。默认保留 Alger，选择按设备保存，下次请求生效，不中断当前播放。所有共用网易云请求客户端的接口一起切换；重试固定使用首次请求的后端，其他平台不受影响。
+网易云请求统一发往网关的 `/netease-enhanced` 路径，网关地址由 `VITE_MUSIC_GATEWAY` 配置。
 
 Enhanced 固定为 `@neteasecloudmusicapienhanced/api@4.41.1`，以独立 systemd 服务监听 `127.0.0.1:3051`，通过 `/zephyrus/api/netease-enhanced/` 反代。歌曲取链沿用已验证的 `randomCNIP=true`；会员、版权及试听限制仍由网易云决定，不保证消除风控。
 
@@ -12,7 +12,7 @@ Enhanced 固定为 `@neteasecloudmusicapienhanced/api@4.41.1`，以独立 system
 2. `npm run build:web`，成功后 `py -u deploy_web.py` 发布 Web。
 3. `py -u deploy_netease_gateway.py announcement` 将本地公告首条合入线上列表，保留旧公告并以 HTTP 验证。
 
-网关部署备份保存在 `/opt/zephyrus-deploy-backups/<时间>/`，激活失败自动还原 Nginx、服务和版本软链接。用户可随时在设置中选择 Alger 回切。手动撤销服务前先让用户回切；恢复备份配置后先 `nginx -t` 再 reload。公告发布前备份线上文件到同目录的 `.backup-<时间>`。
+网关部署备份保存在 `/opt/zephyrus-deploy-backups/<时间>/`，激活失败自动还原 Nginx、服务和版本软链接。恢复备份配置后先运行 `nginx -t`，再重新加载 Nginx。公告发布前备份线上文件到同目录的 `.backup-<时间>`。
 
 2026-11-12 验证：请求方式与现有重试共 8 项单元测试通过；Edge 本地模拟接口验证切换、刷新持久化、实际 Axios 路由、移动端设置和第三张 Hero 跳转，运行异常为零。真实服务已验证歌曲详情、匿名试听取链和二维码生成；未验证用户扫码确认、会员完整音源或 iOS 真机。
 

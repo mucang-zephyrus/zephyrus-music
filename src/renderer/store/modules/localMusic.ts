@@ -11,13 +11,13 @@ import type { LocalMusicEntry } from '@/types/localMusic';
 
 // 扫描版本号，代码变更后递增可强制重新解析所有文件（解决封面/歌词提取逻辑变更后的缓存问题）
 const SCAN_VERSION = 5;
-import { isElectron } from '@/utils';
+
 import { removeStaleEntries } from '@/utils/localMusicUtils';
 
 const { message } = createDiscreteApi(['message']);
 
 /** 是否为移动端环境 */
-const isMobileNative = !isElectron && typeof (window as any).AndroidNative !== 'undefined';
+const isMobileNative = typeof (window as any).AndroidNative !== 'undefined';
 
 /** IndexedDB store 名称 */
 const LOCAL_MUSIC_STORE = 'local_music' as const;
@@ -113,10 +113,10 @@ export const useLocalMusicStore = defineStore(
     /**
      * 扫描所有已配置的文件夹
      * 流程：扫描文件 → 增量对比 → 解析变更文件元数据 → 存入 IndexedDB → 更新列表
-     * 自动适配 Electron (IPC) 和移动端 (NativeBridge)
+     * 支持浏览器导入和 Android 扫描
      */
     async function scanFolders(): Promise<void> {
-      if (scanning.value || folderPaths.value.length === 0) {
+      if (!isMobileNative || scanning.value || folderPaths.value.length === 0) {
         return;
       }
 
@@ -178,38 +178,6 @@ export const useLocalMusicStore = defineStore(
                   console.error('解析元数据失败:', uri, e);
                 }
               }
-            } else {
-              // ==================== Electron 桌面端扫描 ====================
-              const result = await window.api.scanLocalMusicWithStats(folderPath);
-
-              if ((result as any).error) {
-                console.error(`扫描文件夹失败: ${folderPath}`, (result as any).error);
-                message.error(`扫描失败: ${(result as any).error}`);
-                continue;
-              }
-
-              const { files } = result;
-              scanProgress.value += files.length;
-
-              const parseTargets: string[] = [];
-              for (const file of files) {
-                const cached = cachedMap.get(file.path);
-                if (forceRescan || !cached || cached.modifiedTime !== file.modifiedTime) {
-                  parseTargets.push(file.path);
-                }
-              }
-
-              if (parseTargets.length > 0) {
-                const metas = await window.api.parseLocalMusicMetadata(parseTargets);
-                for (const meta of metas) {
-                  const entry: LocalMusicEntry = {
-                    ...meta,
-                    id: generateId(meta.filePath)
-                  };
-                  await localDB.saveData(LOCAL_MUSIC_STORE, entry);
-                  cachedMap.set(entry.filePath, entry);
-                }
-              }
             }
           } catch (error) {
             console.error(`扫描文件夹出错: ${folderPath}`, error);
@@ -261,11 +229,7 @@ export const useLocalMusicStore = defineStore(
               const result = (window as any).AndroidNative.checkFileExists(entry.filePath);
               existsMap[entry.filePath] = result === 'true';
             } else {
-              const exists = await window.electron.ipcRenderer.invoke(
-                'check-file-exists',
-                entry.filePath
-              );
-              existsMap[entry.filePath] = exists !== false;
+              existsMap[entry.filePath] = true;
             }
           } catch {
             existsMap[entry.filePath] = true;
@@ -292,32 +256,6 @@ export const useLocalMusicStore = defineStore(
      * @param dirPath 歌词文件所在目录
      * @returns 绑定结果 { total: 歌词文件总数, matched: 匹配成功数 }
      */
-    async function bindLyricsFromDirectory(dirPath: string) {
-      const { batchSetLocalLyricPaths } = await import('@/utils/localLyricStorage');
-      const { parseLyricFilename, matchLyricsToSongs } = await import('@/utils/localMusicUtils');
-
-      // 1. 扫描目录下的歌词文件
-      const lyricFiles: string[] = await (window.electron as any).api.invoke(
-        'scan-lyric-files',
-        dirPath
-      );
-
-      // 2. 解析文件名
-      const parsed = lyricFiles.map((f) => ({
-        path: f,
-        ...parseLyricFilename(f)
-      }));
-
-      // 3. 匹配本地歌曲
-      const matches = matchLyricsToSongs(parsed, musicList.value);
-
-      // 4. 批量绑定
-      if (matches.length > 0) {
-        batchSetLocalLyricPaths(matches);
-      }
-
-      return { total: lyricFiles.length, matched: matches.length };
-    }
 
     /** 元数据写回文件成功后，用原生复检返回的新元数据更新 IndexedDB 与列表。 */
     async function applyEntryMetadata(metadataJson: string) {
@@ -349,7 +287,6 @@ export const useLocalMusicStore = defineStore(
       scanFolders,
       loadFromCache,
       clearCache,
-      bindLyricsFromDirectory,
       applyEntryMetadata
     };
   },

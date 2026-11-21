@@ -108,6 +108,7 @@
 </template>
 
 <script setup lang="ts">
+import { useMessage } from 'naive-ui';
 import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -121,6 +122,8 @@ import {
 import { useLocalMusicStore } from '@/store/modules/localMusic';
 import type { SongResult } from '@/types/music';
 import { compressImage } from '@/utils/imageCompress';
+
+const messageApi = useMessage();
 
 const props = defineProps<{
   show: boolean;
@@ -320,12 +323,12 @@ const save = async () => {
     if (result.metadata) {
       await localMusicStore.applyEntryMetadata(JSON.stringify(result.metadata));
     }
-    window.$message?.success(st('saved'));
+    messageApi.success(st('saved'));
     emit('saved');
     emit('update:show', false);
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
-    window.$message?.error(message.includes('不支持') ? st('unsupported') : st('saveFailed'));
+    messageApi.error(message.includes('不支持') ? st('unsupported') : st('saveFailed'));
   } finally {
     saving.value = false;
   }

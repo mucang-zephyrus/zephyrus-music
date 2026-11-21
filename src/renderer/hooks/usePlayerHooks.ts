@@ -12,7 +12,7 @@ import { readProviderLyricCache, writeProviderLyricCache } from '@/api/providerL
 import { playbackRequestManager } from '@/services/playbackRequestManager';
 import { SongSourceConfigManager } from '@/services/SongSourceConfigManager';
 import type { ILyric, ILyricText, LyricFormat, LyricSource, SongResult } from '@/types/music';
-import { getImgUrl, isElectron } from '@/utils';
+import { getImgUrl } from '@/utils';
 import { normalizeAudioUrl } from '@/utils/audioUrl';
 import { getImageLinearBackground } from '@/utils/linearColor';
 import { isUsableLyric } from '@/utils/lyricValidation';
@@ -21,57 +21,10 @@ import { mergeAuxiliaryLyrics, parseTimedLyrics } from '@/utils/timedLyrics';
 
 const { message } = createDiscreteApi(['message']);
 
-type DiskCacheResolveResult = {
-  url?: string;
-  cached?: boolean;
-  queued?: boolean;
-};
-
 /** 保持 useLyrics().parseLyrics 的旧返回结构，底层统一走新解析器。 */
 const parseLyrics = (lyricsString: string): { lyrics: ILyricText[]; times: number[] } => {
   const parsed = parseTimedLyrics(lyricsString);
   return { lyrics: parsed.lrcArray, times: parsed.lrcTimeArray };
-};
-
-const getSongArtistText = (songData: SongResult): string => {
-  if (songData?.ar?.length) {
-    return songData.ar.map((artist) => artist.name).join(' / ');
-  }
-
-  if (songData?.song?.artists?.length) {
-    return songData.song.artists.map((artist) => artist.name).join(' / ');
-  }
-
-  return '';
-};
-
-const resolveCachedPlaybackUrl = async (
-  url: string | null | undefined,
-  songData: SongResult
-): Promise<string | null | undefined> => {
-  if (!url || !isElectron || !/^https?:\/\//i.test(url)) {
-    // Web/Capacitor：网易云 CDN 常返回 http:// 地址，在 HTTPS 页面会被
-    // 混合内容拦截，统一升级为 https（music.126.net 支持 HTTPS）
-    return normalizeAudioUrl(url);
-  }
-
-  try {
-    const result = (await window.electron.ipcRenderer.invoke('resolve-cached-music-url', {
-      songId: Number(songData.id),
-      source: songData.source,
-      url,
-      title: songData.name,
-      artist: getSongArtistText(songData)
-    })) as DiskCacheResolveResult;
-
-    if (result?.url) {
-      return result.url;
-    }
-  } catch (error) {
-    console.warn('解析缓存播放地址失败，回退到在线地址:', error);
-  }
-
-  return url;
 };
 
 /**
@@ -97,7 +50,7 @@ export const getSongUrl = async (
 
     if (songData.playMusicUrl) {
       if (isDownloaded) return songData.playMusicUrl;
-      return await resolveCachedPlaybackUrl(songData.playMusicUrl, songData);
+      return normalizeAudioUrl(songData.playMusicUrl);
     }
 
     // QQ/酷狗等跨平台歌曲：开启开关时优先匹配网易云音源（酷狗歌单通常只提供
@@ -121,7 +74,7 @@ export const getSongUrl = async (
 
     // ==================== 哔哩哔哩（音频方式）====================
     // B 站没有音乐平台的曲库接口，直链需现场解析（含时效）。
-    // 桌面端由主进程直接请求；Web/Android 的播放地址已由 api 层换成网关中转地址。
+    // 播放地址由接口层转换为网关地址。
     if (songData.platform === 'bilibili' && songData.platformId) {
       const { getBilibiliAudioUrl } = await import('@/api/bilibili');
       const { url, expireAt } = await getBilibiliAudioUrl(songData);
@@ -163,7 +116,7 @@ export const getSongUrl = async (
               throw new Error('Request cancelled');
             }
             if (isDownloaded) return url;
-            return await resolveCachedPlaybackUrl(url, songData);
+            return normalizeAudioUrl(url);
           }
         } catch (error) {
           if ((error as Error).message === 'Request cancelled') throw error;
@@ -180,7 +133,7 @@ export const getSongUrl = async (
 
       if (res && res.data && res.data.data && res.data.data.url) {
         if (isDownloaded) return res.data.data as any;
-        return await resolveCachedPlaybackUrl(res.data.data.url, songData);
+        return normalizeAudioUrl(res.data.data.url);
       }
 
       // 跨平台解析失败，抛出错误（无法回退到网易云 API）
@@ -216,7 +169,7 @@ export const getSongUrl = async (
           customResult.data.data.url
         ) {
           if (isDownloaded) return customResult.data.data as any;
-          return await resolveCachedPlaybackUrl(customResult.data.data.url, songData);
+          return normalizeAudioUrl(customResult.data.data.url);
         } else {
           message.warning(i18n.global.t('player.reparse.customApiFailed'));
         }
@@ -240,7 +193,7 @@ export const getSongUrl = async (
         }
 
         if (res && res.data && res.data.data && res.data.data.url) {
-          return await resolveCachedPlaybackUrl(res.data.data.url, songData);
+          return normalizeAudioUrl(res.data.data.url);
         }
         console.warn('自定义音源解析失败，使用默认音源');
       } catch (error) {
@@ -273,11 +226,11 @@ export const getSongUrl = async (
         }
         if (isDownloaded) return res?.data?.data as any;
         const parsedUrl = res?.data?.data?.url || null;
-        return await resolveCachedPlaybackUrl(parsedUrl, songData);
+        return normalizeAudioUrl(parsedUrl);
       }
 
       if (isDownloaded) return songDetail as any;
-      return await resolveCachedPlaybackUrl(songDetail.url, songData);
+      return normalizeAudioUrl(songDetail.url);
     }
 
     const res = await getParsingMusicUrl(numericId, cloneDeep(songData));
@@ -287,7 +240,7 @@ export const getSongUrl = async (
     }
     if (isDownloaded) return res?.data?.data as any;
     const parsedUrl = res?.data?.data?.url || null;
-    return await resolveCachedPlaybackUrl(parsedUrl, songData);
+    return normalizeAudioUrl(parsedUrl);
   } catch (error) {
     if ((error as Error).message === 'Request cancelled') {
       throw error;
@@ -296,7 +249,7 @@ export const getSongUrl = async (
     const res = await getParsingMusicUrl(numericId, cloneDeep(songData));
     if (isDownloaded) return res?.data?.data as any;
     const parsedUrl = res?.data?.data?.url || null;
-    return await resolveCachedPlaybackUrl(parsedUrl, songData);
+    return normalizeAudioUrl(parsedUrl);
   }
 };
 
@@ -469,21 +422,11 @@ async function loadNeteaseProviderLyric(id: string | number): Promise<ILyric> {
     const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
     if (!Number.isFinite(numericId)) return emptyLyric();
     let lyricData: any;
-    if (isElectron) {
-      try {
-        lyricData = await window.electron.ipcRenderer.invoke('get-cached-lyric', numericId);
-      } catch (error) {
-        console.warn('读取磁盘歌词缓存失败:', error);
-      }
-    }
+
     if (!lyricData) {
       const response = await getMusicLrc(numericId);
       lyricData = response?.data?.data || response?.data || {};
-      if (isElectron && lyricData) {
-        void window.electron.ipcRenderer
-          .invoke('cache-lyric', numericId, lyricData)
-          .catch((error) => console.warn('写入磁盘歌词缓存失败:', error));
-      }
+
     }
     const hasYrc = Boolean(lyricData?.yrc?.lyric);
     const lyric = createProviderLyric(

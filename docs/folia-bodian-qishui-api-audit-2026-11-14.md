@@ -16,10 +16,7 @@ Folia 的 main 快照：`8941961e0bd84341ab4d4921983f20c8dbba6db2`，提交时�
 Folia 源码证据：
 
 - `src/services/onlineMusic/{bodian,qishui}/*Provider.ts`：能力声明及 UI 到平台操作的映射。
-- 同目录 `*Transport.ts`：只接受 `window.electron.bodianRequest/qishuiRequest`，Web 无此桥接时直接返回不可用。
-- `electron/{bodian,qishui}/*ApiBridge.cjs`：受限操作白名单、调用独立 npm 包、登记音频 URL。
-- `electron/{bodian,qishui}/session.cjs`：设备身份与会话持久化，使用系统加密。
-- `electron/{bodian,qishui}/mediaCors.cjs`：音频及已知图片域名的桌面跨域策略。
+- 同目录 `*Transport.ts` 依赖 Folia 的桌面桥接。桥接调用独立 Node.js 包，并负责会话与媒体请求。
 - 独立 npm 包 `src/{api,auth,catalog,library,playback}.cjs`：真实上游路径、鉴权及音频选取。
 
 可复查的固定源地址：
@@ -34,9 +31,9 @@ https://github.com/GSQZ/qishui-music-api/tree/924add376cadf8a2268f11999051eb976e
 
 ## 接入方式与可复用范围
 
-Folia 调用链：renderer provider → preload/IPC → Electron 主进程 bridge → 独立 Node.js 包 → 上游 API/CDN。
+Folia 调用链：renderer provider → 桌面桥接 → 独立 Node.js 包 → 上游 API/CDN。
 
-两包均为调用库，不自带 HTTP 服务，不是可以填入前端配置的公共网关。协议不依赖 Folia renderer，适合由 Zephyrus 网关封装；不能将 Electron 的跨域放行机制直接迁移到浏览器。
+两包均为调用库，不自带 HTTP 服务，不是可以填入前端配置的公共网关。协议不依赖 Folia renderer，适合由 Zephyrus 网关封装；不能将 桌面客户端的跨域放行机制直接迁移到浏览器。
 
 建议 Web/PWA 和 Android 共用现有平台网关，桌面可按现有 IPC 架构接入同一平台适配层。该建议尚未实施。服务端应按 Zephyrus 登录用户、平台账号及设备身份隔离实例和 session，避免把 Folia 单机实例变成所有用户共享的上游账号。前端仅持有 Zephyrus 的会话引用，不接收汽水 guard 私钥或波点原始 token。
 
@@ -177,6 +174,6 @@ Folia 只开放 standard 音质。包主动跳过 encrypt/PlayAuth 等受保护�
 4. 歌词接入现有 parseTimedLyrics/智能显示整理入口。汽水 KRC 可复用现有 krcParser，但仍需核对时基；波点 AWLRC 需要核对其行时间与词时间格式后适配，不能直接当 KRC 或 YRC。原文、翻译和逐字轨应保持来源及时间索引一致。
 5. 登录→账号信息→个人歌单→喜欢列表→账号写入依次接入。波点只能提供当前包支持的账号公开字段；汽水 VIP 标志只用于显示，不推导高音质权限。未知或失败的喜欢列表不作为完整空列表覆盖同步数据。
 6. 目录与推荐按能力显示：波点支持专辑与歌手专辑，汽水关闭不可用专辑入口、歌手全量曲库和未实现操作。评论与 MV 继续使用已有明确来源或隐藏，不把平台不支持当作接口故障。
-7. Web 媒体代理处理 Range、206、Content-Range、Content-Type、CORS 及 URL 有效期；只代理服务端已签发或允许的媒体资源。Web/PWA、Android、桌面分别验收，不能用 Folia 的 Electron 跨域策略代替。
+7. Web 媒体代理处理 Range、206、Content-Range、Content-Type、CORS 及 URL 有效期；只代理服务端已签发或允许的媒体资源。在 Web/PWA 和 Android 上分别验收。
 
 推荐实施顺序：匿名播放闭环 → 扫码与曲库 → 收藏写入 → 目录及推荐。验收时补充真实账号扫码、会话恢复／过期、来源切换、试听和账号切换中的在途请求；本次没有验证这些账号功能。

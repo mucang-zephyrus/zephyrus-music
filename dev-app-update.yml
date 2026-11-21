@@ -1,4 +1,0 @@
-provider: github
-owner: mucang-zephyrus
-repo: zephyrus-music
-updaterCacheDirName: electron-lan-file-updater

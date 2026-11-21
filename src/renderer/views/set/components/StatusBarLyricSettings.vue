@@ -206,6 +206,7 @@
 </template>
 
 <script setup lang="ts">
+import { useMessage } from 'naive-ui';
 import { useDebounceFn } from '@vueuse/core';
 import type { Ref } from 'vue';
 import { computed, inject, onBeforeUnmount, reactive, ref, watch } from 'vue';
@@ -229,6 +230,8 @@ import {
   type StatusBarLyricConfig
 } from '@/types/lyric';
 import { BUILTIN_FONTS } from '@/types/share';
+
+const messageApi = useMessage();
 
 type ColorKey = 'sung' | 'current' | 'upcoming' | 'fill' | 'border';
 const emit = defineEmits<{ 'update:enabled': [enabled: boolean] }>();
@@ -337,7 +340,7 @@ const setEnabled = (enabled: boolean) => {
   config.enabled = enabled;
   if (enabled && !hasStatusBarLyricPermission()) {
     requestStatusBarLyricPermission();
-    window.$message?.info(st('permissionHint'));
+    messageApi.info(st('permissionHint'));
   }
 };
 
@@ -366,9 +369,9 @@ const importFont = async (event: Event) => {
     const id = await installStatusBarLyricFont(file);
     config.font.source = 'imported';
     config.font.id = id;
-    window.$message?.success(`${st('installed')} ${file.name}`);
+    messageApi.success(`${st('installed')} ${file.name}`);
   } catch (error) {
-    window.$message?.error(error instanceof Error ? error.message : st('installFailed'));
+    messageApi.error(error instanceof Error ? error.message : st('installFailed'));
   } finally {
     input.value = '';
   }

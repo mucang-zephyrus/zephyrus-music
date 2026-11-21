@@ -93,10 +93,6 @@ export default {
     albumBgVivid: '高彩度（カバー準拠）'
   },
   playback: {
-    neteaseRequestMode: 'NetEase API のリクエスト方式',
-    neteaseRequestModeDesc: '再生や読み込みに問題がある場合に切り替えます。この端末に保存され、次のリクエストから有効になります。Enhanced はオンラインゲートウェイを使用し、会員・権利の制限は引き続き適用されます。',
-    neteaseAlger: 'Alger（従来方式）',
-    neteaseEnhanced: 'Enhanced（xeapi）',
     quality: '音質設定',
     qualityDesc: '音楽再生の音質を選択（NetEase Cloud VIP）',
     qualityOptions: {

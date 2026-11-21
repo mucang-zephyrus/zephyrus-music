@@ -16,20 +16,17 @@ import {
 } from '@/services/lyricMergePolicy';
 import { writePlayerSessionSnapshot } from '@/services/playbackSnapshot';
 import { smartMixService } from '@/services/smartMixService';
-import { ttmlToTimedLines } from '@/services/ttmlParser';
 import type { usePlayerStore } from '@/store';
 import { useAmllStore } from '@/store/modules/amll';
 import { useTransitionStore } from '@/store/modules/transition';
 import type { Artist, ILyric, ILyricText, SongResult } from '@/types/music';
-import { isElectron } from '@/utils';
+
 import { getTextColors } from '@/utils/linearColor';
-import { projectCreditLyrics, projectCreditTtml } from '@/utils/lyricCredits';
+import { projectCreditLyrics } from '@/utils/lyricCredits';
 import { createLyricDisplayPipeline } from '@/utils/lyricDisplayPipeline';
 import { buildLyricHoverTimeline, resolveLyricHoverPreview } from '@/utils/lyricHoverPreview';
 import { findStartedTimedLineIndex } from '@/utils/timedLyricProgress';
 import { parseLyrics } from '@/utils/yrcParser';
-
-const windowData = window as any;
 
 // 全局 playerStore 引用，通过 initMusicHook 函数注入
 let playerStore: ReturnType<typeof usePlayerStore> | null = null;
@@ -48,7 +45,6 @@ export const initMusicHook = (store: ReturnType<typeof usePlayerStore>) => {
   setupKeyboardListeners();
   setupMusicWatchers();
   setupCorrectionTimeWatcher();
-  setupPlayStateWatcher();
 };
 
 // 获取 playerStore 的辅助函数
@@ -68,7 +64,6 @@ export const allTime = ref(0); // 总播放时间
 export const nowIndex = ref(0); // 当前播放歌词
 export const currentLrcProgress = ref(0); // 来存储当前歌词的进度
 export const sound = ref<AudioHandle | null>(audioService.getCurrentSound());
-export const isLyricWindowOpen = ref(false); // 新增状态
 export const textColors = ref<any>(getTextColors());
 
 // 这些 computed 属性需要在初始化后创建
@@ -233,7 +228,7 @@ const setupMusicWatchers = () => {
         0,
         findStartedTimedLineIndex(lrcTimeArray.value, nowTime.value + correctionTime.value)
       );
-      if (isElectron && isLyricWindowOpen.value) sendLyricToWin();
+
     },
     { immediate: true, deep: true }
   );
@@ -332,9 +327,7 @@ const setupAudioListeners = () => {
         if (newIndex !== nowIndex.value) {
           nowIndex.value = newIndex;
           currentLrcProgress.value = 0; // 换行时重置进度
-          if (isElectron && isLyricWindowOpen.value) {
-            sendLyricToWin();
-          }
+
         }
 
         // === 逐字歌词行内进度 ===
@@ -348,20 +341,6 @@ const setupAudioListeners = () => {
 
         // === 节流发送轻量歌词进度更新（每 ~200ms / 约每 4 个 tick）===
         lyricThrottleCounter++;
-        if (isElectron && isLyricWindowOpen.value && lyricThrottleCounter % 4 === 0) {
-          try {
-            window.api.sendLyric(
-              JSON.stringify({
-                type: 'update',
-                nowIndex: desktopLyricIndex(),
-                nowTime: nowTime.value,
-                isPlay: getPlayerStore().play
-              })
-            );
-          } catch {
-            // 忽略发送失败
-          }
-        }
 
         // === localStorage 进度保存（每 ~2 秒）===
         if (
@@ -426,9 +405,7 @@ const setupAudioListeners = () => {
           const newIndex = getLrcIndex(nowTime.value);
           if (newIndex !== nowIndex.value) {
             nowIndex.value = newIndex;
-            if (isElectron && isLyricWindowOpen.value) {
-              sendLyricToWin();
-            }
+
           }
         }
       }
@@ -460,9 +437,7 @@ const setupAudioListeners = () => {
   // 监听播放
   audioService.on('play', () => {
     getPlayerStore().setPlayMusic(true);
-    if (isElectron) {
-      window.api.sendSong(cloneDeep(getPlayerStore().playMusic));
-    }
+
     // 启动进度更新
     startProgressInterval();
   });
@@ -471,9 +446,7 @@ const setupAudioListeners = () => {
   audioService.on('pause', () => {
     getPlayerStore().setPlayMusic(false);
     clearInterval();
-    if (isElectron && isLyricWindowOpen.value) {
-      sendLyricToWin();
-    }
+
   });
 
   const replayMusic = async (retryCount: number = 0) => {
@@ -904,220 +877,14 @@ export const getLrcTimeRange = (index: number) => ({
 watch(
   () => displayLrcArray.value,
   () => {
-    if (isElectron && isLyricWindowOpen.value) {
-      sendLyricToWin();
-    }
+
   }
 );
-
-const desktopLyricLines = computed(() => {
-  const provider = displayLrcArray.value;
-  if (!isElectron || !playMusic?.value) return provider;
-  const store = useAmllStore();
-  const source = resolveAmllSource(playMusic.value);
-  if (!source || store.currentSource !== `${source.platform}:${source.songId}`) return provider;
-  const ttml = projectCreditTtml(store.ttmlLyric, lyricCreditConfig.value);
-  if (!ttml) return provider;
-  const lines = ttmlToTimedLines(ttml);
-  // Explicit gap rows keep the native window from extending a TTML line.
-  return lines.flatMap((line, index) => {
-    const end = (line.startTime || 0) + (line.duration || 0);
-    const next = lines[index + 1]?.startTime ?? Infinity;
-    return end < next ? [line, { text: '', trText: '', startTime: end, duration: 0 }] : [line];
-  });
-});
-const desktopLyricTimes = computed(() =>
-  desktopLyricLines.value.map((line, index) =>
-    line.startTime != null ? line.startTime / 1000 : lrcTimeArray.value[index] || 0
-  )
-);
-const desktopLyricIndex = () =>
-  findStartedTimedLineIndex(desktopLyricTimes.value, nowTime.value + correctionTime.value);
-watch(desktopLyricLines, () => {
-  if (isElectron && isLyricWindowOpen.value) sendLyricToWin();
-});
-
-// 发送歌词更新数据
-export const sendLyricToWin = () => {
-  if (!isElectron || !isLyricWindowOpen.value) {
-    return;
-  }
-
-  // 检查是否有播放的歌曲
-  if (!playMusic.value || !playMusic.value.id) {
-    return;
-  }
-
-  try {
-    // 记录歌词发送状态
-    if (desktopLyricLines.value.some((line) => line.text.trim())) {
-      const nowIndex = desktopLyricIndex();
-      // 构建完整的歌词更新数据
-      const updateData = {
-        type: 'full',
-        nowIndex,
-        nowTime: nowTime.value,
-        startCurrentTime: desktopLyricTimes.value[nowIndex] || 0,
-        nextTime: desktopLyricTimes.value[nowIndex + 1] || 0,
-        isPlay: getPlayerStore().play,
-        lrcArray: desktopLyricLines.value,
-        lrcTimeArray: desktopLyricTimes.value,
-        lyricMergeContext:
-          desktopLyricLines.value === displayLrcArray.value ? currentLyricMergeContext.value : null,
-        allTime: allTime.value,
-        playMusic: playMusic.value
-      };
-
-      // 发送数据到歌词窗口
-      window.api.sendLyric(JSON.stringify(updateData));
-    } else {
-      // 发送没有歌词的提示
-      const emptyLyricData = {
-        type: 'empty',
-        nowIndex: 0,
-        nowTime: nowTime.value,
-        startCurrentTime: 0,
-        nextTime: 0,
-        isPlay: getPlayerStore().play,
-        lrcArray: [{ text: '当前歌曲暂无歌词', trText: '' }],
-        lrcTimeArray: [0],
-        allTime: allTime.value,
-        playMusic: playMusic.value
-      };
-      window.api.sendLyric(JSON.stringify(emptyLyricData));
-    }
-  } catch (error) {
-    console.error('Error sending lyric update:', error);
-  }
-};
-
-// 歌词同步定时器
-let lyricSyncInterval: any = null;
-
-// 开始歌词同步
-const startLyricSync = () => {
-  // 清除已有的定时器
-  if (lyricSyncInterval) {
-    clearInterval(lyricSyncInterval);
-  }
-
-  // 每秒同步一次歌词数据
-  lyricSyncInterval = setInterval(() => {
-    if (isElectron && isLyricWindowOpen.value && getPlayerStore().play && playMusic.value?.id) {
-      // 发送当前播放进度的更新
-      try {
-        const updateData = {
-          type: 'update',
-          nowIndex: desktopLyricIndex(),
-          nowTime: nowTime.value,
-          isPlay: getPlayerStore().play
-        };
-        window.api.sendLyric(JSON.stringify(updateData));
-      } catch (error) {
-        console.error('发送歌词进度更新失败:', error);
-      }
-    }
-  }, 1000);
-};
-
-// 停止歌词同步
-const stopLyricSync = () => {
-  if (lyricSyncInterval) {
-    clearInterval(lyricSyncInterval);
-    lyricSyncInterval = null;
-  }
-};
-
-// 修改openLyric函数，添加定时同步
-export const openLyric = () => {
-  if (!isElectron) return;
-
-  // 检查是否有播放中的歌曲
-  if (!playMusic.value || !playMusic.value.id) {
-    return;
-  }
-
-  isLyricWindowOpen.value = !isLyricWindowOpen.value;
-  if (isLyricWindowOpen.value) {
-    // 立即打开窗口
-    window.api.openLyric();
-
-    // 歌词数据将在 lyric-window-ready 回调中发送（窗口加载完成后）
-    // 保留 setTimeout 作为兜底，防止 lyric-window-ready 丢失
-    setTimeout(() => {
-      if (isLyricWindowOpen.value) {
-        sendLyricToWin();
-      }
-    }, 800);
-
-    // 启动歌词同步
-    startLyricSync();
-  } else {
-    closeLyric();
-    // 停止歌词同步
-    stopLyricSync();
-  }
-};
-
-// 修改closeLyric函数，确保停止定时同步
-export const closeLyric = () => {
-  if (!isElectron) return;
-  isLyricWindowOpen.value = false; // 确保状态更新
-  windowData.electron.ipcRenderer.send('close-lyric');
-
-  // 停止歌词同步
-  stopLyricSync();
-};
-
-// 设置播放状态监听器
-const setupPlayStateWatcher = () => {
-  // 在组件挂载时设置对播放状态的监听
-  watch(
-    () => getPlayerStore().play,
-    (isPlaying) => {
-      // 如果歌词窗口打开，根据播放状态控制同步
-      if (isElectron && isLyricWindowOpen.value) {
-        if (isPlaying) {
-          startLyricSync();
-        } else {
-          // 如果暂停播放，发送一次暂停状态的更新
-          const pauseData = {
-            type: 'update',
-            isPlay: false
-          };
-          window.api.sendLyric(JSON.stringify(pauseData));
-        }
-      }
-    }
-  );
-};
 
 // 导出歌词解析函数供外部使用
 export { parseLyricsString };
 
 // 添加播放控制命令监听
-if (isElectron) {
-  windowData.electron.ipcRenderer.on('lyric-control-back', (_, command: string) => {
-    switch (command) {
-      case 'playpause':
-        if (getPlayerStore().playMusic?.id) {
-          void getPlayerStore().setPlay({ ...getPlayerStore().playMusic });
-        }
-        break;
-      case 'prev':
-        getPlayerStore().prevPlay();
-        break;
-      case 'next':
-        getPlayerStore().nextPlay();
-        break;
-      case 'close':
-        isLyricWindowOpen.value = false; // 确保状态更新
-        break;
-      default:
-        break;
-    }
-  });
-}
 
 // 在组件挂载时设置监听器
 export const initAudioListeners = async () => {
@@ -1152,17 +919,6 @@ export const initAudioListeners = async () => {
     setupAudioListeners();
 
     // 监听歌词窗口事件
-    if (isElectron) {
-      window.api.onLyricWindowClosed(() => {
-        isLyricWindowOpen.value = false;
-      });
-      // 歌词窗口 Vue 加载完成后，发送完整歌词数据
-      window.api.onLyricWindowReady(() => {
-        if (isLyricWindowOpen.value) {
-          sendLyricToWin();
-        }
-      });
-    }
 
     // 获取最新的音频实例
     const finalSound = audioService.getCurrentSound();

@@ -51,9 +51,7 @@ async function open() {
   });
   // Called directly by the user's click, preserving transient browser activation.
   try {
-    const value = window.api?.readMusicShareClipboard
-      ? await window.api.readMusicShareClipboard()
-      : await navigator.clipboard.readText();
+    const value = await navigator.clipboard.readText();
     if (token === generation && visible.value) text.value = value.slice(0, 65536);
   } catch {
     if (token === generation && visible.value) status.value = t('share.import.pasteManually');

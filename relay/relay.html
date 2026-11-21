@@ -529,7 +529,7 @@
   <audio id="audio" preload="auto" crossorigin="anonymous"></audio>
 
   <script>
-    var API_BASE = '/zephyrus/api';
+    var API_BASE = '/zephyrus/api/netease-enhanced';
     var LOGO_URL = '/zephyrus/logo.png?v=2';
     var WEB_BASE = 'https://www.mucang.xyz/zephyrus/web/';
     var DEEP_LINK = '';
@@ -740,7 +740,7 @@
         });
 
         try {
-          var urlData = await fetchJSON(API_BASE + '/song/url/v1?id=' + songId + '&level=standard');
+          var urlData = await fetchJSON(API_BASE + '/song/url/v1?id=' + songId + '&level=standard&randomCNIP=true');
           var urlInfo = urlData.data && urlData.data[0];
           if (urlInfo && urlInfo.url) setupPlayer(urlInfo.url);
         } catch (e) { /* 试听不可用不影响主流程 */ }

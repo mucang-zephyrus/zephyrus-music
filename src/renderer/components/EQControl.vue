@@ -11,7 +11,7 @@
     <div class="eq-header flex justify-between items-center mb-4">
       <h3 class="text-base font-semibold" style="color: var(--m-text-primary, #f0ece4)">
         {{ t('player.eq.title') }}
-        <n-tag type="warning" size="small" round v-if="!isElectron">
+        <n-tag type="warning" size="small" round>
           桌面版可用，网页端不支持
         </n-tag>
       </h3>
@@ -140,7 +140,6 @@ import { onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { audioService } from '@/services/audioService';
-import { isElectron } from '@/utils';
 
 const { t } = useI18n();
 

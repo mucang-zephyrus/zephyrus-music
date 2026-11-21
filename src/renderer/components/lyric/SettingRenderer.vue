@@ -114,21 +114,8 @@ const emit = defineEmits<{
 }>();
 
 const showFontDropdown = ref(false);
-const systemFontOptions = ref<string[]>([]);
-
-// 获取系统字体列表
-async function loadSystemFonts() {
-  try {
-    const fonts = await window.api.invoke('get-system-fonts');
-    if (Array.isArray(fonts) && fonts.length > 0) {
-      systemFontOptions.value = fonts;
-    }
-  } catch {
-    systemFontOptions.value = ['PingFang SC', 'Microsoft YaHei', 'SimHei', 'Arial', 'Helvetica'];
-  }
-}
-
-loadSystemFonts();
+const systemFontOptions = ['Noto Serif SC', 'PingFang SC', 'Microsoft YaHei', 'SimHei'];
+const fontDropdownRef = ref<HTMLElement | null>(null);
 
 function sliderPct(val: number, min: number, max: number): string {
   return `${((val - min) / (max - min)) * 100}%`;

@@ -17,7 +17,6 @@ import {
   MusicSourceStrategyFactory} from '@/api/musicParser';
 import { useSettingsStore } from '@/store';
 import type { SongResult } from '@/types/music';
-import { isElectron } from '@/utils';
 
 /**
  * 来源标签类型
@@ -172,12 +171,9 @@ export async function probeSongSource(song: SongResult): Promise<SourceLabel> {
   probingSet.add(songId);
 
   try {
-    // 非 Electron 环境无法使用解锁策略
-    if (!isElectron) {
-      const label: SourceLabel = 'none';
-      probeCache.set(songId, label);
-      return label;
-    }
+    const label: SourceLabel = 'none';
+    probeCache.set(songId, label);
+    return label;
 
     let settingsStore: any;
     try {

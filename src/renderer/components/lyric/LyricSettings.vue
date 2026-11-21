@@ -465,6 +465,7 @@
 </template>
 
 <script setup lang="ts">
+import { useMessage } from 'naive-ui';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
@@ -488,7 +489,7 @@ const { t } = useI18n();
 const { primaryColor } = useCoverColor();
 const config = ref<LyricConfig>({ ...DEFAULT_LYRIC_CONFIG });
 const emit = defineEmits(['themeChange']);
-const message = window.$message;
+const message = useMessage();
 const fileInput = ref<HTMLInputElement>();
 const tr = (key: string, fallback: string) => {
   const value = t(key);
@@ -536,7 +537,6 @@ const showMiniPlayBar = computed({
   }
 });
 
-const systemFontOptions = ref<string[]>(['PingFang SC', 'Microsoft YaHei', 'SimHei']);
 
 const showFontDropdown = ref(false);
 const fontDropdownRef = ref<HTMLElement | null>(null);
@@ -548,14 +548,6 @@ function handleClickOutside(e: MouseEvent) {
 }
 
 onMounted(async () => {
-  try {
-    const fonts = await window.api.invoke('get-system-fonts');
-    if (Array.isArray(fonts) && fonts.length > 0) {
-      systemFontOptions.value = fonts;
-    }
-  } catch {
-    // 保留默认列表
-  }
   document.addEventListener('click', handleClickOutside);
 });
 

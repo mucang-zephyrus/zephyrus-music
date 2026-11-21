@@ -530,7 +530,7 @@ import { useSettingsStore } from '@/store/modules/settings';
 import { useUserStore } from '@/store/modules/user';
 import type { SongResult } from '@/types/music';
 import type { MobilePlayerStyleKey, PlayerStyleCustomConfig } from '@/types/playerStyle';
-import { isElectron } from '@/utils';
+
 import { applyTheme } from '@/utils/theme';
 import StatusBarLyricSettings from '@/views/set/components/StatusBarLyricSettings.vue';
 
@@ -585,11 +585,7 @@ function handleAgreementAgree() {
 }
 
 function handleAgreementDecline() {
-  if (isElectron) {
-    window.api?.quitApp?.();
-  } else {
-    window.close();
-  }
+  window.close();
 }
 
 // ==================== 步骤定义 ====================
@@ -777,7 +773,7 @@ function restoreFolderPickHandler() {
 async function pickLocalFolder() {
   if (folderPicking.value) return;
   // 纯浏览器环境（Web 版）没有文件夹访问能力
-  if (!isElectron && !(window as any).AndroidNative) return;
+  if (!(window as any).AndroidNative) return;
   folderPicking.value = true;
   try {
     (window as any).AndroidNative.pickAudioFolder();

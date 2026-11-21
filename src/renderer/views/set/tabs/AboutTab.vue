@@ -8,10 +8,6 @@
             {{ t('settings.about.hasUpdate') }} {{ updateInfo.latestVersion }}
           </n-tag>
         </div>
-        <div v-if="hasManualUpdateFallback" class="mt-2 text-xs text-amber-600">
-          <i class="ri-information-line mr-1"></i>
-          {{ appUpdateState.errorMessage || t('settings.about.messages.checkError') }}
-        </div>
       </template>
       <template #action>
         <div class="flex items-center gap-2 flex-wrap">
@@ -20,9 +16,6 @@
           </s-btn>
           <s-btn v-if="updateInfo.hasUpdate" variant="primary" @click="openReleasePage">
             {{ t('settings.about.gotoUpdate') }}
-          </s-btn>
-          <s-btn v-if="hasManualUpdateFallback" variant="ghost" @click="openManualUpdatePage">
-            {{ t('settings.about.manualUpdate') }}
           </s-btn>
         </div>
       </template>
@@ -166,27 +159,24 @@
 
 <script setup lang="ts">
 import { marked } from 'marked';
-import { computed, inject, ref } from 'vue';
+import { inject, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { type FeedbackResult, type FeedbackType, submitFeedback } from '@/api/feedback';
 import { openUpdateModal } from '@/composables/useUpdateModal';
-import { useSettingsStore } from '@/store/modules/settings';
-import { isElectron } from '@/utils';
+
 import { checkUpdate, UpdateResult } from '@/utils/update';
 
 import licenseText from '../../../../../LICENSE?raw';
 import config from '../../../../../package.json';
 import readmeText from '../../../../../README.md?raw';
 import userAgreementText from '../../../../../用户协议.md?raw';
-import { APP_UPDATE_STATUS, hasAvailableAppUpdate } from '../../../../shared/appUpdate';
 import { SETTINGS_MESSAGE_KEY } from '../keys';
 import SBtn from '../SBtn.vue';
 import SettingItem from '../SettingItem.vue';
 import SettingSection from '../SettingSection.vue';
 
 const { t } = useI18n();
-const settingsStore = useSettingsStore();
 const message = inject(SETTINGS_MESSAGE_KEY)!;
 
 const checking = ref(false);
@@ -212,51 +202,11 @@ const webUpdateInfo = ref<UpdateResult>({
   releaseInfo: null
 });
 
-const appUpdateState = computed(() => settingsStore.appUpdateState);
-const hasAppUpdate = computed(() => hasAvailableAppUpdate(appUpdateState.value));
-const hasManualUpdateFallback = computed(
-  () => isElectron && appUpdateState.value.status === APP_UPDATE_STATUS.error
-);
-
-const updateInfo = computed<UpdateResult>(() => {
-  if (!isElectron) {
-    return webUpdateInfo.value;
-  }
-
-  return {
-    hasUpdate: hasAppUpdate.value,
-    latestVersion: appUpdateState.value.availableVersion ?? '',
-    currentVersion: `v${config.version}`,
-    releaseInfo: appUpdateState.value.availableVersion
-      ? {
-          tag_name: appUpdateState.value.availableVersion,
-          body: appUpdateState.value.releaseNotes,
-          html_url: appUpdateState.value.releasePageUrl,
-          assets: []
-        }
-      : null
-  };
-});
+const updateInfo = webUpdateInfo;
 
 const checkForUpdates = async (isClick = false) => {
   checking.value = true;
   try {
-    if (isElectron) {
-      const result = await window.api.checkAppUpdate(isClick);
-      settingsStore.setAppUpdateState(result);
-
-      if (hasAvailableAppUpdate(result)) {
-        if (isClick) {
-          settingsStore.setShowUpdateModal(true);
-        }
-      } else if (result.status === APP_UPDATE_STATUS.notAvailable && isClick) {
-        message.success(t('settings.about.latest'));
-      } else if (result.status === APP_UPDATE_STATUS.error && isClick) {
-        message.error(result.errorMessage || t('settings.about.messages.checkError'));
-      }
-
-      return;
-    }
 
     const result = await checkUpdate(config.version);
     if (result) {
@@ -281,22 +231,9 @@ const checkForUpdates = async (isClick = false) => {
 };
 
 const openReleasePage = () => {
-  if (isElectron) {
-    settingsStore.setShowUpdateModal(true);
-    return;
-  }
 
   // 移动端：打开应用内更新弹窗（展示更新内容 + 应用内下载安装）
   openUpdateModal(updateInfo.value);
-};
-
-const openManualUpdatePage = async () => {
-  if (isElectron) {
-    await window.api.openAppUpdatePage();
-    return;
-  }
-
-  window.open(updateInfo.value.releaseInfo?.html_url || config.homepage);
 };
 
 const openAuthor = () => {

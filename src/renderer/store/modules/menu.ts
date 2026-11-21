@@ -3,7 +3,6 @@ import { computed, ref } from 'vue';
 
 import homeRouter from '@/router/home';
 import { useSettingsStore } from '@/store/modules/settings';
-import { isElectron } from '@/utils';
 
 export const useMenuStore = defineStore('menu', () => {
   const allMenus = ref(homeRouter);
@@ -14,11 +13,8 @@ export const useMenuStore = defineStore('menu', () => {
       return allMenus.value.filter((item) => item.meta?.bottomNav === true);
     }
 
-    // 基础过滤：Electron 专属、侧边栏隐藏、移动端
+    // 基础过滤：侧边栏隐藏、移动端
     let filtered = allMenus.value.filter((item) => {
-      if ((item.meta as any)?.electronOnly && !isElectron) {
-        return false;
-      }
       if (item.meta?.hideInSidebar) {
         return false;
       }

@@ -3,18 +3,6 @@
     <setting-section :title="t('settings.sections.playback')">
       <ios-audio-protection-settings class="mb-4" />
       <setting-item
-        item-id="netease-request-mode"
-        :title="t('settings.playback.neteaseRequestMode')"
-        :description="t('settings.playback.neteaseRequestModeDesc')"
-      >
-        <s-select
-          :model-value="normalizeNeteaseRequestMode(setData.neteaseRequestMode)"
-          :options="neteaseRequestOptions"
-          width="w-56 max-md:w-full"
-          @update:model-value="changeNeteaseRequestMode"
-        />
-      </setting-item>
-      <setting-item
         :title="t('settings.playback.quality')"
         :description="t('settings.playback.qualityDesc')"
       >
@@ -23,42 +11,6 @@
           :options="qualityOptions"
           width="w-40 max-md:w-full"
         />
-      </setting-item>
-
-      <setting-item v-if="isElectron" :title="t('settings.playback.musicSources')">
-        <template #description>
-          <div class="flex items-center gap-2">
-            <n-switch v-model:value="setData.enableMusicUnblock">
-              <template #checked>{{ t('common.on') }}</template>
-              <template #unchecked>{{ t('common.off') }}</template>
-            </n-switch>
-            <span>{{ t('settings.playback.musicUnblockEnableDesc') }}</span>
-          </div>
-          <div v-if="setData.enableMusicUnblock" class="mt-2 text-sm">
-            <span class="text-gray-500">{{ t('settings.playback.selectedMusicSources') }}</span>
-            <span v-if="musicSources.length > 0" class="text-gray-400">{{
-              musicSources.join(', ')
-            }}</span>
-            <span v-else class="text-red-500 text-xs">{{
-              t('settings.playback.noMusicSources')
-            }}</span>
-          </div>
-        </template>
-        <s-btn :disabled="!setData.enableMusicUnblock" @click="showMusicSourcesModal = true">
-          {{ t('settings.playback.configureMusicSources') }}
-        </s-btn>
-      </setting-item>
-
-      <setting-item
-        v-if="platform === 'darwin'"
-        mode="direct"
-        :title="t('settings.playback.showStatusBar')"
-        :description="t('settings.playback.showStatusBarContent')"
-      >
-        <n-switch v-model:value="setData.showTopAction">
-          <template #checked>{{ t('common.on') }}</template>
-          <template #unchecked>{{ t('common.off') }}</template>
-        </n-switch>
       </setting-item>
 
       <setting-item
@@ -83,13 +35,6 @@
         </n-switch>
       </setting-item>
 
-      <setting-item
-        v-if="isElectron"
-        :title="t('settings.playback.audioDevice')"
-        :description="t('settings.playback.audioDeviceDesc')"
-      >
-        <audio-device-settings />
-      </setting-item>
     </setting-section>
 
     <setting-section title="智能过渡">
@@ -101,54 +46,25 @@
     <!-- 后台保活（原独立分区,并入播放设置） -->
     <keep-alive-tab />
 
-    <music-source-settings
-      v-if="isElectron"
-      v-model:show="showMusicSourcesModal"
-      v-model:sources="musicSources"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, inject, ref } from 'vue';
+import { computed, inject } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-import AudioDeviceSettings from '@/components/settings/AudioDeviceSettings.vue';
 import IosAudioProtectionSettings from '@/components/settings/IosAudioProtectionSettings.vue';
-import MusicSourceSettings from '@/components/settings/MusicSourceSettings.vue';
 import SmartMixSettings from '@/components/settings/SmartMixSettings.vue';
-import { useSettingsStore } from '@/store/modules/settings';
-import { type Platform } from '@/types/music';
-import { isElectron } from '@/utils';
-import { normalizeNeteaseRequestMode } from '@/utils/neteaseRequestMode';
+
 
 import { SETTINGS_DATA_KEY } from '../keys';
-import SBtn from '../SBtn.vue';
 import SettingItem from '../SettingItem.vue';
 import SettingSection from '../SettingSection.vue';
 import SSelect from '../SSelect.vue';
 import KeepAliveTab from './KeepAliveTab.vue';
 
-const ALL_PLATFORMS: Platform[] = ['migu', 'kugou', 'kuwo', 'pyncmd'];
-
 const { t } = useI18n();
 const setData = inject(SETTINGS_DATA_KEY)!;
-const settingsStore = useSettingsStore();
-const platform = window.electron ? window.electron.ipcRenderer.sendSync('get-platform') : 'web';
-
-const showMusicSourcesModal = ref(false);
-
-const neteaseRequestOptions = computed(() => [
-  { label: t('settings.playback.neteaseAlger'), value: 'alger' },
-  { label: t('settings.playback.neteaseEnhanced'), value: 'enhanced' }
-]);
-
-function changeNeteaseRequestMode(value: string | number | boolean) {
-  setData.value = { ...setData.value, neteaseRequestMode: normalizeNeteaseRequestMode(value) };
-  // Persist immediately so returning to playback or refreshing uses the chosen backend.
-  settingsStore.setSetData(setData.value);
-}
-
 const qualityOptions = computed(() => [
   { label: t('settings.playback.qualityOptions.standard'), value: 'standard' },
   { label: t('settings.playback.qualityOptions.higher'), value: 'higher' },
@@ -160,15 +76,4 @@ const qualityOptions = computed(() => [
   { label: t('settings.playback.qualityOptions.dolby'), value: 'dolby' },
   { label: t('settings.playback.qualityOptions.jymaster'), value: 'jymaster' }
 ]);
-
-const musicSources = computed({
-  get: () => {
-    if (!setData.value.enabledMusicSources) return ALL_PLATFORMS;
-    return setData.value.enabledMusicSources as Platform[];
-  },
-  set: (newValue: Platform[]) => {
-    const valuesToSet = newValue.length > 0 ? [...new Set(newValue)] : ALL_PLATFORMS;
-    setData.value = { ...setData.value, enabledMusicSources: valuesToSet };
-  }
-});
 </script>

@@ -16,29 +16,6 @@
     <slot name="content"></slot>
     <slot name="operating"></slot>
 
-    <!-- 桌面端右键菜单 -->
-    <song-item-dropdown
-      v-if="isElectron"
-      :item="item"
-      :show="showDropdown"
-      :x="dropdownX"
-      :y="dropdownY"
-      :is-favorite="isFavorite"
-      :is-dislike="isDislike"
-      :can-remove="canRemove"
-      @update:show="showDropdown = $event"
-      @play="requestPlay"
-      @play-next="handlePlayNext"
-      @match-netease="playAsNetease(item)"
-      @download="downloadMusic(item)"
-      @download-lyric="downloadLyric(item)"
-      @bind-local-lyric="bindLocalLyric"
-      @toggle-favorite="toggleFavorite"
-      @toggle-dislike="toggleDislike"
-      @goto-artist="handleArtistClick"
-      @goto-album="handleAlbumClick"
-      @remove="$emit('remove-song', $event)"
-    />
   </div>
 </template>
 
@@ -50,15 +27,11 @@ import {
   type MobileSongActionOrigin,
   useMobileSongActionSurface
 } from '@/composables/useMobileSongActionSurface';
-import { isLocalSong, useLocalMusic } from '@/hooks/useLocalMusic';
 import { useMatchNeteasePlay } from '@/hooks/useNeteaseMatchPlay';
 import { useSongItem } from '@/hooks/useSongItem';
-import { usePlayerStore } from '@/store/modules/player';
 import type { SongResult } from '@/types/music';
-import { isElectron } from '@/utils';
-import { selectLyricFile, setLocalLyricPath } from '@/utils/localLyricStorage';
 
-import SongItemDropdown from './SongItemDropdown.vue';
+
 
 const props = defineProps<{
   item: SongResult;
@@ -73,10 +46,8 @@ const emits = defineEmits<{
   play: [item: SongResult];
   select: [id: string | number, selected: boolean];
   'remove-song': [id: string | number];
-  'bind-local-lyric': [];
 }>();
 
-const playerStore = usePlayerStore();
 const songItemRef = ref<HTMLElement | null>(null);
 const songActionSurface = useMobileSongActionSurface();
 const songActionOrigin = inject<MobileSongActionOrigin>('mobileSongActionOrigin', 'mini-player');
@@ -88,24 +59,15 @@ const {
   isFavorite,
   isDislike,
   artists,
-  showDropdown,
-  dropdownX,
-  dropdownY,
   isActive,
   handleImageLoad,
   playMusicEvent,
   toggleFavorite,
-  toggleDislike,
   handlePlayNext,
-  handleContextMenu,
-  handleMenuClick,
   handleArtistClick,
   handleAlbumClick,
-  activate,
-  downloadMusic,
-  downloadLyric
+  activate
 } = useSongItem(props);
-const { loadLocalLyrics } = useLocalMusic();
 const { playAsNetease } = useMatchNeteasePlay();
 
 const requestPlay = () => {
@@ -129,26 +91,6 @@ const imageLoad = async (event: Event) => {
 // 切换选择状态
 const toggleSelect = () => {
   emits('select', props.item.id, !props.selected);
-};
-
-// 绑定本地歌词文件
-const bindLocalLyric = async () => {
-  if (!isElectron) return;
-  const songId = props.item.id?.toString();
-  if (!songId) return;
-
-  const filePath = await selectLyricFile();
-  if (!filePath) return;
-
-  setLocalLyricPath(songId, filePath);
-
-  // 如果当前正在播放这首歌，立即重新加载歌词
-  if (playerStore.playMusic?.id?.toString() === songId) {
-    if (isLocalSong(playerStore.playMusic)) {
-      const lyrics = await loadLocalLyrics(playerStore.playMusic);
-      playerStore.playMusic.lyric = lyrics;
-    }
-  }
 };
 
 // 移动端长按菜单
@@ -176,7 +118,7 @@ const openMobileActionSheet = () => {
 };
 
 const handleTouchStart = () => {
-  if (isElectron) return;
+
   cancelLongPress();
   longPressTimer = window.setTimeout(() => {
     suppressClickUntil = Date.now() + 700;
@@ -196,19 +138,11 @@ const cancelLongPress = () => {
 const handleTouchEnd = () => cancelLongPress();
 const handleTouchMove = () => cancelLongPress();
 
-const openItemMenu = (event: MouseEvent) => {
-  if (isElectron) {
-    handleMenuClick(event);
-    return;
-  }
+const openItemMenu = (_event: MouseEvent) => {
   openMobileActionSheet();
 };
 
-const handleItemContextMenu = (event: MouseEvent) => {
-  if (isElectron) {
-    handleContextMenu(event);
-    return;
-  }
+const handleItemContextMenu = () => {
   suppressClickUntil = Date.now() + 700;
   openMobileActionSheet();
 };

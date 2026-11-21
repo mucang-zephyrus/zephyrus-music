@@ -131,295 +131,6 @@
       </div>
     </div>
 
-    <!-- ==================== 桌面端（Electron） ==================== -->
-    <n-scrollbar v-else-if="isElectron" class="h-full">
-      <div class="local-music-content" style="padding-bottom: calc(var(--mobile-dock-content-inset, 144px) + var(--safe-area-inset-bottom, 0px) + 12px)">
-        <!-- Hero Section -->
-        <section class="hero-section relative overflow-hidden rounded-tl-2xl">
-          <div class="hero-bg absolute inset-0 -top-20">
-            <div
-              class="absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-primary/10 blur-3xl opacity-50 dark:opacity-30"
-            ></div>
-            <div
-              class="absolute inset-0 bg-gradient-to-b from-transparent via-white/80 to-white dark:via-black/80 dark:to-black"
-            ></div>
-          </div>
-
-          <div class="hero-content relative z-10 page-padding-x pt-10 pb-8">
-            <div class="flex flex-col md:flex-row gap-8 items-center md:items-end">
-              <div class="cover-wrapper relative group">
-                <div
-                  class="cover-container relative w-32 h-32 md:w-40 md:h-40 rounded-2xl bg-[var(--accent-color)]/10 flex items-center justify-center shadow-2xl ring-4 ring-white/50 dark:ring-neutral-800/50"
-                >
-                  <i class="ri-folder-music-fill text-6xl text-[var(--accent-color)] opacity-80" />
-                </div>
-              </div>
-
-              <div class="info-content text-center md:text-left">
-                <div class="badge mb-3">
-                  <span
-                    class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--accent-color)]/10 dark:bg-[var(--accent-color)]/20 text-[var(--accent-color)] text-xs font-semibold uppercase tracking-wider"
-                  >
-                    {{ t('localMusic.title') }}
-                  </span>
-                </div>
-                <h1
-                  class="text-3xl md:text-4xl lg:text-5xl font-bold text-neutral-900 dark:text-white tracking-tight"
-                >
-                  {{ t('localMusic.title') }}
-                </h1>
-                <p class="mt-4 text-sm md:text-base text-neutral-500 dark:text-neutral-400">
-                  {{ t('localMusic.songCount', { count: localMusicStore.musicList.length }) }}
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Action Bar (Sticky) -->
-        <section
-          class="action-bar sticky top-0 z-20 page-padding-x py-3 md:py-4 bg-white/80 dark:bg-black/80 backdrop-blur-xl border-b border-neutral-100 dark:border-neutral-800/50"
-        >
-          <div class="flex items-center justify-between gap-4 flex-wrap">
-            <div
-              class="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-900 rounded-full p-1"
-            >
-              <button
-                v-for="tab in tabs"
-                :key="tab.key"
-                class="tab-btn px-4 py-1.5 rounded-full text-sm font-medium transition-all"
-                :class="
-                  activeTab === tab.key
-                    ? 'bg-[var(--accent-color)] text-white shadow-md'
-                    : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
-                "
-                @click="activeTab = tab.key"
-              >
-                {{ tab.label }}
-              </button>
-            </div>
-
-            <div class="flex items-center gap-3 flex-1 justify-end">
-              <div class="flex-1 max-w-xs min-w-[140px]">
-                <n-input
-                  v-model:value="searchKeyword"
-                  :placeholder="t('localMusic.search')"
-                  clearable
-                  size="small"
-                  round
-                >
-                  <template #prefix>
-                    <i class="ri-search-line text-neutral-400" />
-                  </template>
-                </n-input>
-              </div>
-
-              <n-select
-                v-if="activeTab === 'songs' || detailView"
-                v-model:value="sortKey"
-                :options="sortOptions"
-                size="small"
-                class="w-32"
-              />
-
-              <button
-                v-if="displayedList.length > 0"
-                class="action-btn-pill flex items-center gap-2 px-4 py-2 rounded-full font-semibold text-sm transition-all bg-[var(--accent-color)] text-white hover:bg-[var(--accent-color)]/90"
-                @click="handlePlayAll"
-              >
-                <i class="ri-play-fill text-lg" />
-                <span class="hidden md:inline">{{ t('localMusic.playAll') }}</span>
-              </button>
-
-              <button
-                class="action-btn-icon w-10 h-10 rounded-full flex items-center justify-center bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-all"
-                :disabled="localMusicStore.scanning"
-                @click="handleScan"
-              >
-                <i
-                  class="ri-refresh-line text-lg"
-                  :class="{ 'animate-spin': localMusicStore.scanning }"
-                />
-              </button>
-
-              <button
-                class="action-btn-icon w-10 h-10 rounded-full flex items-center justify-center bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-all"
-                @click="handleAddFolder"
-              >
-                <i class="ri-folder-add-line text-lg" />
-              </button>
-
-              <button
-                class="action-btn-icon w-10 h-10 rounded-full flex items-center justify-center bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-all"
-                :disabled="localMusicStore.musicList.length === 0"
-                @click="handleAddLyricDir"
-              >
-                <i class="ri-file-music-line text-lg" />
-              </button>
-
-              <button
-                v-if="localMusicStore.folderPaths.length > 0"
-                class="action-btn-icon w-10 h-10 rounded-full flex items-center justify-center bg-neutral-100 dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-all"
-                @click="showFolderManager = true"
-              >
-                <i class="ri-folder-settings-line text-lg" />
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section v-if="localMusicStore.scanning" class="page-padding-x mt-6">
-          <div
-            class="flex items-center gap-4 p-4 rounded-2xl bg-[var(--accent-color)]/5 dark:bg-[var(--accent-color)]/10 border border-[var(--accent-color)]/20"
-          >
-            <n-spin size="small" />
-            <div>
-              <p class="text-sm font-medium text-neutral-900 dark:text-white">
-                {{ t('localMusic.scanning') }}
-              </p>
-              <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-                {{ t('localMusic.songCount', { count: localMusicStore.scanProgress }) }}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section class="list-section page-padding-x mt-6">
-          <div
-            v-if="!localMusicStore.scanning && localMusicStore.musicList.length === 0"
-            class="empty-state py-20 text-center"
-          >
-            <i class="ri-folder-music-fill text-5xl mb-4 text-neutral-200 dark:text-neutral-800" />
-            <p class="text-neutral-400">{{ t('localMusic.emptyState') }}</p>
-            <button
-              class="mt-6 px-6 py-2 rounded-full bg-[var(--accent-color)] text-white text-sm font-medium hover:bg-[var(--accent-color)]/90 transition-all"
-              @click="handleAddFolder"
-            >
-              <i class="ri-folder-add-line mr-2" />
-              {{ t('localMusic.scanFolder') }}
-            </button>
-          </div>
-
-          <div v-else-if="displayedList.length === 0" class="empty-state py-20 text-center">
-            <i class="ri-search-line text-5xl mb-4 text-neutral-200 dark:text-neutral-800" />
-            <p class="text-neutral-400">{{ t('localMusic.search') }}</p>
-          </div>
-
-          <div v-else-if="activeTab === 'songs' || detailView" class="song-list-container">
-            <div v-if="detailView" class="detail-header mb-6">
-              <button
-                class="back-btn flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400 hover:text-[var(--accent-color)] transition-colors mb-4"
-                @click="exitDetailView"
-              >
-                <i class="ri-arrow-left-line text-lg" />
-                {{ t('localMusic.backToList') }}
-              </button>
-              <div class="flex items-center gap-4">
-                <div
-                  class="w-16 h-16 rounded-2xl flex items-center justify-center bg-[var(--accent-color)]/10"
-                >
-                  <i
-                    :class="detailType === 'artist' ? 'ri-user-3-fill' : 'ri-disc-line'"
-                    class="text-3xl text-[var(--accent-color)]"
-                  />
-                </div>
-                <div>
-                  <h2 class="text-xl font-bold text-neutral-900 dark:text-white">
-                    {{ detailName }}
-                  </h2>
-                  <p class="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
-                    {{ t('localMusic.songCount', { count: displayedList.length }) }}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <n-virtual-list
-              class="song-virtual-list"
-              style="max-height: calc(100vh - 320px)"
-              :items="displayedSongResults"
-              :item-size="70"
-              item-resizable
-              key-field="id"
-            >
-              <template #default="{ item, index }">
-                <div>
-                  <song-item :item="item" :index="index" @play="handlePlaySong" />
-                  <div v-if="index === displayedSongResults.length - 1" class="h-36"></div>
-                </div>
-              </template>
-            </n-virtual-list>
-          </div>
-
-          <div v-else-if="activeTab === 'artists'" class="artist-grid">
-            <div
-              class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4"
-            >
-              <button
-                v-for="artist in artistList"
-                :key="artist.name"
-                class="artist-card group flex flex-col items-center gap-3 p-4 rounded-2xl hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-all"
-                @click="enterDetailView('artist', artist.name)"
-              >
-                <div
-                  class="w-20 h-20 rounded-full flex items-center justify-center bg-gradient-to-br from-[var(--accent-color)]/20 to-[var(--accent-color)]/5 text-2xl font-bold text-[var(--accent-color)]"
-                >
-                  {{ artist.name.charAt(0).toUpperCase() }}
-                </div>
-                <div class="text-center w-full">
-                  <p class="text-sm font-medium text-neutral-900 dark:text-white truncate">
-                    {{ artist.name }}
-                  </p>
-                  <p class="text-xs text-neutral-400 mt-0.5">
-                    {{ artist.count }} {{ t('localMusic.tabSongs') }}
-                  </p>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          <div v-else-if="activeTab === 'albums'" class="album-grid">
-            <div
-              class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4"
-            >
-              <button
-                v-for="album in albumList"
-                :key="album.name"
-                class="album-card group flex flex-col gap-3 p-3 rounded-2xl hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-all"
-                @click="enterDetailView('album', album.name)"
-              >
-                <div
-                  class="album-cover relative aspect-square rounded-xl overflow-hidden bg-neutral-100 dark:bg-neutral-800"
-                >
-                  <img
-                    v-if="album.cover"
-                    :src="album.cover"
-                    :alt="album.name"
-                    class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                  <div
-                    v-else
-                    class="w-full h-full flex items-center justify-center bg-gradient-to-br from-[var(--accent-color)]/20 to-[var(--accent-color)]/5"
-                  >
-                    <i class="ri-disc-line text-3xl text-[var(--accent-color)] opacity-60" />
-                  </div>
-                </div>
-                <div class="text-center w-full">
-                  <p class="text-sm font-medium text-neutral-900 dark:text-white truncate">
-                    {{ album.name }}
-                  </p>
-                  <p class="text-xs text-neutral-400 mt-0.5 truncate">
-                    {{ album.artist }}
-                  </p>
-                </div>
-              </button>
-            </div>
-          </div>
-        </section>
-      </div>
-    </n-scrollbar>
-
-    <!-- Non-Electron, Non-Mobile fallback -->
     <div v-else class="flex h-full flex-col items-center justify-center px-8 text-center">
       <div
         class="mb-6 flex h-24 w-24 items-center justify-center rounded-3xl bg-[var(--accent-color)]/10"
@@ -499,12 +210,11 @@ import {
   unregisterMobileTopbarAction,
   unregisterMobileTopbarPresentation
 } from '@/composables/useMobileTopbarMenu';
-import { usePlaylistConfirm } from '@/hooks/usePlaylistConfirm';
 import { useLocalMusicStore } from '@/store/modules/localMusic';
 import { usePlayerStore } from '@/store/modules/player';
 import type { LocalMusicEntry } from '@/types/localMusic';
 import type { SongResult } from '@/types/music';
-import { isElectron } from '@/utils';
+
 import { parseAudioFileMetadata } from '@/utils/audioMetadata';
 import type { SortKey } from '@/utils/localMusicUtils';
 import { filterByKeyword, sortMusicList, toSongResult } from '@/utils/localMusicUtils';
@@ -517,15 +227,14 @@ const { t } = useI18n();
 const { message } = createDiscreteApi(['message']);
 const localMusicStore = useLocalMusicStore();
 const playerStore = usePlayerStore();
-const { confirmPlaylistReplace } = usePlaylistConfirm();
 
 // ==================== Platform detection ====================
-const isMobileNative = !isElectron;
+const isMobileNative = true;
 // ==================== 网页版:本地音频文件导入 + 拖拽 ====================
 // 会话级能力(blob URL 刷新失效):条目入 IndexedDB 但标记 fileUrl,
 // 播放走 blob URL;刷新后这些条目自动清除
 const isWebBrowser =
-  isElectron === false && !(window as any).AndroidNative && typeof window !== 'undefined';
+  typeof window !== 'undefined' && !(window as any).AndroidNative;
 const dropActive = ref(false);
 const audioFileInput = ref<HTMLInputElement | null>(null);
 const sessionFiles = ref<Set<string>>(new Set());
@@ -653,7 +362,6 @@ const isCompact = ref(false);
 
 // ==================== Computed ====================
 type TabKey = 'songs' | 'artists' | 'albums';
-type SortOption = { label: string; value: SortKey };
 
 const tabs = computed<{ key: TabKey; label: string }[]>(() => [
   { key: 'songs', label: t('localMusic.tabSongs') },
@@ -689,7 +397,7 @@ const syncTopbarActions = () => {
       routePath: route.path,
       label: '导入音乐文件',
       icon: 'ri-upload-2-line',
-      run: () => audioFileInput?.click()
+      run: () => audioFileInput.value?.click()
     });
     return;
   }
@@ -717,15 +425,6 @@ const syncTopbarActions = () => {
     run: () => void handleScan()
   });
 };
-
-const sortOptions = computed<SortOption[]>(() => [
-  { label: t('localMusic.sortDefault'), value: 'default' },
-  { label: t('localMusic.sortTitle'), value: 'title' },
-  { label: t('localMusic.sortArtist'), value: 'artist' },
-  { label: t('localMusic.sortAlbum'), value: 'album' },
-  { label: t('localMusic.sortYear'), value: 'year' },
-  { label: t('localMusic.sortDuration'), value: 'duration' }
-]);
 
 const filteredList = computed<LocalMusicEntry[]>(() => {
   let list = localMusicStore.musicList;
@@ -815,17 +514,10 @@ function enterDetailView(type: 'artist' | 'album', name: string): void {
   sortKey.value = type === 'album' ? 'album' : 'default';
 }
 
-function exitDetailView(): void {
-  detailView.value = false;
-  detailType.value = null;
-  detailName.value = '';
-  sortKey.value = 'default';
-}
-
 // ==================== Folder picker ====================
 async function handleAddFolder(): Promise<void> {
   // 纯浏览器环境（Web 版）没有文件夹访问能力
-  if (!isElectron && !(window as any).AndroidNative) {
+  if (!(window as any).AndroidNative) {
     message.warning('网页版暂不支持扫描本地音乐，请使用客户端');
     return;
   }
@@ -842,37 +534,6 @@ async function handleAddFolder(): Promise<void> {
     await localMusicStore.scanFolders();
     message.success(t('localMusic.scanComplete'));
     return;
-  }
-  // Electron 桌面端
-  try {
-    const result = await window.electron.ipcRenderer.invoke('select-directory');
-    if (result && !result.canceled && result.filePaths?.length > 0) {
-      localMusicStore.addFolder(result.filePaths[0]);
-      await localMusicStore.scanFolders();
-    }
-  } catch (error) {
-    console.error('Failed to select folder:', error);
-    message.error(String(error));
-  }
-}
-
-async function handleAddLyricDir(): Promise<void> {
-  try {
-    const result = await window.electron.ipcRenderer.invoke('select-directory');
-    if (!result || result.canceled || !result.filePaths?.length) return;
-    const dirPath = result.filePaths[0];
-    message.loading('正在扫描歌词文件...');
-    const bindResult = await localMusicStore.bindLyricsFromDirectory(dirPath);
-    if (bindResult.matched > 0) {
-      message.success(`成功绑定 ${bindResult.matched} 首歌词（共扫描 ${bindResult.total} 个文件）`);
-    } else if (bindResult.total > 0) {
-      message.warning(`扫描到 ${bindResult.total} 个歌词文件，但未匹配到本地歌曲`);
-    } else {
-      message.info('该目录下没有找到歌词文件');
-    }
-  } catch (error) {
-    console.error('Failed to add lyric directory:', error);
-    message.error('添加歌词目录失败');
   }
 }
 
@@ -896,30 +557,6 @@ async function handlePlaySong(song: SongResult): Promise<void> {
   await playerStore.setPlay(song);
 }
 
-async function handlePlayAll(): Promise<void> {
-  if (displayedSongResults.value.length === 0) return;
-  confirmPlaylistReplace(async () => {
-    try {
-      const firstSong = displayedSongResults.value[0];
-      const entry = displayedList.value[0];
-      if (isElectron) {
-        const exists = await window.electron.ipcRenderer.invoke(
-          'check-file-exists',
-          entry.filePath
-        );
-        if (!exists) {
-          message.error(t('localMusic.fileNotFound'));
-          return;
-        }
-      }
-      playerStore.setPlayList(displayedSongResults.value);
-      await playerStore.setPlay(firstSong);
-    } catch (error) {
-      console.error('Failed to play all:', error);
-    }
-  });
-}
-
 // ==================== Mobile folder picker callback ====================
 let folderPickerResolver: ((treeUri: string | null) => void) | null = null;
 
@@ -941,7 +578,7 @@ if (typeof window !== 'undefined') {
 
 // ==================== Lifecycle ====================
 onMounted(async () => {
-  if (!isElectron && !isMobileNative) return;
+  if (!isMobileNative) return;
   await localMusicStore.loadFromCache();
   syncTopbarActions();
 });

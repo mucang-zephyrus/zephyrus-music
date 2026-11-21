@@ -9,12 +9,6 @@ export interface MobileSettingSearchDefinition {
 }
 
 export const MOBILE_SETTING_SEARCH_DEFINITIONS: readonly MobileSettingSearchDefinition[] = [
-  {
-    tabId: 'playback',
-    titleKey: 'settings.playback.neteaseRequestMode',
-    descKey: 'settings.playback.neteaseRequestModeDesc',
-    targetId: 'netease-request-mode'
-  },
   { tabId: 'lyrics', titleKey: 'settings.lyricSettings.hideIntroOutroCredits', descKey: 'settings.lyricSettings.creditDescription', targetId: 'lyric-credits' },
   { tabId: 'lyrics', titleKey: 'settings.lyricSettings.creditKeywords', descKey: 'settings.lyricSettings.creditKeywordsHelp', targetId: 'lyric-credits' },
   {

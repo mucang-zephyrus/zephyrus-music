@@ -611,14 +611,13 @@
 }
 
 /* 深色模式下的 message */
-.mobile.noElectron .n-message {
+.mobile .n-message {
   background: rgba(50, 50, 50, 0.95) !important;
   color: #fff !important;
 }
 
 /* 浅色模式下的 message
    原先 0.5 透明度靠 backdrop-filter 保证可读；玻璃移除后改为不透明表面 */
-.mobile:not(.noElectron) .n-message,
 .mobile .theme-light .n-message {
   background: var(--m-surface-container-high, #efeae2) !important;
   color: var(--m-text-primary, #2c2c2c) !important;

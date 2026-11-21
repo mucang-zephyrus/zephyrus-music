@@ -53,22 +53,6 @@ export function useSettingsPageContext() {
   provide(SETTINGS_MESSAGE_KEY, message);
   provide(SETTINGS_DIALOG_KEY, dialog);
 
-  const ensureDefaults = () => {
-    if (setData.value.enableRealIP === undefined) {
-      setData.value = { ...setData.value, enableRealIP: false };
-    }
-    if (setData.value.enableDiskCache === undefined) {
-      setData.value = { ...setData.value, enableDiskCache: true };
-    }
-    if (!setData.value.diskCacheMaxSizeMB) {
-      setData.value = { ...setData.value, diskCacheMaxSizeMB: 4096 };
-    }
-    if (!['lru', 'fifo'].includes(setData.value.diskCacheCleanupPolicy)) {
-      setData.value = { ...setData.value, diskCacheCleanupPolicy: 'lru' };
-    }
-  };
-  ensureDefaults();
-
   return { setData, message, dialog };
 }
 

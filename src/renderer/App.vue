@@ -1,5 +1,5 @@
 <template>
-  <div class="app-container h-full w-full" :class="{ mobile: isMobile, noElectron: !isElectron }">
+  <div class="app-container h-full w-full" :class="{ mobile: isMobile }">
     <n-config-provider
       :theme="theme === 'dark' ? darkTheme : lightTheme"
       :theme-overrides="themeOverrides"
@@ -8,14 +8,14 @@
         <n-message-provider>
           <router-view></router-view>
           <lyric-merge-feedback-panel />
-          <traffic-warning-drawer v-if="!isElectron"></traffic-warning-drawer>
+          <traffic-warning-drawer></traffic-warning-drawer>
           <disclaimer-modal></disclaimer-modal>
           <shared-song-card ref="sharedSongCardRef"></shared-song-card>
           <share-link-import />
           <listen-together-invite-modal ref="listenTogetherInviteRef" />
-          <mobile-update-modal v-if="!isElectron" />
-          <onboarding-overlay v-if="!isElectron" ref="onboardingRef" />
-          <ios-audio-protection-prompt v-if="!isElectron && !isLyricWindow" />
+          <mobile-update-modal />
+          <onboarding-overlay ref="onboardingRef" />
+          <ios-audio-protection-prompt />
           <splash-screen v-if="startupSplashVisible" @finish="startupSplashVisible = false" />
         </n-message-provider>
       </n-dialog-provider>
@@ -24,7 +24,6 @@
 </template>
 
 <script setup lang="ts">
-import { cloneDeep } from 'lodash';
 import { darkTheme, lightTheme } from 'naive-ui';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -50,7 +49,6 @@ import { usePlayerStore } from '@/store/modules/player';
 import { usePlayerCoreStore } from '@/store/modules/playerCore';
 import { useSettingsStore } from '@/store/modules/settings';
 import { useUserStore } from '@/store/modules/user';
-import { isElectron, isLyricWindow } from '@/utils';
 import { checkLoginStatus } from '@/utils/auth';
 
 import { initAudioListeners, initMusicHook } from './hooks/MusicHook';
@@ -62,7 +60,6 @@ import { initLxMusicRunner } from './services/LxMusicSourceRunner';
 import { setupMediaSessionLyric } from './services/mediaSessionLyric';
 import { useStyleEngineStore } from './store/modules/styleEngine';
 import { isMobile } from './utils';
-import { useAppShortcuts } from './utils/appShortcuts';
 import { setListenTogetherInviteRef, setSharedSongCardRef } from './utils/deepLink';
 import { showBottomToast } from './utils/shortcutToast';
 
@@ -77,7 +74,7 @@ const router = useRouter();
 const { primaryColor } = useCoverColor();
 const styleEngine = useStyleEngineStore();
 const onboardingRef = ref();
-const startupSplashVisible = ref(isAndroidNative() && !isLyricWindow.value);
+const startupSplashVisible = ref(isAndroidNative());
 
 watch(
   () => accountStore.activeAccount,
@@ -246,41 +243,28 @@ const handleSetLanguage = (value: string) => {
 // 并注册为全局单例供 audioService.crossfadeToNext 在过渡时调用三级策略。
 const smartAudio = useSmartAudio();
 let smartAudioRegistered = false;
-if (!isLyricWindow.value) {
-  setSmartAudioInstance(smartAudio);
-  smartAudioRegistered = true;
-}
+setSmartAudioInstance(smartAudio);
+smartAudioRegistered = true;
 
-if (!isLyricWindow.value) {
-  settingsStore.initializeSettings();
-  settingsStore.initializeTheme();
-  settingsStore.initializeSystemFonts();
+settingsStore.initializeSettings();
+settingsStore.initializeTheme();
 
-  // 初始化登录状态 - 从 localStorage 恢复用户信息和登录类型
-  const loginInfo = checkLoginStatus();
-  if (loginInfo.isLoggedIn) {
-    if (loginInfo.user && !userStore.user) {
-      userStore.setUser(loginInfo.user);
-    }
-    if (loginInfo.loginType && !userStore.loginType) {
-      userStore.setLoginType(loginInfo.loginType);
-    }
-    // 异步加载歌单、专辑、收藏列表（不阻塞渲染）
-    userStore.initializeUser().catch((err) => {
-      console.error('[App] 初始化用户数据失败:', err);
-    });
+// 初始化登录状态 - 从 localStorage 恢复用户信息和登录类型
+const loginInfo = checkLoginStatus();
+if (loginInfo.isLoggedIn) {
+  if (loginInfo.user && !userStore.user) {
+    userStore.setUser(loginInfo.user);
   }
+  if (loginInfo.loginType && !userStore.loginType) {
+    userStore.setLoginType(loginInfo.loginType);
+  }
+  // 异步加载歌单、专辑、收藏列表（不阻塞渲染）
+  userStore.initializeUser().catch((err) => {
+    console.error('[App] 初始化用户数据失败:', err);
+  });
 }
 
 handleSetLanguage(settingsStore.setData.language);
-
-// Electron 迷你模式已随 /mini 路由与 MiniLayout 移除（移动端项目，桌面迷你窗为遗留）
-if (isElectron) {
-  window.api.onLanguageChanged(handleSetLanguage);
-}
-
-// 使用应用内快捷键
-useAppShortcuts();
 
 // 提前注入 safe-area CSS 变量（在 Vue 首次渲染前），避免顶栏底栏上下跳动
 if (isAndroidNative()) {
@@ -331,14 +315,6 @@ onMounted(async () => {
   // 注册内置功能
   registerBuiltinFeatures();
 
-  // 加载已安装插件并激活播放器样式
-  const { pluginManager } = await import('@/services/pluginManager');
-  await pluginManager.loadInstalled();
-
-  if (isLyricWindow.value) {
-    return;
-  }
-
   // 检查网络状态，离线时自动跳转到本地音乐页面
   if (!navigator.onLine) {
     router.push('/local-music');
@@ -378,9 +354,7 @@ onMounted(async () => {
     // 使用 nextTick 确保 DOM 更新后再初始化
     await nextTick();
     initAudioListeners();
-    if (isElectron) {
-      window.api.sendSong(cloneDeep(playerStore.playMusic));
-    }
+
   }
 
   audioService.releaseOperationLock();
@@ -390,7 +364,7 @@ onMounted(async () => {
 
   // 首次使用展示新手引导;仅裸启动(直接访问根路径)时弹出,
   // 通过分享链接直达歌单等二级页时不遮挡目标内容
-  if (!isElectron && isBareMobileLaunch(window.location.hash)) {
+  if (isBareMobileLaunch(window.location.hash)) {
     nextTick(() => onboardingRef.value?.show());
   }
 

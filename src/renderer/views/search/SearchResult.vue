@@ -80,11 +80,6 @@
               </button>
 
               <!-- Batch Actions -->
-              <div v-if="isElectron" class="d-divider-vertical mx-1 hidden md:block"></div>
-
-              <button v-if="!isSelecting && isElectron" class="d-btn-icon" @click="startSelect">
-                <i class="ri-checkbox-multiple-line text-lg" />
-              </button>
 
               <div
                 v-if="isSelecting"
@@ -279,7 +274,7 @@ import {
 import { usePlayerStore } from '@/store/modules/player';
 import { useSearchStore } from '@/store/modules/search';
 import type { SongResult } from '@/types/music';
-import { calculateAnimationDelay, isElectron, isMobile } from '@/utils';
+import { calculateAnimationDelay, isMobile } from '@/utils';
 import {
   createSongSearchResults,
   type SearchSupplementSource,
@@ -350,11 +345,6 @@ const { isDownloading, batchDownloadMusic } = useDownload();
 const isCompactLayout = ref(
   isMobile.value ? false : localStorage.getItem('musicListLayout') === 'compact'
 );
-
-const startSelect = () => {
-  isSelecting.value = true;
-  selectedSongs.value = [];
-};
 
 const cancelSelect = () => {
   isSelecting.value = false;

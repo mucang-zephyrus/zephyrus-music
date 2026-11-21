@@ -2,7 +2,7 @@ import { Howl, Howler } from 'howler';
 
 import type { AudioOutputDevice } from '@/types/audio';
 import type { SongResult } from '@/types/music';
-import { isElectron } from '@/utils';
+
 import { buildTogetherCurves, sampleCurve } from '@/utils/audio/crossfade';
 import type { TransitionChoice } from '@/utils/audio/transitionChooser';
 import { isIosSafari } from '@/utils/platform';
@@ -79,7 +79,6 @@ class AudioService {
     '16000': -2.5
   };
 
-
   private bypass = false;
   /** iOS 专用：静音镜像元素与其监听清理（它承担分析图输入，出声元素保持未接图） */
   private analysisMirror: HTMLAudioElement | null = null;
@@ -111,7 +110,6 @@ class AudioService {
     '16000': 0
   };
 
-  private retryCount = 0;
 
   private seekLock = false;
 
@@ -915,161 +913,26 @@ class AudioService {
   private async setupEQ(sound: Howl | LocalAudioPlayer) {
     try {
       // 移动端：跳过 EQ 滤波器，但 LocalAudioPlayer 仍需连接到音频输出
-      if (!isElectron) {
-        this.bypass = true;
-        if (sound instanceof LocalAudioPlayer) {
-          return await this._setupEQLocalMobile(sound);
-        }
-        if (iosAudioProtection.enabled) {
-          return this._setupEQHowlMobile(sound as Howl);
-        }
-        // 网页端：探测通过且已挂 crossOrigin 的流媒体走建图路径（鼓点/高潮分析）
-        if (isAnalysisArmed(sound as Howl)) {
-          return await this._setupEQHowlWebAnalyzed(sound as Howl);
-        }
+      this.bypass = true;
+      if (sound instanceof LocalAudioPlayer) {
+        return await this._setupEQLocalMobile(sound);
+      }
+      if (iosAudioProtection.enabled) {
         return this._setupEQHowlMobile(sound as Howl);
       }
+      // 网页端：探测通过且已挂 crossOrigin 的流媒体走建图路径（鼓点/高潮分析）
+      if (isAnalysisArmed(sound as Howl)) {
+        return await this._setupEQHowlWebAnalyzed(sound as Howl);
+      }
+      return this._setupEQHowlMobile(sound as Howl);
 
       // 清理现有连接
       await this.disposeEQ(true);
 
-      // LocalAudioPlayer: 走专用分支
-      if (sound instanceof LocalAudioPlayer) {
-        return this._setupEQLocal(sound);
-      }
-
-      // Howl: 走原有路径
-      const howl = sound as any;
-      const audioNode = howl._sounds?.[0]?._node;
-
-      if (!audioNode || !(audioNode instanceof HTMLMediaElement)) {
-        if (this.retryCount < 3) {
-          console.warn('等待音频节点初始化，重试次数:', this.retryCount + 1);
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          this.retryCount++;
-          return await this.setupEQ(sound);
-        }
-        throw new Error('无法获取音频节点，请重试');
-      }
-
-      this.retryCount = 0;
-
-      // 确保使用 Howler 的音频上下文
-      this.context = Howler.ctx as AudioContext;
-
-      if (!this.context || this.context.state === 'closed') {
-        Howler.ctx = new AudioContext();
-        this.context = Howler.ctx;
-        Howler.masterGain = this.context.createGain();
-        Howler.masterGain.connect(this.context.destination);
-      }
-
-      if (this.context.state === 'suspended') {
-        await this.context.resume();
-      }
-
-      // 设置 AudioContext 状态监控
-      this.setupContextStateMonitoring();
-
-      // 恢复保存的音频输出设备
-      this.restoreSavedAudioDevice();
-
-      // 清理现有连接
-      await this.disposeEQ(true);
-
-      try {
-        // 检查节点是否已经有源
-        const existingSource = (audioNode as any).source as MediaElementAudioSourceNode;
-        if (existingSource?.context === this.context) {
-          this.source = existingSource;
-        } else {
-          // 创建新的源节点
-          this.source = this.context.createMediaElementSource(audioNode);
-          (audioNode as any).source = this.source;
-        }
-      } catch (e) {
-        console.error('创建音频源节点失败:', e);
-        throw e;
-      }
-
-      // 创建增益节点
-      this.gainNode = this.context.createGain();
-
-      // 创建滤波器
-      this.filters = this.frequencies.map((freq) => {
-        const filter = this.context!.createBiquadFilter();
-        filter.type = 'peaking';
-        filter.frequency.value = freq;
-        filter.Q.value = 1;
-        filter.gain.value = this.getEffectiveGainDb(freq.toString());
-        return filter;
-      });
-      this.applyEffectiveGainsToFilters();
-
-      // 连接高潮检测器和鼓点检测器（连接到 gainNode，不受 applyBypassState 断连影响）
-      climaxDetector.connect(this.context, this.gainNode);
-      connectAnalysisNodes(this.context, this.gainNode);
-
-      // 启动检测器（idempotent，styleEngine 也会调用）
-      drumDetector.start();
-      climaxDetector.start();
-
-      // 应用EQ状态
-      this.applyBypassState();
-
-      // 从 localStorage 应用音量到增益节点
-      const savedVolume = localStorage.getItem('volume');
-      if (savedVolume) {
-        this.applyVolume(parseFloat(savedVolume));
-      } else {
-        this.applyVolume(1);
-      }
     } catch (error) {
       console.error('EQ initialization failed:', error);
       await this.disposeEQ();
       throw error;
-    }
-  }
-
-  private _setupEQLocal(sound: LocalAudioPlayer) {
-    this.context = Howler.ctx as AudioContext;
-    if (!this.context || this.context.state === 'closed') {
-      Howler.ctx = new AudioContext();
-      this.context = Howler.ctx;
-      Howler.masterGain = this.context.createGain();
-      Howler.masterGain.connect(this.context.destination);
-    }
-
-    this.setupContextStateMonitoring();
-    this.restoreSavedAudioDevice();
-
-    this.source = sound.getInputNode() as any;
-
-    this.gainNode = this.context.createGain();
-
-    this.filters = this.frequencies.map((freq) => {
-      const filter = this.context!.createBiquadFilter();
-      filter.type = 'peaking';
-      filter.frequency.value = freq;
-      filter.Q.value = 1;
-      filter.gain.value = this.getEffectiveGainDb(freq.toString());
-      return filter;
-    });
-    this.applyEffectiveGainsToFilters();
-
-    climaxDetector.connect(this.context, this.gainNode);
-    connectAnalysisNodes(this.context, this.gainNode);
-
-    drumDetector.start();
-    climaxDetector.start();
-
-    this.applyBypassState();
-
-    const savedVolume = localStorage.getItem('volume');
-    if (savedVolume) {
-      this.applyVolume(parseFloat(savedVolume));
-    } else {
-      this.applyVolume(1);
     }
   }
 
@@ -1678,7 +1541,6 @@ class AudioService {
       }
       // 网页端未武装 CORS 的元素禁止建源（taint 静音不可逆）；此类歌曲放弃 crossfade 直切
       if (
-        !isElectron &&
         (audioNode as HTMLMediaElement).getAttribute('crossorigin') !== 'anonymous'
       ) {
         try {

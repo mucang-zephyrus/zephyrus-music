@@ -19,11 +19,10 @@ function getAudioSession(): AudioSession | undefined {
 export function isIosWeb(): boolean {
   if (!isIosSafari() || typeof window === 'undefined') return false;
   const host = window as Window & {
-    electron?: unknown;
     AndroidNative?: unknown;
     Capacitor?: { isNativePlatform?: () => boolean };
   };
-  return !host.electron && !host.AndroidNative && host.Capacitor?.isNativePlatform?.() !== true;
+  return !host.AndroidNative && host.Capacitor?.isNativePlatform?.() !== true;
 }
 
 /**

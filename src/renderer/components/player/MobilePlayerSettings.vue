@@ -1295,6 +1295,7 @@
 </template>
 
 <script setup lang="ts">
+import { useMessage } from 'naive-ui';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { storeToRefs } from 'pinia';
@@ -1388,7 +1389,7 @@ const climaxStore = useClimaxStore();
 const communityDataStore = useCommunityDataStore();
 const userStore = useUserStore();
 const { navigateToArtist } = useArtist();
-const message = window.$message;
+const message = useMessage();
 const androidNativeAvailable = isAndroidNative();
 const activeTab = ref<'song' | 'control'>('control');
 const metaphorModelSelection = ref(getMetaphorConfig().model || 'glm-4-flash');

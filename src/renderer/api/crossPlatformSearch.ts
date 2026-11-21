@@ -5,9 +5,7 @@
  * 1. 当网易云搜索结果不足或为空时，调用多平台搜索进行补充
  * 2. 将各平台搜索结果统一映射为 SongResult 格式
  *
- * 两条搜索通道：
- * - 原生多平台搜索（通过主进程 IPC，支持 QQ/咪咕/酷狗/酷我/JOOX，可使用 Cookie 解锁高品质）
- * - GD 音乐台搜索（作为 fallback，仅支持 joox/kuwo/netease）
+ * Spotify、哔哩哔哩走网关，其他来源使用 GD 音乐台。
  *
  * 注意：GD 音乐台不支持 tencent/qq 音源（返回 400），
  * joox 是 QQ 音乐的国际版，曲库覆盖高度重合。
@@ -15,11 +13,8 @@
 
 import type { Artist, SongResult } from '@/types/music';
 
-import {
-  searchBilibiliViaGateway,
-  toGatewayProxyUrl as proxyBilibiliResource
-} from './bilibili';
-import { type GDCrossPlatformSearchItem,searchFromGDMusic } from './gdmusic';
+import { searchBilibiliViaGateway } from './bilibili';
+import { type GDCrossPlatformSearchItem, searchFromGDMusic } from './gdmusic';
 import { searchSpotifyViaGateway } from './spotify';
 
 /**
@@ -33,7 +28,6 @@ export interface CrossPlatformSearchConfig {
   /** 是否启用 kuwo 音源（搜索可用但 URL 解析可能失败） */
   enableKuwo?: boolean;
   /** 是否使用原生多平台搜索（主进程 IPC） */
-  useNativeSearch?: boolean;
   /** 原生搜索的平台列表 */
   nativePlatforms?: string[];
 }
@@ -42,7 +36,6 @@ const DEFAULT_CONFIG: Required<CrossPlatformSearchConfig> = {
   minNeteaseResults: 5,
   perSourceLimit: 20,
   enableKuwo: false, // kuwo URL 解析不稳定，默认关闭
-  useNativeSearch: true,
   nativePlatforms: ['qq', 'migu', 'kugou', 'kuwo', 'joox', 'spotify', 'bilibili']
 };
 
@@ -142,131 +135,6 @@ function convertGdItemToSongResult(
 }
 
 /**
- * 主进程返回的原生搜索结果项
- */
-interface NativePlatformSong {
-  id: string;
-  name: string;
-  artists: string[];
-  album: string;
-  duration: number;
-  picUrl?: string;
-  platform: string;
-  platformId: string;
-  externalUrl?: string;
-}
-
-/**
- * 将主进程原生搜索结果转换为 SongResult
- */
-function convertNativeItemToSongResult(item: NativePlatformSong): SongResult {
-  const artists: Artist[] = (item.artists || []).map((name, idx) => ({
-    name,
-    id: idx,
-    picId: 0,
-    img1v1Id: 0,
-    briefDesc: '',
-    picUrl: '',
-    img1v1Url: '',
-    albumSize: 0,
-    alias: [],
-    trans: '',
-    musicSize: 0,
-    topicPerson: 0
-  }));
-
-  const album = {
-    name: item.album || '',
-    id: 0,
-    type: '',
-    size: 0,
-    picId: 0,
-    blurPicUrl: '',
-    companyId: 0,
-    pic: 0,
-    picUrl: item.picUrl || '',
-    publishTime: 0,
-    description: '',
-    tags: '',
-    company: '',
-    briefDesc: '',
-    artist: artists[0] || ({} as Artist),
-    songs: [],
-    alias: [],
-    status: 0,
-    copyrightId: 0,
-    commentThreadId: '',
-    artists,
-    subType: '',
-    transName: null,
-    onSale: false,
-    mark: 0,
-    picId_str: ''
-  };
-
-  const crossId = makeCrossPlatformId(item.platform, item.platformId);
-
-  return {
-    id: crossId,
-    name: item.name || '未知歌曲',
-    // 哔哩哔哩封面走网关中转（hdslb 拒绝带外域 Referer，403）
-    picUrl: item.platform === 'bilibili' ? proxyBilibiliResource(item.picUrl || '') : item.picUrl || '',
-    ar: artists,
-    artists,
-    al: album,
-    album,
-    count: item.duration || 0,
-    platform: item.platform,
-    platformId: item.platformId,
-    externalUrl: item.externalUrl,
-    // 哔哩哔哩返回的是视频，列表里用长矩形视频封面渲染
-    isVideo: item.platform === 'bilibili',
-    source: 'netease' as any
-  };
-}
-
-/**
- * 原生多平台搜索（通过主进程 IPC）
- *
- * @param keyword 搜索关键词
- * @param platforms 平台列表
- * @param limit 每个平台返回的最大结果数
- * @returns 转换后的 SongResult 列表
- */
-async function nativeMultiPlatformSearch(
-  keyword: string,
-  platforms: string[],
-  limit: number
-): Promise<SongResult[]> {
-  if (!window.api?.multiPlatformSearch) {
-    console.warn('[nativeSearch] window.api.multiPlatformSearch 不可用');
-    return [];
-  }
-
-  try {
-    console.log(`[nativeSearch] 开始搜索: keyword="${keyword}", platforms=[${platforms.join(',')}], limit=${limit}`);
-    const results = await window.api.multiPlatformSearch(keyword, platforms, limit);
-
-    const songs: SongResult[] = [];
-    for (const result of results) {
-      if (result.error) {
-        console.warn(`[nativeSearch] ${result.platform} 搜索失败: ${result.error}`);
-        continue;
-      }
-      console.log(`[nativeSearch] ${result.platform} 返回 ${result.songs.length} 条结果`);
-      for (const item of result.songs) {
-        songs.push(convertNativeItemToSongResult(item as NativePlatformSong));
-      }
-    }
-    console.log(`[nativeSearch] 总计获取 ${songs.length} 条跨平台结果`);
-    return songs;
-  } catch (error) {
-    console.error('[nativeSearch] 多平台搜索失败:', error);
-    return [];
-  }
-}
-
-/**
  * GD 音乐台搜索（作为 fallback）
  */
 async function gdMusicSearch(
@@ -317,26 +185,16 @@ export async function crossPlatformSearch(
   // 获取搜索结果
   let rawSongs: SongResult[] = [];
 
-  if (cfg.useNativeSearch && typeof window.api?.multiPlatformSearch === 'function') {
-    // 原生多平台搜索
-    const platforms = [...cfg.nativePlatforms];
-    if (!cfg.enableKuwo) {
-      const kuwoIdx = platforms.indexOf('kuwo');
-      if (kuwoIdx > -1) platforms.splice(kuwoIdx, 1);
-    }
-    rawSongs = await nativeMultiPlatformSearch(keyword, platforms, cfg.perSourceLimit);
-  } else {
-    // 非 Electron（Web / Android）：网关通道。Spotify 与哔哩哔哩都经网关，
-    // 其余平台由网关侧的 platform 路由覆盖或由 GD 音乐台兜底。
-    const gatewayTasks: Promise<SongResult[]>[] = [
-      searchSpotifyViaGateway(keyword, cfg.perSourceLimit)
-    ];
-    if (cfg.nativePlatforms.includes('bilibili')) {
-      gatewayTasks.push(searchBilibiliViaGateway(keyword, cfg.perSourceLimit));
-    }
-    const settled = await Promise.allSettled(gatewayTasks);
-    rawSongs = settled.flatMap((item) => (item.status === 'fulfilled' ? item.value : []));
+  // Spotify 与哔哩哔哩都经网关，
+  // 其余平台由网关侧的 platform 路由覆盖或由 GD 音乐台兜底。
+  const gatewayTasks: Promise<SongResult[]>[] = [
+    searchSpotifyViaGateway(keyword, cfg.perSourceLimit)
+  ];
+  if (cfg.nativePlatforms.includes('bilibili')) {
+    gatewayTasks.push(searchBilibiliViaGateway(keyword, cfg.perSourceLimit));
   }
+  const settled = await Promise.allSettled(gatewayTasks);
+  rawSongs = settled.flatMap((item) => (item.status === 'fulfilled' ? item.value : []));
 
   // 如果原生搜索无结果，回退到 GD 音乐台
   if (rawSongs.length === 0) {

@@ -2,9 +2,8 @@ import { cloneDeep } from 'lodash';
 
 import { getMusicDB } from '@/hooks/MusicHook';
 import { SongSourceConfigManager } from '@/services/SongSourceConfigManager';
-import { useSettingsStore } from '@/store';
 import type { SongResult } from '@/types/music';
-import { isElectron } from '@/utils';
+
 import requestMusic from '@/utils/request_music';
 
 import { isCrossPlatformSong } from './crossPlatformSearch';
@@ -158,7 +157,7 @@ export class CacheManager {
       await db.deleteData('music_url_cache', id);
 
       // 清除失败缓存 - 需要遍历所有策略
-      const strategies = ['custom', 'gdmusic', 'unblockMusic'];
+      const strategies = ['custom', 'gdmusic'];
       for (const strategy of strategies) {
         const cacheKey = `${id}_${strategy}`;
         try {
@@ -228,12 +227,6 @@ const getGDMusicAudio = async (id: number, data: SongResult): Promise<ParsedMusi
  * @param sources 音源列表
  * @returns 解析结果
  */
-const getUnblockMusicAudio = (id: number, data: SongResult, sources: any[]) => {
-  // unblockMusic 依赖 Electron IPC（window.api），Web/Capacitor 环境跳过
-  if (!isElectron) return Promise.resolve(null);
-  const filteredSources = sources.filter((source) => source !== 'gdmusic');
-  return window.api.unblockMusic(id, cloneDeep(data), cloneDeep(filteredSources));
-};
 
 /**
  * 统一的解析结果适配器
@@ -379,56 +372,6 @@ class GDMusicStrategy implements MusicSourceStrategy {
 }
 
 /**
- * UnblockMusic解析策略
- */
-class UnblockMusicStrategy implements MusicSourceStrategy {
-  name = 'unblockMusic';
-  priority = 4;
-
-  canHandle(sources: string[]): boolean {
-    // unblockMusic 依赖 Electron IPC，Web/Capacitor 环境不可用
-    if (!isElectron) return false;
-    const unblockSources = sources.filter((source) => !['custom', 'gdmusic'].includes(source));
-    return unblockSources.length > 0;
-  }
-
-  async parse(
-    id: number,
-    data: SongResult,
-    _quality?: string,
-    sources?: string[]
-  ): Promise<MusicParseResult | null> {
-    // 检查失败缓存
-    if (CacheManager.isInFailedCache(id, this.name)) {
-      return null;
-    }
-
-    try {
-      const unblockSources = (sources || []).filter(
-        (source) => !['custom', 'gdmusic'].includes(source)
-      );
-
-      const result = await RetryHelper.withRetry(async () => {
-        return await getUnblockMusicAudio(id, data, unblockSources);
-      });
-
-      const adaptedResult = adaptParseResult(result);
-      if (adaptedResult?.data?.data?.url) {
-        return adaptedResult;
-      }
-
-      // 解析失败，添加失败缓存
-      CacheManager.addFailedCache(id, this.name);
-      return null;
-    } catch (error) {
-      console.error('UnblockMusic解析失败:', error);
-      CacheManager.addFailedCache(id, this.name);
-      return null;
-    }
-  }
-}
-
-/**
  * 跨平台直链解析策略
  *
  * 对跨平台搜索结果（platform + platformId），按以下优先级获取播放 URL：
@@ -445,8 +388,6 @@ class CrossPlatformStrategy implements MusicSourceStrategy {
   name = 'crossPlatform';
   priority = -1; // 最高优先级（小于 0）
 
-  // 支持通过 unblockMusic 解析的平台
-  private static readonly UNBLOCK_PLATFORMS = ['qq', 'migu', 'kugou', 'kuwo', 'joox', 'pyncmd'];
   // GD 音乐台直接支持的平台（可用于 getUrlByPlatform）
   private static readonly GD_SUPPORTED_PLATFORMS = ['joox', 'kuwo', 'netease'];
 
@@ -461,44 +402,6 @@ class CrossPlatformStrategy implements MusicSourceStrategy {
    * @param platform 要尝试的平台
    * @returns 解析结果，失败返回 null
    */
-  private async tryUnblockMusic(
-    data: SongResult,
-    platform: string
-  ): Promise<MusicParseResult | null> {
-    // unblockMusic 依赖 Electron IPC（window.api），Web/Capacitor 环境跳过
-    if (!isElectron) return null;
-    try {
-      const unblockData = {
-        name: data.name,
-        artists: (data.ar || data.artists || []).map((a) => ({ name: a.name })),
-        album: data.al || data.album || { name: '' },
-        duration: data.duration || data.dt || data.count || 0
-      };
-
-      const unblockResult = await window.api.unblockMusic(
-        0, // 跨平台歌曲没有网易云 ID，传 0（unblockMusic 内部用 data 搜索，不依赖 id）
-        unblockData,
-        [platform]
-      );
-
-      // 检测 IPC handler 返回的错误格式 { error: string }
-      if (unblockResult?.error) {
-        console.warn(
-          `[CrossPlatformStrategy] unblockMusic [${platform}] 失败: ${unblockResult.error}`
-        );
-        return null;
-      }
-
-      const adapted = adaptParseResult(unblockResult);
-      if (adapted?.data?.data?.url) {
-        console.log(`[CrossPlatformStrategy] unblockMusic [${platform}] 解析成功`);
-        return adapted;
-      }
-    } catch (unblockError) {
-      console.warn(`[CrossPlatformStrategy] unblockMusic [${platform}] 异常:`, unblockError);
-    }
-    return null;
-  }
 
   /**
    * 归一化字符串用于比较（小写 + 去空格/标点）
@@ -647,13 +550,6 @@ class CrossPlatformStrategy implements MusicSourceStrategy {
     const br = brMap[quality] || '999';
 
     try {
-      // ==================== 1. unblockMusic 指定平台 ====================
-      // 仅在原始平台搜索，确保匹配的歌曲来自正确的平台
-      if (CrossPlatformStrategy.UNBLOCK_PLATFORMS.includes(platform)) {
-        const result = await this.tryUnblockMusic(data, platform);
-        if (result) return result;
-      }
-
       // ==================== 2. GD 音乐台直链获取（仅限支持的平台） ====================
       // GD 音乐台支持 joox/kuwo/netease，可以直接用 platformId 获取 URL
       if (CrossPlatformStrategy.GD_SUPPORTED_PLATFORMS.includes(platform)) {
@@ -696,7 +592,6 @@ export class MusicSourceStrategyFactory {
     new LxMusicStrategy(),
     new CustomApiStrategy(),
     new GDMusicStrategy(),
-    new UnblockMusicStrategy()
   ];
 
   /**
@@ -787,73 +682,6 @@ export class MusicParser {
         };
       }
 
-      // 非Electron环境直接使用API请求
-      if (!isElectron) {
-        return await requestMusic.get<any>('/music', { params: { id } });
-      }
-
-      // 获取设置存储
-      let settingsStore: any;
-      try {
-        settingsStore = useSettingsStore();
-      } catch (error) {
-        console.error('无法获取设置存储，使用后备方案:', error);
-        return await requestMusic.get<any>('/music', { params: { id } });
-      }
-
-      // 获取音源配置
-      const { musicSources, quality } = getMusicConfig(id, settingsStore);
-
-      // 检查缓存（传入音源配置用于验证缓存有效性）
-      const cachedResult = await CacheManager.getCachedMusicUrl(id, musicSources);
-      if (cachedResult) {
-        return cachedResult;
-      }
-
-      // 检查音乐解析功能是否启用
-      if (!settingsStore?.setData?.enableMusicUnblock) {
-        return {
-          data: {
-            code: 404,
-            message: '音乐解析功能已禁用',
-            data: undefined
-          }
-        };
-      }
-
-      if (musicSources.length === 0) {
-        console.warn('没有配置可用的音源，使用后备方案');
-        return await requestMusic.get<any>('/music', { params: { id } });
-      }
-
-      // 获取可用的解析策略
-      const availableStrategies = MusicSourceStrategyFactory.getAvailableStrategies(
-        musicSources,
-        settingsStore
-      );
-
-      if (availableStrategies.length === 0) {
-        console.warn('没有可用的解析策略，使用后备方案');
-        return await requestMusic.get<any>('/music', { params: { id } });
-      }
-
-      // 按优先级依次尝试解析策略
-      for (const strategy of availableStrategies) {
-        try {
-          const result = await strategy.parse(id, data, quality, musicSources);
-          if (result?.data?.data?.url) {
-            // 缓存成功结果（包含音源配置）
-            await CacheManager.setCachedMusicUrl(id, result, musicSources);
-
-            return result;
-          }
-        } catch (error) {
-          console.error(`策略 ${strategy.name} 解析异常:`, error);
-          // 继续尝试下一个策略
-        }
-      }
-
-      console.warn('所有解析策略都失败了，使用后备方案');
     } catch (error) {
       console.error('MusicParser.parseMusic 执行异常，使用后备方案:', error);
     }

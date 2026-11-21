@@ -1,7 +1,5 @@
 import { Howler } from 'howler';
 
-import { isElectron } from '@/utils';
-
 import { upgradeToHttps } from './audioAnalysisGate';
 
 type EventCallback = (...args: any[]) => void;
@@ -48,19 +46,7 @@ export class LocalAudioPlayer {
       if (this._cancelled) throw new Error('音频加载已取消');
       let arrayBuffer: ArrayBuffer;
 
-      if (isElectron && this._url.startsWith('local://')) {
-        const filePath = this._localUrlToPath(this._url);
-        const result: unknown = await (window as any).electron.ipcRenderer.invoke(
-          'read-file-binary',
-          filePath
-        );
-        if (!result) throw new Error('文件读取失败');
-        const uint8 = result as Uint8Array;
-        // Uint8Array.buffer 的静态类型是 ArrayBufferLike，此处实际来自 ipcRenderer 的
-        // 普通 ArrayBuffer，收窄一次避免后续切片出现 SharedArrayBuffer 分支
-        const binary = uint8.buffer as ArrayBuffer;
-        arrayBuffer = binary.slice(uint8.byteOffset, uint8.byteOffset + uint8.byteLength);
-      } else if (!this._url.startsWith('local://')) {
+      if (!this._url.startsWith('local://')) {
         // https 页面 fetch 不会像 media 元素那样自动升级混合内容，http 直链必须显式升级
         const response = await fetch(upgradeToHttps(this._url));
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -127,7 +113,7 @@ export class LocalAudioPlayer {
           arrayBuffer = await response.arrayBuffer();
         }
       } else {
-        throw new Error('非 Electron 环境无法加载本地文件');
+        throw new Error('当前平台无法加载此本地文件');
       }
 
       if (this._cancelled) throw new Error('音频加载已取消');

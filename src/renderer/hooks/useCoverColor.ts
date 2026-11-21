@@ -230,9 +230,7 @@ export function initCoverColor() {
         updateCSSVariables(accent.r, accent.g, accent.b);
 
         // 发送颜色到桌面歌词窗口
-        if (window.api?.sendCoverColor) {
-          window.api.sendCoverColor(primaryColor.value);
-        }
+
       }
     },
     { immediate: true }

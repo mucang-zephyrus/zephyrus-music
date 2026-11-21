@@ -584,6 +584,7 @@
 </template>
 
 <script setup lang="ts">
+import { useMessage } from 'naive-ui';
 import { useDebounceFn } from '@vueuse/core';
 import { onClickOutside } from '@vueuse/core';
 import type { CSSProperties } from 'vue';
@@ -606,6 +607,8 @@ import { usePlayerStore } from '@/store/modules/player';
 import { useSearchStore } from '@/store/modules/search';
 import { useUserStore } from '@/store/modules/user';
 import { getImgUrl } from '@/utils';
+
+const messageApi = useMessage();
 
 const route = useRoute();
 const router = useRouter();
@@ -1406,7 +1409,7 @@ async function onCreatePlaylistCoverChange(event: Event) {
     if (createPlaylistCover.value) URL.revokeObjectURL(createPlaylistCover.value.url);
     createPlaylistCover.value = { ...cropped, url: URL.createObjectURL(cropped.blob) };
   } catch {
-    window.$message?.error('封面图片读取失败');
+    messageApi.error('封面图片读取失败');
   }
 }
 
@@ -1452,7 +1455,7 @@ const submitCreatePlaylist = async () => {
     }
     closeCreatePlaylist();
     const resultSuffix = followUpIssues.length ? '（' + followUpIssues.join('、') + '）' : '';
-    window.$message?.success('已创建「' + name + '」' + resultSuffix);
+    messageApi.success('已创建「' + name + '」' + resultSuffix);
   } catch (error: any) {
     createPlaylistError.value = error?.message || '创建歌单失败';
   } finally {

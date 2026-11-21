@@ -20,25 +20,17 @@ import {
   registerMobileTopbarPresentation,
   unregisterMobileTopbarPresentation
 } from '@/composables/useMobileTopbarMenu';
-import { useSettingsStore } from '@/store/modules/settings';
-import { isElectron } from '@/utils';
 
-import { createDefaultAppUpdateState } from '../../../shared/appUpdate';
-import config from '../../../../package.json';
 import { flashSettingTarget, useSettingsPageContext } from './useSettingsPageContext';
 import AboutTab from './tabs/AboutTab.vue';
 import AdvancedTab from './tabs/AdvancedTab.vue';
-import ApplicationTab from './tabs/ApplicationTab.vue';
-import NetworkTab from './tabs/NetworkTab.vue';
 import PlaybackTab from './tabs/PlaybackTab.vue';
-import SystemTab from './tabs/SystemTab.vue';
 
 defineOptions({ name: 'SetSection' });
 
 const route = useRoute();
 const router = useRouter();
 const { t } = useI18n();
-const settingsStore = useSettingsStore();
 const contentRef = ref<HTMLElement | null>(null);
 
 useSettingsPageContext();
@@ -46,14 +38,7 @@ useSettingsPageContext();
 const SECTION_COMPONENTS: Record<string, unknown> = {
   playback: PlaybackTab,
   advanced: AdvancedTab,
-  about: AboutTab,
-  ...(isElectron
-    ? {
-        application: ApplicationTab,
-        network: NetworkTab,
-        system: SystemTab
-      }
-    : {})
+  about: AboutTab
 };
 
 const section = computed(() => String(route.params.section || ''));
@@ -70,9 +55,7 @@ onMounted(() => {
     router.replace('/set');
     return;
   }
-  if (isElectron && settingsStore.appUpdateState.currentVersion === '') {
-    settingsStore.setAppUpdateState(createDefaultAppUpdateState(config.version));
-  }
+
   registerMobileTopbarPresentation({
     routePath: route.path,
     title: sectionTitle.value

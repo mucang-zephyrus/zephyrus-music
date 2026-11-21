@@ -27,13 +27,6 @@
     </n-button>
 
     <!-- 自动获取 Cookie（仅桌面端网易云） -->
-    <n-button
-      v-if="platform === 'netease' && isElectron"
-      class="btn-auto-cookie"
-      @click="autoGetCookie"
-    >
-      {{ t('login.button.autoGetCookie') }}
-    </n-button>
   </div>
 </template>
 
@@ -44,7 +37,6 @@ import { useI18n } from 'vue-i18n';
 
 import PlatformLogo from '@/components/common/PlatformLogo.vue';
 import type { MusicPlatform } from '@/store/modules/platformAccounts';
-import { isElectron } from '@/utils';
 
 const props = defineProps<{
   platform: MusicPlatform;
@@ -145,9 +137,7 @@ const handleLogin = async () => {
       if (props.platform === 'bilibili' && !cookieEntries.SESSDATA) {
         throw new Error('哔哩哔哩 Cookie 缺少 SESSDATA');
       }
-      if (window.api?.setPlatformCookie) {
-        await window.api.setPlatformCookie(props.platform, cookie);
-      }
+
       localStorage.setItem(`platform-cookie-${props.platform}`, cookie);
 
       message.success(`${props.platformName} Cookie 保存成功`);
@@ -182,43 +172,15 @@ const handleLogin = async () => {
 };
 
 // 网易云自动获取 Cookie
-const autoGetCookie = () => {
-  if (!isElectron) return;
-  message.info(t('login.message.autoGetCookieTip'));
-  window.electron.ipcRenderer.send('open-login');
-};
 
 // 监听 Cookie 接收（仅网易云）
-const handleCookieReceived = async (_event: any, cookieValue: string) => {
-  try {
-    localStorage.setItem('token', cookieValue);
-    const { getUserDetail } = await import('@/api/login');
-    const user = await getUserDetail();
-    if (user.data && user.data.profile) {
-      message.success(t('login.message.autoGetCookieSuccess'));
-      emit('loginSuccess', user.data.profile, cookieValue);
-    } else {
-      localStorage.removeItem('token');
-      message.error(t('login.message.autoGetCookieFailed'));
-      emit('loginError', t('login.message.autoGetCookieFailed'));
-    }
-  } catch {
-    localStorage.removeItem('token');
-    message.error(t('login.message.autoGetCookieFailed'));
-    emit('loginError', t('login.message.autoGetCookieFailed'));
-  }
-};
 
 onMounted(() => {
-  if (isElectron && props.platform === 'netease') {
-    window.electron.ipcRenderer.on('send-cookies', handleCookieReceived);
-  }
+
 });
 
 onBeforeUnmount(() => {
-  if (isElectron && props.platform === 'netease') {
-    window.electron.ipcRenderer.removeAllListeners('send-cookies');
-  }
+
 });
 </script>
 

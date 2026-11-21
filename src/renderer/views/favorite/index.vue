@@ -16,67 +16,6 @@
         </div>
       </div>
 
-      <div v-if="!isComponent && isElectron" class="flex items-center gap-3">
-        <template v-if="!isSelecting">
-          <!-- Sort Controls -->
-          <div class="flex items-center bg-gray-100 dark:bg-neutral-800 rounded-full p-1 h-9">
-            <button
-              v-for="isDesc in [true, false]"
-              :key="String(isDesc)"
-              class="px-3 h-full rounded-full text-xs font-medium transition-all duration-300 flex items-center gap-1"
-              :class="
-                isDescending === isDesc
-                  ? 'bg-white dark:bg-neutral-700 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-              "
-              @click="toggleSort(isDesc)"
-            >
-              <i class="text-sm" :class="isDesc ? 'ri-sort-desc' : 'ri-sort-asc'"></i>
-              {{ isDesc ? t('favorite.descending') : t('favorite.ascending') }}
-            </button>
-          </div>
-
-          <button
-            class="h-9 px-4 rounded-full bg-[var(--accent-color)]/10 hover:bg-[var(--accent-color)] text-[var(--accent-color)] hover:text-white text-xs font-medium transition-all duration-300 flex items-center gap-1.5"
-            @click="startSelect"
-          >
-            <i class="ri-checkbox-multiple-line text-sm"></i>
-            {{ t('favorite.batchDownload') }}
-          </button>
-        </template>
-
-        <!-- Selection Controls -->
-        <div
-          v-else
-          class="flex items-center gap-3 bg-white dark:bg-neutral-800 shadow-sm rounded-full px-4 py-1.5 border border-gray-100 dark:border-neutral-700 h-9"
-        >
-          <n-checkbox
-            :checked="isAllSelected"
-            :indeterminate="isIndeterminate"
-            size="small"
-            @update:checked="handleSelectAll"
-          >
-            <span class="text-xs">{{ t('common.selectAll') }}</span>
-          </n-checkbox>
-          <div class="h-3 w-px bg-gray-200 dark:bg-neutral-700 mx-1"></div>
-          <div class="flex items-center gap-2">
-            <button
-              class="h-6 px-3 rounded-full bg-primary text-white text-xs font-medium hover:bg-[var(--accent-color)]-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-              :disabled="selectedSongs.length === 0"
-              @click="handleBatchDownload"
-            >
-              <i class="ri-download-line"></i>
-              {{ t('favorite.download', { count: selectedSongs.length }) }}
-            </button>
-            <button
-              class="h-6 px-3 rounded-full bg-gray-100 dark:bg-neutral-700 text-gray-600 dark:text-gray-300 text-xs font-medium hover:bg-gray-200 dark:hover:bg-neutral-600 transition-colors"
-              @click="cancelSelect"
-            >
-              {{ t('common.cancel') }}
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- Main Content -->
@@ -101,15 +40,9 @@
             :item="song"
             :favorite="false"
             class="rounded-xl hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors"
-            :class="[
-              setAnimationClass('animate__bounceInLeft'),
-              { '!bg-[var(--accent-color)]/10': selectedSongs.includes(song.id as number) }
-            ]"
+            :class="setAnimationClass('animate__bounceInLeft')"
             :style="getItemAnimationDelay(index)"
-            :selectable="isSelecting"
-            :selected="selectedSongs.includes(song.id as number)"
             @play="handlePlay"
-            @select="handleSelect"
           />
 
           <div v-if="isComponent" class="pt-4 text-center">
@@ -151,10 +84,9 @@ import { useRouter } from 'vue-router';
 import { getMusicDetail } from '@/api/music';
 import PlayBottom from '@/components/common/PlayBottom.vue';
 import SongItem from '@/components/common/SongItem.vue';
-import { useDownload } from '@/hooks/useDownload';
 import { usePlayerStore } from '@/store';
 import type { SongResult } from '@/types/music';
-import { isElectron, setAnimationClass, setAnimationDelay } from '@/utils';
+import { setAnimationClass, setAnimationDelay } from '@/utils';
 
 const { t } = useI18n();
 const playerStore = usePlayerStore();
@@ -163,58 +95,8 @@ const favoriteSongs = ref<SongResult[]>([]);
 const loading = ref(false);
 const noMore = ref(false);
 
-// 多选相关
-const isSelecting = ref(false);
-const selectedSongs = ref<number[]>([]);
-const { batchDownloadMusic } = useDownload();
-
-// 开始多选
-const startSelect = () => {
-  isSelecting.value = true;
-  selectedSongs.value = [];
-};
-
-// 取消多选
-const cancelSelect = () => {
-  isSelecting.value = false;
-  selectedSongs.value = [];
-};
-
-// 处理选择
-const handleSelect = (songId: number, selected: boolean) => {
-  if (selected) {
-    selectedSongs.value.push(songId);
-  } else {
-    selectedSongs.value = selectedSongs.value.filter((id) => id !== songId);
-  }
-};
-
-// 批量下载
-const handleBatchDownload = async () => {
-  // 获取选中歌曲的信息
-  const selectedSongsList = selectedSongs.value
-    .map((songId) => favoriteSongs.value.find((s) => s.id === songId))
-    .filter((song) => song) as SongResult[];
-
-  // 使用hook中的批量下载功能
-  await batchDownloadMusic(selectedSongsList);
-
-  // 下载完成后取消选择
-  cancelSelect();
-};
-
 // 排序相关
 const isDescending = ref(true); // 默认倒序显示
-
-// 切换排序方式
-const toggleSort = (descending: boolean) => {
-  if (isDescending.value === descending) return;
-  isDescending.value = descending;
-  currentPage.value = 1;
-  favoriteSongs.value = [];
-  noMore.value = false;
-  getFavoriteSongs();
-};
 
 // 无限滚动相关
 const pageSize = 100;
@@ -347,25 +229,6 @@ const handleMore = () => {
   router.push('/history');
 };
 
-// 全选相关
-const isAllSelected = computed(() => {
-  return (
-    favoriteSongs.value.length > 0 && selectedSongs.value.length === favoriteSongs.value.length
-  );
-});
-
-const isIndeterminate = computed(() => {
-  return selectedSongs.value.length > 0 && selectedSongs.value.length < favoriteSongs.value.length;
-});
-
-// 处理全选/取消全选
-const handleSelectAll = (checked: boolean) => {
-  if (checked) {
-    selectedSongs.value = favoriteSongs.value.map((song) => song.id as number);
-  } else {
-    selectedSongs.value = [];
-  }
-};
 </script>
 
 <style lang="scss" scoped>

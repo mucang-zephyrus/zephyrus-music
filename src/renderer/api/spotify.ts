@@ -115,10 +115,7 @@ export async function searchSpotifyViaGateway(keyword: string, limit = 20): Prom
 
 export function openSpotifyTrack(url: string): void {
   if (!url) return;
-  if (window.api?.openExternal) {
-    void window.api.openExternal(url);
-    return;
-  }
+
   if (typeof (window as any).AndroidNative !== 'undefined' && (window as any).AndroidNative.openExternal) {
     (window as any).AndroidNative.openExternal(url);
     return;

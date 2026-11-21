@@ -1,14 +1,12 @@
 import { Howl } from 'howler';
 
-import { isElectron } from '@/utils';
-
 import { isAndroidNative } from './androidNative';
 
 /**
  * 网页端在线歌曲音频响应可行性网关
  *
- * 背景：非 Electron 环境的流媒体此前走 _setupEQHowlMobile（不建 Web Audio 图），
- * 因为跨域媒体一旦接入 createMediaElementSource 会被 taint 成静音且不可逆。
+ * 跨域流媒体默认直通播放，
+ *跨域媒体一旦接入 createMediaElementSource 会被 taint 成静音且不可逆。
  * 实测（2026-09）：网易云 CDN 绝大多数节点（m7/m8/m701/m702/m801）与自建曲库
  * 均返回 Access-Control-Allow-Origin: *，少数节点（m802/jd-musicrep 等）不带。
  * 因此按"运行时探测 + host 级缓存"决定是否武装元素并建图；探测不过的一律
@@ -35,13 +33,12 @@ const PROBE_TIMEOUT_MS = 1500;
 
 /**
  * 是否为"纯 Web 浏览器"平台：
- * Electron 无 CORS 限制（走桌面建图路径），Android 原生有 PeakSafeAudioProcessor
- * 分析通道（styleEngine 直接注入），都不经过本网关。
+ * Android 原生使用 PeakSafeAudioProcessor 分析通道。
  * 注意：@capacitor/core 的 web 运行时在纯浏览器里也会注册 window.Capacitor，
  * 必须用 isNativePlatform() 区分真实原生壳与网页版。
  */
 export function isWebAnalysisPlatform(): boolean {
-  if (isElectron || isAndroidNative()) return false;
+  if (isAndroidNative()) return false;
   if (typeof window === 'undefined') return false;
   const capacitor = (window as any).Capacitor;
   return !(capacitor?.isNativePlatform?.() === true);

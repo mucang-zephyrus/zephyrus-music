@@ -1,4 +1,4 @@
-import { isElectron } from '@/utils';
+
 import request from '@/utils/request';
 
 interface IParams {
@@ -45,27 +45,21 @@ export const getSearchSuggestions = async (keyword: string) => {
     return Promise.resolve([]);
   }
 
-
   try {
     let responseData: KugouSuggestionResponse;
-    if (isElectron) {
-      responseData = await window.api.getSearchSuggestions(keyword);
-    } else {
-      // 非 Electron 环境下，使用接口
-      const res = await request.get<NeteaseSuggestResult>('/search/suggest', {
-        params: { keywords: keyword }
-      });
+    const res = await request.get<NeteaseSuggestResult>('/search/suggest', {
+      params: { keywords: keyword }
+    });
 
-      const result = res?.data?.result || {};
-      const names: string[] = [];
-      if (Array.isArray(result.songs)) names.push(...result.songs.map((s) => s.name));
-      if (Array.isArray(result.artists)) names.push(...result.artists.map((a) => a.name));
-      if (Array.isArray(result.albums)) names.push(...result.albums.map((al) => al.name));
+    const result = res?.data?.result || {};
+    const names: string[] = [];
+    if (Array.isArray(result.songs)) names.push(...result.songs.map((s) => s.name));
+    if (Array.isArray(result.artists)) names.push(...result.artists.map((a) => a.name));
+    if (Array.isArray(result.albums)) names.push(...result.albums.map((al) => al.name));
 
-      // 去重并截取前10个
-      const unique = Array.from(new Set(names)).slice(0, 10);
-      return unique;
-    }
+    // 去重并截取前10个
+    const unique = Array.from(new Set(names)).slice(0, 10);
+    return unique;
 
     if (responseData && Array.isArray(responseData.data)) {
       const suggestions = responseData.data.map((item) => item.keyword).slice(0, 10);

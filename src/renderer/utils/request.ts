@@ -3,20 +3,12 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { gatewayBaseURL } from '@/api/gatewayBase';
 import { useUserStore } from '@/store/modules/user';
 
-import { getSetData, isElectron, isMobile } from '.';
-import {
-  type NeteaseRequestMode,
-  normalizeNeteaseRequestMode,
-  resolveNeteaseRequestBase
-} from './neteaseRequestMode';
-
-let setData: any = null;
+import { isMobile } from '.';
 
 // 扩展请求配置接口
 interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
   retryCount?: number;
   noRetry?: boolean;
-  neteaseRequestMode?: NeteaseRequestMode;
 }
 
 /**
@@ -27,35 +19,11 @@ function isCapacitor(): boolean {
   return typeof window !== 'undefined' && !!(window as any).Capacitor;
 }
 
-/**
- * 计算 API baseURL
- * - Electron: 本地 Express 服务（netease-cloud-music-api）
- * - Capacitor: 远程 API（通过 VITE_API 环境变量配置）
- * - Web: VITE_API 环境变量
- */
-function computeBaseURL(): string {
-  if (typeof window !== 'undefined' && (window as any).electron) {
-    // Electron: 本地 API 服务
-    const port = setData?.musicApiPort || 30488;
-    return `http://127.0.0.1:${port}`;
-  }
-  // 非 Electron（Web / Capacitor）: 使用环境变量
-  const api = import.meta.env.VITE_API;
-  if (api) return api;
-  // 兜底：开发环境默认
-  if (import.meta.env.DEV) return 'http://localhost:30488';
-  // 生产环境兜底：使用 HTTPS 网关，避免 Android WebView 的明文请求限制。
-  console.warn('[request] VITE_API 未配置，使用 HTTPS 网关兜底地址');
-  return 'https://mucang.xyz/zephyrus/api';
-}
-
-const baseURL = computeBaseURL();
-
 // Capacitor 原生 HTTP 不支持 withCredentials，需要禁用
 const isCapacitorEnv = isCapacitor();
 
 const request = axios.create({
-  baseURL,
+  baseURL: `${gatewayBaseURL}/netease-enhanced`,
   timeout: 15000,
   withCredentials: !isCapacitorEnv
 });
@@ -68,19 +36,6 @@ const RETRY_DELAY = 500;
 // 请求拦截器
 request.interceptors.request.use(
   (config: CustomAxiosRequestConfig) => {
-    try {
-      setData = getSetData();
-    } catch {
-      // 在 Pinia 未激活时（如 Axios 拦截器早期调用），使用空对象
-      setData = setData || {};
-    }
-    // Pin retries to their original backend even if the user switches while a request is pending.
-    config.neteaseRequestMode ??= normalizeNeteaseRequestMode(setData?.neteaseRequestMode);
-    config.baseURL = resolveNeteaseRequestBase(
-      computeBaseURL(),
-      gatewayBaseURL,
-      config.neteaseRequestMode
-    );
     // 只在retryCount未定义时初始化为0
     if (config.retryCount === undefined) {
       config.retryCount = 0;
@@ -91,9 +46,9 @@ request.interceptors.request.use(
     config.params = {
       ...config.params,
       timestamp: Date.now(),
-      device: isElectron ? 'pc' : isMobile.value ? 'mobile' : isCapacitor() ? 'capacitor' : 'web'
+      device: isMobile.value ? 'mobile' : isCapacitor() ? 'capacitor' : 'web'
     };
-    if (config.neteaseRequestMode === 'enhanced' && config.url?.split('?')[0] === '/song/url/v1') {
+    if (config.url?.split('?')[0] === '/song/url/v1') {
       config.params.randomCNIP = true;
     }
     const token = localStorage.getItem('token');
@@ -105,15 +60,6 @@ request.interceptors.request.use(
         ...config.data,
         cookie: token
       };
-    }
-    if (isElectron && config.neteaseRequestMode === 'alger') {
-      const proxyConfig = setData?.proxyConfig;
-      if (proxyConfig?.enable && ['http', 'https'].includes(proxyConfig?.protocol)) {
-        config.params.proxy = `${proxyConfig.protocol}://${proxyConfig.host}:${proxyConfig.port}`;
-      }
-      if (setData.enableRealIP && setData.realIP) {
-        config.params.realIP = setData.realIP;
-      }
     }
 
     return config;

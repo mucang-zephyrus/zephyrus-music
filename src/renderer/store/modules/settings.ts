@@ -2,10 +2,10 @@ import { cloneDeep, isArray, mergeWith } from 'lodash';
 import { defineStore } from 'pinia';
 import { ref, watch } from 'vue';
 
-import setDataDefault from '@/../main/set.json';
+import setDataDefault from '@/config/defaultSettings.json';
 import homeRouter from '@/router/home';
 import { useMenuStore } from '@/store/modules/menu';
-import { isElectron } from '@/utils';
+
 import {
   applyTheme,
   getCurrentTheme,
@@ -14,19 +14,13 @@ import {
   watchSystemTheme
 } from '@/utils/theme';
 
-import { type AppUpdateState, createDefaultAppUpdateState } from '../../../shared/appUpdate';
-
 export const useSettingsStore = defineStore('settings', () => {
   const theme = ref<ThemeType>(getCurrentTheme());
   const isMobile = ref(false);
   const isMiniMode = ref(false);
   const showUpdateModal = ref(false);
-  const appUpdateState = ref<AppUpdateState>(createDefaultAppUpdateState());
   const showArtistDrawer = ref(false);
   const currentArtistId = ref<number | null>(null);
-  const systemFonts = ref<{ label: string; value: string }[]>([
-    { label: '系统默认', value: 'system-ui' }
-  ]);
   const showDownloadDrawer = ref(false);
 
   // 系统主题监听器清理函数
@@ -43,23 +37,18 @@ export const useSettingsStore = defineStore('settings', () => {
       ...data
     };
 
-    if (isElectron) {
-      window.electron.ipcRenderer.send('set-store-value', 'set', cloneDeep(mergedData));
-    } else {
-      localStorage.setItem('appSettings', JSON.stringify(cloneDeep(mergedData)));
-    }
+    localStorage.setItem('appSettings', JSON.stringify(cloneDeep(mergedData)));
     setData.value = cloneDeep(mergedData);
   };
 
   // 初始化时先从存储中读取设置
   const getInitialSettings = () => {
     // 从存储中获取保存的设置
-    const savedSettings = isElectron
-      ? window.electron.ipcRenderer.sendSync('get-store-value', 'set')
-      : JSON.parse(localStorage.getItem('appSettings') || '{}');
+    const savedSettings = JSON.parse(localStorage.getItem('appSettings') || '{}');
 
     if (savedSettings && typeof savedSettings === 'object') {
       delete savedSettings.bottomNavLayout;
+      delete savedSettings.neteaseRequestMode;
     }
 
     // 自定义合并策略：如果是数组，直接使用源数组（覆盖默认值）
@@ -154,10 +143,6 @@ export const useSettingsStore = defineStore('settings', () => {
     showUpdateModal.value = value;
   };
 
-  const setAppUpdateState = (value: AppUpdateState) => {
-    appUpdateState.value = value;
-  };
-
   const setShowArtistDrawer = (show: boolean) => {
     showArtistDrawer.value = show;
     if (!show) {
@@ -169,25 +154,13 @@ export const useSettingsStore = defineStore('settings', () => {
     currentArtistId.value = id;
   };
 
-  const setSystemFonts = (fonts: string[]) => {
-    systemFonts.value = [
-      { label: '系统默认', value: 'system-ui' },
-      ...fonts.map((font) => ({
-        label: font,
-        value: font
-      }))
-    ];
-  };
-
   const setShowDownloadDrawer = (show: boolean) => {
     showDownloadDrawer.value = show;
   };
 
   const setLanguage = (language: string) => {
     setSetData({ language });
-    if (isElectron) {
-      window.electron.ipcRenderer.send('change-language', language);
-    }
+
   };
 
   const initializeSettings = () => {
@@ -203,18 +176,6 @@ export const useSettingsStore = defineStore('settings', () => {
       const manualTheme = setData.value.manualTheme || getCurrentTheme();
       theme.value = manualTheme;
       applyTheme(manualTheme);
-    }
-  };
-
-  const initializeSystemFonts = async () => {
-    if (!isElectron) return;
-    if (systemFonts.value.length > 1) return;
-
-    try {
-      const fonts = await window.api.invoke('get-system-fonts');
-      setSystemFonts(fonts);
-    } catch (error) {
-      console.error('获取系统字体失败:', error);
     }
   };
 
@@ -267,25 +228,20 @@ export const useSettingsStore = defineStore('settings', () => {
     isMobile,
     isMiniMode,
     showUpdateModal,
-    appUpdateState,
     showArtistDrawer,
     currentArtistId,
-    systemFonts,
     showDownloadDrawer,
     setSetData,
     toggleTheme,
     setAutoTheme,
     setMiniMode,
     setShowUpdateModal,
-    setAppUpdateState,
     setShowArtistDrawer,
     setCurrentArtistId,
-    setSystemFonts,
     setShowDownloadDrawer,
     setLanguage,
     initializeSettings,
     initializeTheme,
-    initializeSystemFonts,
     setCustomApiPlugin
   };
 });

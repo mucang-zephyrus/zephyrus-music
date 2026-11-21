@@ -1,6 +1,6 @@
 # Zephyrus Music 开发指南
 
-本指南介绍 Android、Web 及 Electron 入口的开发环境、代码结构和检查方法。
+本指南介绍 Android 与 Web的开发环境、代码结构和检查方法。
 
 ## 环境与启动
 
@@ -16,19 +16,17 @@ npm run dev:web -- --port 5199 --strictPort
 
 音乐 API 服务需单独配置。开发服务器使用 `--strictPort`，端口占用时会直接报错。
 
-`npm run dev` 启动 Electron 开发入口。
-
 ## 构建产物
 
 | 命令                                               | 用途与产物                                                          |
 | -------------------------------------------------- | ------------------------------------------------------------------- |
 | `npm run build:web`                                | 浏览器前端，输出 `src/renderer/dist/`                               |
-| `npm run build`                                    | electron-vite 构建，渲染产物位于 `out/renderer/`，供 Capacitor 使用 |
+| `npm run build`                                    | 同 `build:web` |
 | `npm run workflow -- web`                          | 歌词测试、工作流测试与 Web 构建                                     |
-| `npm run ci:local`                                 | 歌词测试、工作流测试与完整 electron-vite 构建                       |
+| `npm run ci:local`                                 | 歌词测试、工作流测试与Web 构建                       |
 | `npm run release:android -- --version-code <整数>` | 校验签名、构建、Capacitor 同步、Gradle 与 APK 验证                  |
 
-`capacitor.config.ts` 的 `webDir` 是 `out/renderer`。不能把单独执行 `build:web` 当作 Android 资源已更新。
+`capacitor.config.ts` 的 `webDir` 是 `src/renderer/dist`。构建后运行 `npx cap sync android`，将前端资源同步到 Android 工程。
 
 本地工作流会设置 `VITE_DISABLE_GZIP=1`；手动构建 Web 时可按需要设置该变量以跳过 gzip。它只影响压缩产物，不决定是否部署。
 
@@ -38,7 +36,6 @@ npm run dev:web -- --port 5199 --strictPort
 
 | 变量                    | 用途                                            |
 | ----------------------- | ----------------------------------------------- |
-| `VITE_API`              | 网易云 API 基础地址；缺失时请求层使用代码内兜底 |
 | `VITE_API_MUSIC`        | 音乐解析服务基础地址                            |
 | `VITE_MUSIC_GATEWAY`    | 平台登录、分享与其他音乐网关基础地址            |
 | `VITE_TTML_DB_BASE_URL` | 自有 TTML 库基础地址，配置后在 AMLL 之前尝试    |

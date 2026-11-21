@@ -104,16 +104,12 @@ function isPhoneDevice(): boolean {
 function openAnnouncement() {
   const action = announcement.value?.action;
   if (!action) return;
-  if (action.type === 'netease-settings') {
-    router.push('/set/playback?focus=netease-request-mode');
-    return;
-  }
   const albumId = action.id;
   const webUrl =
     action.type === 'album' && albumId ? `https://music.163.com/#/album?id=${albumId}` : action.url;
   if (!webUrl) return;
 
-  // 电脑（桌面浏览器/Electron）：新开网页
+  // 电脑（桌面浏览器）：新开网页
   if (!isPhoneDevice()) {
     window.open(webUrl, '_blank', 'noopener,noreferrer');
     return;

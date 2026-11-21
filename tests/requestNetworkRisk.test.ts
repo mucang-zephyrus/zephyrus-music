@@ -5,7 +5,6 @@ const { createDiscreteApi } = vi.hoisted(() => ({ createDiscreteApi: vi.fn() }))
 vi.mock('naive-ui', () => ({ createDiscreteApi }));
 vi.mock('../src/renderer/utils/index', () => ({
   getSetData: () => ({}),
-  isElectron: false,
   isMobile: { value: false }
 }));
 vi.mock('../src/renderer/store/modules/user', () => ({

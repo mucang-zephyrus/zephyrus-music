@@ -9,7 +9,6 @@ vi.mock('@/services/iosAudioProtection', () => ({
     subscribe: (listener: () => void) => protection.listeners.push(listener)
   }
 }));
-vi.mock('@/utils', () => ({ isElectron: false }));
 vi.mock('@/services/androidNative', () => ({ isAndroidNative: () => false }));
 vi.mock('@/services/climaxDetector', () => ({ climaxDetector: { disconnect: vi.fn() } }));
 vi.mock('@/services/leadDetector', () => ({

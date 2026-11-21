@@ -10,8 +10,7 @@ export const SUPPORTED_AUDIO_FORMATS = ['.mp3', '.flac', '.wav', '.ogg', '.m4a',
 export type SupportedAudioFormat = (typeof SUPPORTED_AUDIO_FORMATS)[number];
 
 /**
- * 主进程返回的原始音乐元数据
- * 由主进程扫描模块解析音乐文件后生成
+ * 从本地文件读取的音乐元数据
  */
 export type LocalMusicMeta = {
   /** 文件绝对路径 */
@@ -53,4 +52,7 @@ export type LocalMusicMeta = {
 export type LocalMusicEntry = LocalMusicMeta & {
   /** 使用 filePath 的 hash 作为唯一 ID */
   id: string;
+  /** 当前浏览器会话内导入文件的 Blob URL */
+  fileUrl?: string;
+  isSession?: boolean;
 };

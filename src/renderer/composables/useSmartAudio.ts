@@ -22,7 +22,7 @@ import { computed, ref, shallowRef } from 'vue';
 import { upgradeToHttps } from '@/services/audioAnalysisGate';
 import { audioService } from '@/services/audioService';
 import { type BpmCacheEntry,useMixEngineStore } from '@/store/modules/mixEngine';
-import { isElectron } from '@/utils';
+
 import { applyBandSplitCrossfade, type BandSplitChain,createBandSplitChain } from '@/utils/audio/bandSplitter';
 import { calculateBeatAlignedTransition } from '@/utils/audio/beatAlign';
 import {
@@ -172,18 +172,7 @@ export function useSmartAudio() {
 
     try {
       let arrayBuffer: ArrayBuffer;
-      if (isElectron && url.startsWith('local://')) {
-        const filePath = url.replace(/^local:\/{2,3}/, '').replace(/%2F/g, '/');
-        const result: unknown = await (window as any).electron.ipcRenderer.invoke(
-          'read-file-binary',
-          decodeURIComponent(filePath)
-        );
-        if (!result) return null;
-        const uint8 = result as Uint8Array;
-        const copy = new Uint8Array(uint8.byteLength);
-        copy.set(uint8);
-        arrayBuffer = copy.buffer;
-      } else if (!url.startsWith('local://')) {
+      if (!url.startsWith('local://')) {
         // https 页面上 fetch 不会像 media 元素那样自动升级混合内容，
         // 音频直链多为 http:// 必须显式升级，否则整段 BPM 预分析静默失效
         const response = await fetch(upgradeToHttps(url));

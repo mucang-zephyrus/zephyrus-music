@@ -147,25 +147,6 @@
                   </div>
 
                   <div class="mt-3 space-y-1">
-                    <div
-                      v-if="activePlTab === 'created' && isElectron"
-                      class="flex items-center gap-3 px-3 py-2.5 rounded-2xl cursor-pointer bg-neutral-50 dark:bg-neutral-800/40 hover:bg-neutral-100 dark:hover:bg-neutral-700/60 transition-colors duration-200"
-                      @click="goToImportPlaylist"
-                    >
-                      <div
-                        class="w-14 h-14 rounded-2xl bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center shrink-0"
-                      >
-                        <i class="ri-add-line text-xl text-neutral-400 dark:text-neutral-500" />
-                      </div>
-                      <div class="flex-1 min-w-0">
-                        <p class="text-sm font-medium text-neutral-800 dark:text-neutral-100">
-                          {{ t('comp.playlist.import.button') }}
-                        </p>
-                        <p class="text-xs text-neutral-400 dark:text-neutral-500">
-                          {{ t('comp.playlist.import.description') }}
-                        </p>
-                      </div>
-                    </div>
 
                     <div
                       v-for="(item, index) in currentPlaylists"
@@ -287,7 +268,7 @@ import PlayBottom from '@/components/common/PlayBottom.vue';
 import SongItem from '@/components/common/SongItem.vue';
 import { usePlayerStore } from '@/store/modules/player';
 import type { IUserDetail } from '@/types/user';
-import { formatNumber, getImgUrl, isElectron } from '@/utils';
+import { formatNumber, getImgUrl } from '@/utils';
 
 defineOptions({ name: 'UserDetail' });
 
@@ -418,9 +399,6 @@ const showFollowerList = () => {
   });
 };
 
-const goToImportPlaylist = () => {
-  router.push('/playlist/import');
-};
 
 const isArtist = (profile: any) => {
   return profile.userType === 4 || profile.userType === 2 || profile.accountType === 2;

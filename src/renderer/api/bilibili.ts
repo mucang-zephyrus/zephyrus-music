@@ -1,15 +1,12 @@
 /**
  * 哔哩哔哩（渲染层）
  *
- * 三端分流：
- * - Electron：走主进程 IPC（主进程直接请求 + 由 webRequest 注入 Referer/UA/CORS，可直连）
- * - Web / Android：浏览器无法自定义 Referer，播放地址统一经自有网关中转
+ * Web 和 Android：浏览器无法自定义 Referer，播放地址统一经自有网关中转
  *   （网关注入 Referer/UA 后流式转发，见 server-bilibili.js）
  */
 import axios from 'axios';
 
 import type { Artist, SongResult } from '@/types/music';
-import { isElectron } from '@/utils';
 
 import { gatewayBaseURL } from './gatewayBase';
 
@@ -54,24 +51,12 @@ export interface BilibiliSubtitlePayload {
 
 const gateway = axios.create({ baseURL: gatewayBaseURL, timeout: 20000 });
 
-/** 是否处于"需要网关中转"的环境（Web / Android WebView） */
-export const needsGatewayProxy = (): boolean => !isElectron;
-
 const cidCache = new Map<string, number>();
-
-function unwrap<T>(payload: { data?: T; error?: string } | undefined): T {
-  if (!payload) throw new Error('B 站接口无响应');
-  if (payload.error) throw new Error(payload.error);
-  if (payload.data === undefined || payload.data === null) throw new Error('B 站接口返回空数据');
-  return payload.data;
-}
 
 // ==================== 视频信息 ====================
 
 export async function getBilibiliVideoInfo(bvid: string): Promise<BilibiliVideoInfo> {
-  if (isElectron && window.api?.bilibiliVideoInfo) {
-    return unwrap<BilibiliVideoInfo>(await window.api.bilibiliVideoInfo(bvid));
-  }
+
   const { data } = await gateway.get<{ data: BilibiliVideoInfo }>('/bilibili/video-info', {
     params: { bvid }
   });
@@ -98,9 +83,7 @@ export async function getBilibiliStream(params: {
   cid: number;
   kind?: 'audio' | 'video';
 }): Promise<BilibiliStream> {
-  if (isElectron && window.api?.bilibiliStream) {
-    return unwrap<BilibiliStream>(await window.api.bilibiliStream(params));
-  }
+
   const { data } = await gateway.get<{ data: BilibiliStream }>('/bilibili/playurl', {
     params
   });
@@ -109,18 +92,15 @@ export async function getBilibiliStream(params: {
 
 /** 把 B 站直链转成当前环境可直接播放的地址（Web/Android 走网关中转） */
 export function toPlayableUrl(streamUrl: string): string {
-  if (!needsGatewayProxy()) return streamUrl;
   return toGatewayProxyUrl(streamUrl);
 }
 
 /**
  * 任意 B 站域内资源（封面/字幕/音视频）的网关中转地址。
  * 用于需要 CORS 或会被 Referer 防盗链拦截的场景（如封面取色）。
- * 非 Web/Android 环境直接返回原地址（Electron 由主进程注入请求头）。
  */
 export function toGatewayProxyUrl(resourceUrl: string): string {
   if (!resourceUrl) return resourceUrl;
-  if (!needsGatewayProxy()) return resourceUrl;
   return `${gatewayBaseURL}/bilibili/stream?url=${encodeURIComponent(resourceUrl)}`;
 }
 
@@ -141,9 +121,7 @@ export async function getBilibiliSubtitle(params: {
   /** 指定字幕语言（如 'ai-zh'）；不传则自动选中文优先 */
   lan?: string;
 }): Promise<BilibiliSubtitlePayload> {
-  if (isElectron && window.api?.bilibiliSubtitle) {
-    return unwrap<BilibiliSubtitlePayload>(await window.api.bilibiliSubtitle(params));
-  }
+
   const { data } = await gateway.get<{ data: BilibiliSubtitlePayload }>('/bilibili/subtitle', {
     params
   });
@@ -192,7 +170,7 @@ interface GatewaySearchItem {
   url: string;
 }
 
-/** 非 Electron 环境下经网关搜索 B 站视频，返回与原生搜索一致的 SongResult */
+/** 经网关搜索 B 站视频 */
 export async function searchBilibiliViaGateway(
   keyword: string,
   limit = 20
@@ -240,9 +218,9 @@ export interface BilibiliFavFolder {
   mediaCount: number;
 }
 
-/** 取当前 B 站账号的 Cookie（Web/Android 从账号 store；Electron 走主进程 env） */
+/** 从账号 store 读取当前 B 站账号的 Cookie */
 async function activeBilibiliCookie(): Promise<string> {
-  if (isElectron) return '';
+
   try {
     const { usePlatformAccountsStore } = await import('@/store/modules/platformAccounts');
     const store = usePlatformAccountsStore();
@@ -260,9 +238,7 @@ async function activeBilibiliCookie(): Promise<string> {
 export async function getBilibiliFavFolders(song: SongResult): Promise<BilibiliFavFolder[]> {
   const bvid = String(song.platformId || '');
   if (!bvid) throw new Error('缺少 bvid');
-  if (isElectron && window.api?.bilibiliFavFolders) {
-    return unwrap<BilibiliFavFolder[]>(await window.api.bilibiliFavFolders(bvid));
-  }
+
   const cookie = await activeBilibiliCookie();
   const { data } = await gateway.get<{ data: BilibiliFavFolder[] }>('/bilibili/fav/folders', {
     params: { bvid },
@@ -276,10 +252,7 @@ async function dealBilibiliFavoriteRequest(
   addIds: number[],
   delIds: number[]
 ): Promise<void> {
-  if (isElectron && window.api?.bilibiliFavDeal) {
-    unwrap<boolean>(await window.api.bilibiliFavDeal({ bvid, addIds, delIds }));
-    return;
-  }
+
   const cookie = await activeBilibiliCookie();
   const { data } = await gateway.post<{ data: boolean }>('/bilibili/fav/deal', { bvid, addIds, delIds }, {
     headers: cookie ? { 'X-Platform-Cookie': cookie } : {}
@@ -351,9 +324,7 @@ export async function fetchBilibiliAccountData(cookie: string): Promise<{
   userInfo: { userId: string; nickname: string; avatarUrl: string; vip: boolean };
   playlists: { id: number; name: string; coverImgUrl: string; trackCount: number; userId: string }[];
 }> {
-  if (isElectron && window.api?.bilibiliAccountData) {
-    return unwrap(await window.api.bilibiliAccountData(cookie));
-  }
+
   const { data } = await gateway.get<{ data: any }>('/bilibili/account/data', {
     headers: cookie ? { 'X-Platform-Cookie': cookie } : {}
   });
@@ -369,9 +340,7 @@ export async function fetchBilibiliPlaylistTracks(
   playlist: { id: number; name: string; coverImgUrl: string; trackCount: number };
   songs: GatewaySearchItem[];
 }> {
-  if (isElectron && window.api?.bilibiliPlaylistTracks) {
-    return unwrap(await window.api.bilibiliPlaylistTracks(cookie, folderId, page));
-  }
+
   const { data } = await gateway.get<{ data: any }>('/bilibili/playlist/tracks', {
     params: { id: folderId, page },
     headers: cookie ? { 'X-Platform-Cookie': cookie } : {}
@@ -397,9 +366,7 @@ export async function fetchBilibiliComments(
   oid: number,
   pn = 1
 ): Promise<{ total: number; replies: BilibiliCommentItem[] }> {
-  if (isElectron && window.api?.bilibiliComments) {
-    return unwrap(await window.api.bilibiliComments(oid, pn));
-  }
+
   const { data } = await gateway.get<{ data: { total: number; replies: BilibiliCommentItem[] } }>(
     '/bilibili/comments',
     { params: { oid, pn } }
@@ -409,13 +376,10 @@ export async function fetchBilibiliComments(
 
 // ==================== 链接解析 ====================
 
-/** 打开外部链接（Electron / Android 原生 / 浏览器三通道） */
+/** 在 Android 或浏览器打开外部链接 */
 export function openExternalUrl(url: string): void {
   if (!url) return;
-  if (window.api?.openExternal) {
-    void window.api.openExternal(url);
-    return;
-  }
+
   const androidNative = (window as any).AndroidNative;
   if (typeof androidNative !== 'undefined' && androidNative?.openExternal) {
     androidNative.openExternal(url);
@@ -425,9 +389,7 @@ export function openExternalUrl(url: string): void {
 }
 
 export async function resolveBilibiliBvid(input: string): Promise<string | null> {
-  if (isElectron && window.api?.bilibiliResolveBvid) {
-    return unwrap<string | null>(await window.api.bilibiliResolveBvid(input));
-  }
+
   const { data } = await gateway.get<{ data: string | null }>('/bilibili/resolve', {
     params: { input }
   });

@@ -155,12 +155,7 @@ export function setupDeepLinkHandler(): void {
   if (!(window as any).AndroidNative) {
     stopClipboard = startShareClipboardMonitor({
       onText: handleClipboardShare,
-      ...((window as any).api?.readMusicShareClipboard
-        ? {
-            readText: () => (window as any).api.readMusicShareClipboard(),
-            canRead: async () => true
-          }
-        : {})
+      ...({})
     });
   }
 }

@@ -79,7 +79,7 @@ APK 使用不可变的版本文件名，SHA-256 校验上传内容后，再依�
 ## 产物与版本边界
 
 - `npm run build:web` 输出 `src/renderer/dist/`，只供浏览器 Web 使用。
-- `npm run build` 的渲染产物为 `out/renderer/`，与 `capacitor.config.ts` 的 `webDir` 一致，APK 工作流在此之后执行 Capacitor sync。
+- `npm run build` 的渲染产物为 `src/renderer/dist/`，与 `capacitor.config.ts` 的 `webDir` 一致，APK 工作流在此之后执行 Capacitor sync。
 - `versionName` 取自 `package.json`，`versionCode` 来自命令参数，由工作流注入 Gradle；不需要为了每次发版手动改写 Gradle 调试回退值。
 - 当前工程最低 API 为 24（Android 7.0），编译及目标 API 为 36，见 `android/variables.gradle`。
 - 文档更新、Git 提交或 Web 部署不自动生成或发布 Android APK。发布前以服务器实际包信息和预演结果为准。

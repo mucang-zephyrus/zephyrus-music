@@ -9,7 +9,7 @@
 import type { ClimaxSegment } from '@/api/climax';
 import { probeAnalysisCapability, upgradeToHttps } from '@/services/audioAnalysisGate';
 import { getAutoClimax, saveAutoClimax } from '@/services/cacheService';
-import { isElectron } from '@/utils';
+
 import { decodeToMono8k } from '@/utils/audio/decodeToMono8k';
 import { deviceTier } from '@/utils/deviceTier';
 
@@ -79,20 +79,6 @@ export function isAutoClimaxEnabled(): boolean {
 
 /** 取整曲字节（与 useSmartAudio.preloadAndAnalyzeBpm 同分支） */
 async function fetchAudioBytes(url: string): Promise<ArrayBuffer | null> {
-  if (url.startsWith('local://')) {
-    if (!isElectron) return null;
-    const filePath = url.replace(/^local:\/{2,3}/, '').replace(/%2F/g, '/');
-    const result: unknown = await (
-      window as unknown as {
-        electron: { ipcRenderer: { invoke: (ch: string, ...args: unknown[]) => Promise<unknown> } };
-      }
-    ).electron.ipcRenderer.invoke('read-file-binary', decodeURIComponent(filePath));
-    if (!result) return null;
-    const uint8 = result as Uint8Array;
-    const copy = new Uint8Array(uint8.byteLength);
-    copy.set(uint8);
-    return copy.buffer;
-  }
   if (!/^https?:/i.test(url)) return null;
   const response = await fetch(upgradeToHttps(url));
   if (!response.ok) return null;

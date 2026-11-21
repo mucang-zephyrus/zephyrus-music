@@ -116,31 +116,18 @@ export const isMobile = computed(() => {
   return settingsStore.isMobile;
 });
 
-// 惰性守卫:vitest/node 环境(测试歌词解析器)没有 window,顶层裸引用会让测试套件崩溃
-export const isElectron =
-  typeof window !== 'undefined' && (window as any).electron !== undefined;
-
-/** 纯浏览器环境（非 Electron、非 Capacitor 壳、无 AndroidNative 桥），即部署到网站的 Web 版 */
+/** 纯浏览器环境（非 Capacitor 壳、无 AndroidNative 桥），即部署到网站的 Web 版 */
 export function isWebBrowser(): boolean {
   return (
     typeof window !== 'undefined' &&
-    !isElectron &&
     !(window as any).Capacitor &&
     !(window as any).AndroidNative
   );
 }
 
-export const isLyricWindow = computed(() => {
-  return window.location.hash.includes('lyric');
-});
-
 export const getSetData = (): any => {
   let setData = null;
-  if (window.electron) {
-    setData = window.electron.ipcRenderer.sendSync('get-store-value', 'set');
-  } else {
-    const settingsStore = useSettingsStore();
-    setData = settingsStore.setData;
-  }
+  const settingsStore = useSettingsStore();
+  setData = settingsStore.setData;
   return setData;
 };

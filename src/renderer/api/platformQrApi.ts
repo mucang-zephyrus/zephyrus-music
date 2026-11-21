@@ -1,8 +1,7 @@
 /**
  * 多平台扫码登录 API（渲染进程）
  *
- * - Electron 环境：走 IPC 调用主进程 platformLogin.ts
- * - 移动端（Capacitor）：走服务器中转 API（/platform/{platform}/qr/create|poll）
+ * - 通过服务器调用扫码登录 API（/platform/{platform}/qr/create|poll）
  *
  * 服务器中转的优势：
  * - 解决 CapacitorHttp 在某些设备上无法读取 Set-Cookie 头的问题
@@ -13,7 +12,7 @@
 import axios, { type AxiosError } from 'axios';
 
 import type { SongResult } from '@/types/music';
-import { isElectron } from '@/utils';
+
 import {
   classifyPlatformLoginFailure,
   parseQqChannels,
@@ -490,7 +489,6 @@ export async function isKugouApiAvailable(force = false): Promise<boolean> {
 /**
  * 创建平台扫码二维码。
  * 新链优先（qq-music-api / KuGouMusicApi，Folia 移植），探测失败回退旧链：
- * - 旧链 Electron: 走 IPC；移动端: 走服务器中转
  */
 export async function createPlatformQr(
   platform: LoginPlatform,
@@ -506,11 +504,6 @@ export async function createPlatformQr(
   }
   if (platform === 'kugou' && (await isKugouApiAvailable())) {
     return createKugouApiQr();
-  }
-
-  // 旧链：Electron 环境：走 IPC
-  if (provider !== 'wechat' && isElectron && (window as any).api?.platformQrCreate) {
-    return (window as any).api.platformQrCreate(platform, provider);
   }
 
   return createQrViaServer(platform, provider);
@@ -533,11 +526,6 @@ export async function pollPlatformQr(
   }
   if (platform === 'kugou' && (await isKugouApiAvailable())) {
     return pollKugouApiQr(key);
-  }
-
-  // 旧链：Electron 环境：走 IPC
-  if (provider !== 'wechat' && isElectron && (window as any).api?.platformQrPoll) {
-    return (window as any).api.platformQrPoll(platform, key, provider);
   }
 
   return pollQrViaServer(platform, key, provider);

@@ -4,7 +4,6 @@
  * 为什么要中转：
  * - B 站 CDN 与接口硬校验 Referer（非 https://www.bilibili.com 直接 403，且拒绝空 Referer），
  *   浏览器里的 <audio>/<video>/fetch 无法自定义 Referer；
- * - Desktop(Electron) 端由主进程 webRequest 直接注入请求头，不需要走这里。
  *
  * 安全约束（重要）：
  * - /stream 只转发「白名单域名内的 B 站直链」，绝不接受任意 URL（防 SSRF）；

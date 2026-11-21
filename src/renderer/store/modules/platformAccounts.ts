@@ -102,21 +102,6 @@ export const usePlatformAccountsStore = defineStore(
     const accountsForPlatform = (platform: MusicPlatform) =>
       accounts.value.filter((account) => account.platform === platform);
 
-    const syncRuntimePlatformCookie = (platform: MusicPlatform, cookie: string) => {
-      if (
-        platform === 'netease' ||
-        platform === 'spotify' ||
-        typeof window === 'undefined' ||
-        !window.api?.setPlatformCookie
-      ) {
-        return;
-      }
-
-      void window.api.setPlatformCookie(platform, cookie).catch((error) => {
-        console.error(`[platformAccounts] 同步 ${platform} Cookie 失败:`, error);
-      });
-    };
-
     const syncLegacyPlatformState = (account: PlatformAccount) => {
       localStorage.setItem('active-music-account', account.accountId);
       localStorage.setItem('active-music-platform', account.platform);
@@ -131,7 +116,6 @@ export const usePlatformAccountsStore = defineStore(
       if (account.cookie) {
         localStorage.setItem(`platform-cookie-${account.platform}`, account.cookie);
       }
-      syncRuntimePlatformCookie(account.platform, account.cookie);
 
       if (account.platform === 'netease') {
         localStorage.setItem(
@@ -248,11 +232,9 @@ export const usePlatformAccountsStore = defineStore(
         } else {
           localStorage.removeItem(`platform-cookie-${account.platform}`);
         }
-        syncRuntimePlatformCookie(account.platform, platformReplacement.cookie || '');
       } else {
         localStorage.removeItem(`platform-user-${account.platform}`);
         localStorage.removeItem(`platform-cookie-${account.platform}`);
-        syncRuntimePlatformCookie(account.platform, '');
         if (account.platform === 'netease') {
           localStorage.removeItem('user');
           localStorage.removeItem('token');

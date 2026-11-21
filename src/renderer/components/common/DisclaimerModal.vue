@@ -45,8 +45,6 @@
 import { marked } from 'marked';
 import { onMounted, ref } from 'vue';
 
-import { isElectron, isLyricWindow } from '@/utils';
-
 import userAgreementText from '../../../../用户协议.md?raw';
 
 const DISCLAIMER_AGREED_KEY = 'disclaimer_agreed_timestamp';
@@ -81,17 +79,11 @@ const handleDisagree = () => {
   if (isTransitioning.value) return;
   isTransitioning.value = true;
 
-  if (isElectron) {
-    window.api?.quitApp?.();
-  } else {
-    window.close();
-  }
+  window.close();
   isTransitioning.value = false;
 };
 
 onMounted(() => {
-  if (isLyricWindow.value) return;
-
   if (shouldShowDisclaimer()) {
     showDisclaimer.value = true;
   }

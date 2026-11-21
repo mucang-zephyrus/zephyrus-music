@@ -713,14 +713,7 @@ class SmartMixService {
       }, 1000);
 
       // 发送给歌词窗口
-      if (window.electron) {
-        try {
-          const { cloneDeep } = await import('lodash');
-          (window as any).api?.sendSong?.(cloneDeep(nextSong));
-        } catch {
-          // Desktop companion sync is optional on Android.
-        }
-      }
+
     } catch (error) {
       console.error('[SmartMix] 状态更新失败:', error);
     } finally {

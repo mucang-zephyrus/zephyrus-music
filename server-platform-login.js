@@ -2910,17 +2910,13 @@ function createPlatformGatewayApp() {
   app.use('/platform/qq/api', createQqApiRouter());
   app.use('/platform/kugou/api', createKugouApiRouter());
   // 哔哩哔哩：搜索 / 取流 / 字幕 / 短链解析，以及音视频流中转
-  // （浏览器无法自定义 Referer，B 站 CDN 会 403；桌面端由 Electron 直接注入请求头，不走这里）
+  // （浏览器无法自定义 Referer，B 站 CDN 会 403）
   app.use('/bilibili', createBilibiliRouter());
   // MCP endpoint is exposed twice: /platform/mcp works behind the existing
   // `VITE_MUSIC_GATEWAY` reverse-proxy prefix; /mcp works for direct access.
   app.use('/platform/mcp', createListenTogetherMcpRouter());
   app.use('/mcp', createListenTogetherMcpRouter());
   // AI 网关已弃用(BYOK:用户自带密钥客户端直连),不再挂载 /v1
-  // 网易云 API(alger):relay 中继页 / 网页版 / 桌面端的数据源,
-  // 路由来自同目录 module/*.js(如 /search、/album、/song/detail)
-  const neteaseServer = require('./main.js').server;
-  app.use(neteaseServer);
   app.use((_req, res) => {
     res.status(404).json({ code: 404, msg: 'Gateway route not found' });
   });

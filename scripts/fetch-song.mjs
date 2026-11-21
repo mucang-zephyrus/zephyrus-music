@@ -54,6 +54,7 @@ import sharp from 'sharp';
 // ==================== 配置 ====================
 
 const API_BASE = (process.env.ZEPHYRUS_API || 'https://mucang.xyz/zephyrus/api').replace(/\/+$/, '');
+const NETEASE_API_BASE = `${API_BASE}/netease-enhanced`;
 const TTML_BASE = (process.env.ZEPHYRUS_TTML || 'https://mucang.xyz/zephyrus/ttml').replace(/\/+$/, '');
 const CLOUD_CATALOG_URL = (
   process.env.ZEPHYRUS_CLOUD_JSON || 'https://www.mucang.xyz/server-music/songs.json'
@@ -208,7 +209,7 @@ const inlineTimeTag = (ms) => `<${lrcTimeTag(ms).slice(1, -1)}>`;
 // ==================== 搜索与取流 ====================
 
 async function searchSongs(keyword, limit) {
-  const url = `${API_BASE}/cloudsearch?keywords=${encodeURIComponent(keyword)}&type=1&limit=${limit}`;
+  const url = `${NETEASE_API_BASE}/cloudsearch?keywords=${encodeURIComponent(keyword)}&type=1&limit=${limit}`;
   const data = await httpJson(url);
   const songs = data?.result?.songs;
   if (!Array.isArray(songs) || songs.length === 0) return [];
@@ -225,7 +226,7 @@ async function searchSongs(keyword, limit) {
 }
 
 async function getSongDetail(id) {
-  const data = await httpJson(`${API_BASE}/song/detail?ids=${encodeURIComponent(id)}`);
+  const data = await httpJson(`${NETEASE_API_BASE}/song/detail?ids=${encodeURIComponent(id)}`);
   const song = data?.songs?.[0];
   if (!song) return null;
   return {
@@ -454,10 +455,10 @@ async function resolveAudioUrl(song, preferredLevel) {
   const startIndex = Math.max(0, LEVELS.indexOf(preferredLevel));
   const failures = [];
   for (const level of LEVELS.slice(startIndex)) {
-    const params = new URLSearchParams({ id: song.id, level, encodeType: level === 'lossless' ? 'flac' : 'mp3' });
+    const params = new URLSearchParams({ id: song.id, level, randomCNIP: 'true', encodeType: level === 'lossless' ? 'flac' : 'mp3' });
     if (NETEASE_COOKIE) params.set('cookie', NETEASE_COOKIE);
     try {
-      const data = await httpJson(`${API_BASE}/song/url/v1?${params}`, { timeout: 20000 });
+      const data = await httpJson(`${NETEASE_API_BASE}/song/url/v1?${params}`, { timeout: 20000 });
       const item = data?.data?.[0];
       if (item?.url) {
         return {
@@ -798,13 +799,13 @@ async function fetchAmllTtml(id) {
 async function fetchNeteaseLyricRaw(id) {
   const cache = { new: null, legacy: null };
   try {
-    cache.new = await httpJson(`${API_BASE}/lyric/new?id=${encodeURIComponent(id)}`);
+    cache.new = await httpJson(`${NETEASE_API_BASE}/lyric/new?id=${encodeURIComponent(id)}`);
   } catch {
     /* 忽略，走旧接口 */
   }
   if (!cache.new) {
     try {
-      cache.legacy = await httpJson(`${API_BASE}/lyric?id=${encodeURIComponent(id)}`);
+      cache.legacy = await httpJson(`${NETEASE_API_BASE}/lyric?id=${encodeURIComponent(id)}`);
     } catch {
       /* 无歌词 */
     }
@@ -834,7 +835,7 @@ async function fetchNeteaseYrc(id, cache) {
   if (translation) attachTranslation(lines, parsePlainLrc(translation));
   return {
     source: '网易云 YRC',
-    detail: `${API_BASE}/lyric/new?id=${id}`,
+    detail: `${NETEASE_API_BASE}/lyric/new?id=${id}`,
     lines,
     wordTimed: true
   };
@@ -854,7 +855,7 @@ async function fetchNeteaseLrc(id, cache) {
   if (translation) attachTranslation(lines, parsePlainLrc(translation));
   return {
     source: '网易云 LRC',
-    detail: `${API_BASE}/lyric/new?id=${id}`,
+    detail: `${NETEASE_API_BASE}/lyric/new?id=${id}`,
     lines,
     wordTimed: false
   };

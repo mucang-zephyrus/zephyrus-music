@@ -9,7 +9,7 @@
  * 用法：node scripts/comment-batch-test.mjs [歌单ID] [数量]
  */
 
-const GATEWAY = 'https://mucang.xyz/zephyrus/api';
+const NETEASE_API_BASE = 'https://mucang.xyz/zephyrus/api/netease-enhanced';
 const PLAYLIST_ID = process.argv[2] || '17426036509';
 const LIMIT = Math.min(Number(process.argv[3]) || 50, 100);
 // 每首拉取的页数（每页 30 条）：loadMore 越深越容易出现注销账号/缺字段等脏形态
@@ -19,7 +19,7 @@ const FETCH_DELAY = 220; // 逐首间隔，降低被上游风控的概率
 // ────────────────────────── 工具 ──────────────────────────
 
 async function api(path, params = {}) {
-  const url = new URL(GATEWAY + path);
+  const url = new URL(NETEASE_API_BASE + path);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
   url.searchParams.set('timestamp', String(Date.now()));
   url.searchParams.set('device', 'web');

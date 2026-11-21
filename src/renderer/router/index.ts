@@ -22,10 +22,6 @@ const routes = [
     path: '/',
     component: AppLayout,
     children: [...homeRouter, loginRouter, ...otherRouter]
-  },
-  {
-    path: '/lyric',
-    component: () => import('@/views/lyric/index.vue')
   }
 ];
 
@@ -49,8 +45,7 @@ router.beforeEach((to, _, next) => {
     }
   }
 
-  // 迷你模式为 Electron 桌面遗留（移动端永不触发），/mini 路由已随 MiniLayout 移除
-  if (to.path === '/mini') {
+  if (['/mini', '/lyric', '/downloads'].includes(to.path)) {
     next('/');
     return;
   }

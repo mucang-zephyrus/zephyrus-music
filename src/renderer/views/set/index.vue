@@ -80,7 +80,6 @@ import {
   registerMobileTopbarGroup,
   unregisterMobileTopbarGroup
 } from '@/composables/useMobileTopbarMenu';
-import { isElectron } from '@/utils';
 
 import { MOBILE_SETTING_SEARCH_DEFINITIONS } from './mobileSettingSearch';
 import AiTab from './tabs/AiTab.vue';
@@ -110,22 +109,15 @@ const HOME_SECTIONS = ['appearance', 'ai', 'lyrics'] as const;
 const ENTRY_ICONS: Record<string, string> = {
   playback: 'ri-music-2-line',
   advanced: 'ri-settings-4-line',
-  about: 'ri-information-line',
-  application: 'ri-apps-2-line',
-  network: 'ri-global-line',
-  system: 'ri-computer-line'
+  about: 'ri-information-line'
 };
 
 const subPageEntries = computed(() =>
   [
     { id: 'playback' },
     { id: 'advanced' },
-    { id: 'about' },
-    { id: 'application', electron: true },
-    { id: 'network', electron: true },
-    { id: 'system', electron: true }
+    { id: 'about' }
   ]
-    .filter((entry) => !entry.electron || isElectron)
     .map((entry) => ({
       id: entry.id,
       title: t(`settings.sections.${entry.id}`),

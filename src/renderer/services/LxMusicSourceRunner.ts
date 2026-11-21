@@ -380,7 +380,7 @@ export class LxMusicSourceRunner {
   }
 
   /**
-   * 处理 HTTP 请求（优先使用主进程，绕过 CORS 限制）
+   * 处理 HTTP 请求
    */
   private handleHttpRequest(
     url: string,
@@ -389,32 +389,6 @@ export class LxMusicSourceRunner {
   ): () => void {
 
     const timeout = options.timeout || 30000;
-    const requestId = `lx_http_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-
-    const hasMainProcessHttp = typeof window.api?.lxMusicHttpRequest === 'function';
-
-    if (hasMainProcessHttp) {
-      window.api
-        .lxMusicHttpRequest({
-          url,
-          options: {
-            ...options,
-            timeout
-          },
-          requestId
-        })
-        .then((response: any) => {
-          callback(null, response, response.body);
-        })
-        .catch((error: Error) => {
-          callback(error, null, null);
-        });
-
-      return () => {
-        void window.api?.lxMusicHttpCancel?.(requestId);
-      };
-    }
-
     const controller = new AbortController();
     const fetchOptions: RequestInit = {
       method: options.method || 'GET',

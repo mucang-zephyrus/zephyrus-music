@@ -117,13 +117,11 @@ export async function startSpotifyAuth(): Promise<void> {
   const authUrl = `${AUTH_ENDPOINT}?${params.toString()}`;
 
   // 在移动端通过 Android Native 打开外部浏览器
-  // 在桌面端/Electron 用 window.open
+  // 在浏览器使用 window.open
   if (typeof (window as any).AndroidNative?.openSpotifyAuth === 'function') {
     (window as any).AndroidNative.openSpotifyAuth(authUrl);
   } else if (typeof (window as any).AndroidNative?.openExternal === 'function') {
     (window as any).AndroidNative.openExternal(authUrl);
-  } else if (window.api?.openExternal) {
-    void window.api.openExternal(authUrl);
   } else {
     window.open(authUrl, '_blank', 'noopener,noreferrer');
   }

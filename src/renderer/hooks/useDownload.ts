@@ -1,450 +1,185 @@
+import { Capacitor } from '@capacitor/core';
 import { cloneDeep } from 'lodash';
 import { useMessage } from 'naive-ui';
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { getMusicLrc } from '@/api/music';
+import { getServerSongDetail, isServerSongResult } from '@/api/serverSongs';
 import { getSongUrl } from '@/store/modules/player';
 import type { SongResult } from '@/types/music';
-import { isElectron } from '@/utils';
 
-import { isServerSongResult } from '@/api/serverSongs';
-import { Capacitor } from '@capacitor/core';
-
-const ipcRenderer = isElectron ? window.electron.ipcRenderer : null;
-const isNativePlatform = () => Capacitor.isNativePlatform();
-// 供 UI 消费的下载进度(文件名 → 0-100)
-// 供 UI 消费的下载进度(文件名 → 0-100)
 export const mobileDownloadProgress = ref<Record<string, number>>({});
 
-// 全局下载管理（闭包模式）
-const createDownloadManager = () => {
-  // 正在下载的文件集合
-  const activeDownloads = new Set<string>();
+function songFilename(song: SongResult): string {
+  const artists = (song.ar || song.artists || song.song?.artists)?.map((a) => a.name).join(',');
+  const name = artists ? `${song.name} - ${artists}` : song.name;
+  return name.replace(/[<>:"/\\|?*]/g, '_').trim() || String(song.id);
+}
 
-  // 已经发送了通知的文件集合（避免重复通知）
-  const notifiedDownloads = new Set<string>();
+function triggerBrowserDownload(url: string, filename: string) {
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
 
-  // 事件监听器是否已初始化
-  let isInitialized = false;
-
-  // 监听器引用（用于清理）
-  let completeListener: ((event: any, data: any) => void) | null = null;
-  let errorListener: ((event: any, data: any) => void) | null = null;
-
-  return {
-    // 添加下载
-    addDownload: (filename: string) => {
-      activeDownloads.add(filename);
-    },
-
-    // 移除下载
-    removeDownload: (filename: string) => {
-      activeDownloads.delete(filename);
-      // 延迟清理通知记录
-      setTimeout(() => {
-        notifiedDownloads.delete(filename);
-      }, 5000);
-    },
-
-    // 标记文件已通知
-    markNotified: (filename: string) => {
-      notifiedDownloads.add(filename);
-    },
-
-    // 检查文件是否已通知
-    isNotified: (filename: string) => {
-      return notifiedDownloads.has(filename);
-    },
-
-    // 清理所有下载
-    clearDownloads: () => {
-      activeDownloads.clear();
-      notifiedDownloads.clear();
-    },
-
-    // 初始化事件监听器
-    initEventListeners: (message: any, t: any) => {
-      if (isInitialized) return;
-
-      // 移除可能存在的旧监听器
-      if (completeListener) {
-        ipcRenderer?.removeListener('music-download-complete', completeListener);
-      }
-
-      if (errorListener) {
-        ipcRenderer?.removeListener('music-download-error', errorListener);
-      }
-
-      // 创建新的监听器
-      completeListener = (_event, data) => {
-        if (!data.filename || !activeDownloads.has(data.filename)) return;
-
-        // 如果该文件已经通知过，则跳过
-        if (notifiedDownloads.has(data.filename)) return;
-
-        // 标记为已通知
-        notifiedDownloads.add(data.filename);
-
-        // 从活动下载移除
-        activeDownloads.delete(data.filename);
-      };
-
-      errorListener = (_event, data) => {
-        if (!data.filename || !activeDownloads.has(data.filename)) return;
-
-        // 如果该文件已经通知过，则跳过
-        if (notifiedDownloads.has(data.filename)) return;
-
-        // 标记为已通知
-        notifiedDownloads.add(data.filename);
-
-        // 显示失败通知
-        message.error(
-          t('songItem.message.downloadFailed', {
-            filename: data.filename,
-            error: data.error || '未知错误'
-          })
-        );
-
-        // 从活动下载移除
-        activeDownloads.delete(data.filename);
-      };
-
-      // 添加监听器
-      ipcRenderer?.on('music-download-complete', completeListener);
-      ipcRenderer?.on('music-download-error', errorListener);
-
-      isInitialized = true;
-    },
-
-    // 清理事件监听器
-    cleanupEventListeners: () => {
-      if (!isInitialized) return;
-
-      if (completeListener) {
-        ipcRenderer?.removeListener('music-download-complete', completeListener);
-        completeListener = null;
-      }
-
-      if (errorListener) {
-        ipcRenderer?.removeListener('music-download-error', errorListener);
-        errorListener = null;
-      }
-
-      isInitialized = false;
-    },
-
-    // 获取活跃下载数量
-    getActiveDownloadCount: () => {
-      return activeDownloads.size;
-    },
-
-    // 检查是否有特定文件正在下载
-    hasDownload: (filename: string) => {
-      return activeDownloads.has(filename);
-    }
-  };
-};
-
-// 创建单例下载管理器
-const downloadManager = createDownloadManager();
+async function saveNativeFile(blob: Blob, filename: string) {
+  const { Filesystem, Directory } = await import('@capacitor/filesystem');
+  const data = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+  try {
+    await Filesystem.writeFile({
+      path: `Download/${filename}`,
+      data,
+      directory: Directory.ExternalStorage,
+      recursive: true
+    });
+    return `Download/${filename}`;
+  } catch {
+    await Filesystem.writeFile({ path: filename, data, directory: Directory.Documents });
+    return `Documents/${filename}`;
+  }
+}
 
 export const useDownload = () => {
   const { t } = useI18n();
   const message = useMessage();
   const isDownloading = ref(false);
 
-  // 初始化事件监听器
-  downloadManager.initEventListeners(message, t);
-
-  /**
-   * 下载单首音乐
-   * @param song 歌曲信息
-   * @returns Promise<void>
-   */
-
-
-/**
- * 移动端/网页版直链下载:
- * - Capacitor(安卓):fetch 流式分块写入 Download 目录,带进度
- * - 网页:触发浏览器下载(<a download>)
- * 云歌曲(platform='server')直链固定不过期,跳过 getSongUrl 的多策略解析
- * (此前 server 歌曲丢 playMusicUrl 会落入跨平台解析链,卡几分钟)
- */
-async function downloadMobileDirect(song: SongResult): Promise<void> {
-  let url = song.playMusicUrl;
-  if (!url && isServerSongResult(song)) {
-    // playMusicUrl 缺失时从云端曲库查表兜底
-    const { getServerSongDetail } = await import('@/api/serverSongs');
-    const detail = await getServerSongDetail(String(song.platformId));
-    url = detail.audioUrl;
-  }
-  if (!url) throw new Error(t('songItem.message.getUrlFailed'));
-
-  const artistNames = (song.ar || song.artists)?.map((a) => a.name).join(',');
-  const ext = url.includes('.flac') ? 'flac' : 'mp3';
-  const filename = `${song.name} - ${artistNames}.${ext}`;
-
-  // 网页:浏览器下载
-  if (!isNativePlatform()) {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    message.success(t('download.browserDownloadStarted') || '已开始下载');
-    return;
-  }
-
-  // Capacitor:流式下载到 Download 目录
-  const { Filesystem, Directory } = await import('@capacitor/filesystem');
-  mobileDownloadProgress.value[filename] = 0;
-  try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const total = Number(response.headers.get('content-length') || 0);
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error('stream unavailable');
-
-    const chunks: BlobPart[] = [];
-    let loaded = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value as BlobPart);
-      loaded += value.length;
-      if (total) mobileDownloadProgress.value[filename] = Math.round((loaded / total) * 100);
+  const saveMusic = async (song: SongResult) => {
+    let url: string | undefined;
+    let type: string | undefined;
+    if (isServerSongResult(song)) {
+      url = song.playMusicUrl || (await getServerSongDetail(String(song.platformId))).audioUrl;
+    } else {
+      const audio = await getSongUrl(song.id, cloneDeep(song), true);
+      if (typeof audio === 'string') {
+        url = audio;
+      } else {
+        url = audio?.url;
+        type = audio?.type;
+      }
     }
-    const blob = new Blob(chunks);
-    const base64 = await new Promise<string>((resolve, reject) => {
-      const reader2 = new FileReader();
-      reader2.onload = () => {
-        const result = String(reader2.result ?? '');
-        resolve(result.includes(',') ? result.split(',')[1] : result);
-      };
-      reader2.onerror = () => reject(reader2.error);
-      reader2.readAsDataURL(blob);
-    });
-    try {
-      await Filesystem.writeFile({
-        path: `Download/${filename}`,
-        data: base64,
-        directory: Directory.ExternalStorage,
-        recursive: true
-      });
-      message.success(`已下载到 Download/${filename}`);
-    } catch {
-      // ExternalStorage 不可写时退回文档目录
-      await Filesystem.writeFile({ path: filename, data: base64, directory: Directory.Documents });
-      message.success(`已下载到 Documents/${filename}`);
-    }
-  } finally {
-    delete mobileDownloadProgress.value[filename];
-  }
-}
+    if (!url) throw new Error(t('songItem.message.getUrlFailed'));
 
-  const downloadMusic = async (song: SongResult) => {
-    if (isDownloading.value) {
-      message.warning(t('songItem.message.downloading'));
+    const mediaExtension = /\.(flac|mp3|m4a|aac|ogg|opus|wav|webm)(?:[?#]|$)/i.exec(url)?.[1];
+    const ext = mediaExtension || (/^(flac|mp3|m4a|aac|ogg|opus|wav|webm)$/i.test(type || '') ? type : 'mp3');
+    const filename = `${songFilename(song)}.${ext}`;
+    if (!Capacitor.isNativePlatform()) {
+      if (new URL(url, location.href).origin === location.origin) {
+        triggerBrowserDownload(url, filename);
+      } else {
+        // Browsers ignore the download attribute for cross-origin URLs.
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const objectUrl = URL.createObjectURL(await response.blob());
+        triggerBrowserDownload(objectUrl, filename);
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+      }
       return;
     }
 
+    if (filename in mobileDownloadProgress.value) throw new Error(t('songItem.message.downloading'));
+    mobileDownloadProgress.value[filename] = 0;
     try {
-      isDownloading.value = true;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const total = Number(response.headers.get('content-length') || 0);
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('Download stream unavailable');
 
-      // 云端歌曲:直链固定不过期,跳过多策略解析(此前会卡进跨平台解析链数分钟);
-      // 安卓/网页走真实下载(Capacitor Filesystem / 浏览器下载)
-      if (isServerSongResult(song)) {
-        isDownloading.value = false;
-        await downloadMobileDirect(song);
-        return;
+      const chunks: BlobPart[] = [];
+      let loaded = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value as BlobPart);
+        loaded += value.length;
+        if (total) mobileDownloadProgress.value[filename] = Math.min(100, Math.round((loaded / total) * 100));
       }
-
-      const musicUrl = (await getSongUrl(song.id as number, cloneDeep(song), true)) as any;
-      if (!musicUrl) {
-        throw new Error(t('songItem.message.getUrlFailed'));
-      }
-
-      // 构建文件名
-      const artistNames = (song.ar || song.song?.artists)?.map((a) => a.name).join(',');
-      const filename = `${song.name} - ${artistNames}`;
-
-      // 检查是否已在下载
-      if (downloadManager.hasDownload(filename)) {
-        isDownloading.value = false;
-        return;
-      }
-
-      // 添加到活动下载集合
-      downloadManager.addDownload(filename);
-
-      const songData = cloneDeep(song);
-      songData.ar = songData.ar || songData.song?.artists;
-
-      // 发送下载请求
-      ipcRenderer?.send('download-music', {
-        url: typeof musicUrl === 'string' ? musicUrl : musicUrl.url,
-        filename,
-        songInfo: {
-          ...songData,
-          downloadTime: Date.now()
-        },
-        type: musicUrl.type
-      });
-
-      message.success(t('songItem.message.downloadQueued'));
-
-      // 简化的监听逻辑，基本通知由全局监听器处理
-      setTimeout(() => {
-        isDownloading.value = false;
-      }, 2000);
-    } catch (error: any) {
-      console.error('Download error:', error);
-      isDownloading.value = false;
-      message.error(error.message || t('songItem.message.downloadFailed'));
+      return await saveNativeFile(new Blob(chunks), filename);
+    } finally {
+      delete mobileDownloadProgress.value[filename];
     }
   };
 
-  /**
-   * 批量下载音乐
-   * @param songs 歌曲列表
-   * @returns Promise<void>
-   */
-  const batchDownloadMusic = async (songs: SongResult[]) => {
-    if (isDownloading.value) {
-      message.warning(t('favorite.downloading'));
-      return;
+  const downloadMusic = async (song: SongResult) => {
+    if (isDownloading.value) return;
+    isDownloading.value = true;
+    try {
+      const savedPath = await saveMusic(song);
+      message.success(savedPath ? `${t('favorite.downloadSuccess')} · ${savedPath}` : t('download.browserDownloadStarted'));
+    } catch (error) {
+      console.error('Download error:', error);
+      message.error(t('songItem.message.downloadFailed'));
+    } finally {
+      isDownloading.value = false;
     }
+  };
 
-    if (songs.length === 0) {
+  const batchDownloadMusic = async (songs: SongResult[]) => {
+    if (isDownloading.value) return;
+    if (!songs.length) {
       message.warning(t('favorite.selectSongsFirst'));
       return;
     }
-
+    isDownloading.value = true;
     try {
-      isDownloading.value = true;
-      message.success(t('favorite.downloading'));
-
-      let successCount = 0;
-      let failCount = 0;
-      const totalCount = songs.length;
-
-      // 下载进度追踪
-      const trackProgress = () => {
-        if (successCount + failCount === totalCount) {
-          isDownloading.value = false;
-          message.success(t('favorite.downloadSuccess'));
+      let failed = 0;
+      for (const song of songs) {
+        try {
+          await saveMusic(song);
+        } catch (error) {
+          failed++;
+          console.error('Download error:', song.name, error);
         }
-      };
-
-      // 并行获取所有歌曲的下载链接
-      const downloadUrls = await Promise.all(
-        songs.map(async (song) => {
-          try {
-            const data = (await getSongUrl(song.id, song, true)) as any;
-            return { song, ...data };
-          } catch (error) {
-            console.error(`获取歌曲 ${song.name} 下载链接失败:`, error);
-            failCount++;
-            return { song, url: null };
-          }
-        })
-      );
-
-      // 开始下载有效的链接
-      downloadUrls.forEach(({ song, url, type }) => {
-        if (!url) {
-          failCount++;
-          trackProgress();
-          return;
-        }
-
-        const songData = cloneDeep(song);
-        const filename = `${song.name} - ${(song.ar || song.song?.artists)?.map((a) => a.name).join(',')}`;
-
-        // 检查是否已在下载
-        if (downloadManager.hasDownload(filename)) {
-          failCount++;
-          trackProgress();
-          return;
-        }
-
-        // 添加到活动下载集合
-        downloadManager.addDownload(filename);
-
-        const songInfo = {
-          ...songData,
-          ar: songData.ar || songData.song?.artists,
-          downloadTime: Date.now()
-        };
-
-        ipcRenderer?.send('download-music', {
-          url,
-          filename,
-          songInfo,
-          type
-        });
-
-        successCount++;
-      });
-
-      // 所有下载开始后，检查进度
-      trackProgress();
-    } catch (error) {
-      console.error('下载失败:', error);
+      }
+      if (failed) {
+        message.error(`${t('favorite.downloadFailed')} (${failed}/${songs.length})`);
+      } else {
+        message.success(t(Capacitor.isNativePlatform() ? 'favorite.downloadSuccess' : 'download.browserDownloadStarted'));
+      }
+    } finally {
       isDownloading.value = false;
-      message.destroyAll();
-      message.error(t('favorite.downloadFailed'));
     }
   };
 
-  /**
-   * 下载单首歌曲的歌词（.lrc 文件）
-   * @param song 歌曲信息
-   */
   const downloadLyric = async (song: SongResult) => {
     try {
-      const res = await getMusicLrc(song.id as number);
-      const lyricData = res?.data;
-
-      if (!lyricData?.lrc?.lyric) {
+      const { data } = await getMusicLrc(song.id as number);
+      const original = data?.lrc?.lyric;
+      if (!original) {
         message.warning(t('songItem.message.noLyric'));
         return;
       }
-
-      // 构建 LRC 内容：保留原始歌词，如有翻译则合并
-      let lrcContent = lyricData.lrc.lyric;
-      if (lyricData.tlyric?.lyric) {
-        lrcContent = mergeLrcWithTranslation(lyricData.lrc.lyric, lyricData.tlyric.lyric);
-      }
-
-      // 构建文件名
-      const artistNames = (song.ar || song.song?.artists)?.map((a) => a.name).join(',');
-      const filename = `${song.name} - ${artistNames}`;
-
-      const result = await ipcRenderer?.invoke('save-lyric-file', { filename, lrcContent });
-
-      if (result?.success) {
-        message.success(t('songItem.message.lyricDownloaded'));
+      const translation = data.tlyric?.lyric;
+      const text = translation ? mergeLrcWithTranslation(original, translation) : original;
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const filename = `${songFilename(song)}.lrc`;
+      if (Capacitor.isNativePlatform()) {
+        await saveNativeFile(blob, filename);
       } else {
-        message.error(t('songItem.message.lyricDownloadFailed'));
+        const url = URL.createObjectURL(blob);
+        triggerBrowserDownload(url, filename);
+        setTimeout(() => URL.revokeObjectURL(url), 30_000);
       }
+      message.success(t('songItem.message.lyricDownloaded'));
     } catch (error) {
       console.error('Download lyric error:', error);
       message.error(t('songItem.message.lyricDownloadFailed'));
     }
   };
 
-  return {
-    isDownloading,
-    downloadMusic,
-    downloadLyric,
-    batchDownloadMusic,
-    mobileDownloadProgress
-  };
+  return { isDownloading, downloadMusic, downloadLyric, batchDownloadMusic, mobileDownloadProgress };
 };
 
 /**

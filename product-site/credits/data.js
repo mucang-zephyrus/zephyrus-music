@@ -13,14 +13,6 @@ window.CREDITS = [
     url: 'https://github.com/algerkong/AlgerMusicPlayer'
   },
   {
-    id: 'ncm-api-alger', name: 'netease-cloud-music-api-alger', author: 'algerkong',
-    license: 'MIT', licenseType: 'mit', color: '#C20C0C',
-    logo: './logos/algerkong.png',
-    tagline: '本地网易云 API 网关',
-    desc: '桌面端内置的网易云 API 服务（端口 30488）：登录、歌单、账号、播放链接全部经由它。QWeb 页的 anonymous_token 兼容处理也是为它而做。',
-    url: 'https://github.com/algerkong/netease-cloud-music-api-alger'
-  },
-  {
     id: 'amll', name: 'Apple Music-like Lyrics', author: 'amll-dev',
     license: 'AGPL-3.0-only', licenseType: 'agpl', color: '#7C66F9',
     logo: './logos/amll-dev.png',
@@ -173,14 +165,6 @@ window.CREDITS = [
     url: 'https://vitejs.dev/'
   },
   {
-    id: 'electron', name: 'Electron', author: 'OpenJS Foundation',
-    license: 'MIT', licenseType: 'mit', color: '#47848F',
-    logo: './logos/electron.png',
-    tagline: '桌面端壳',
-    desc: '桌面端的主进程：本地 API 服务、托盘、桌面歌词、文件扫描与自动更新。',
-    url: 'https://www.electronjs.org/'
-  },
-  {
     id: 'capacitor', name: 'Capacitor', author: 'Ionic',
     license: 'MIT', licenseType: 'mit', color: '#119EFF',
     logo: './logos/ionic-team.png',
@@ -256,8 +240,8 @@ window.CREDITS = [
     id: 'metadata-suite', name: '音频元数据套件', author: 'Borewit / arelliot / sindresorhus 等',
     license: 'MIT 等', licenseType: 'mit', color: '#8B5CF6',
     logo: './logos/Borewit.png',
-    tagline: 'music-metadata / flac-tagger / node-id3 / file-type',
-    desc: '本地音乐扫描的元数据解析、FLAC/MP3 标签写回与文件类型嗅探。',
+    tagline: 'music-metadata',
+    desc: '读取本地音乐的元数据。',
     url: 'https://github.com/Borewit/music-metadata'
   },
   {
@@ -272,7 +256,7 @@ window.CREDITS = [
     id: 'web-basics', name: '网络与工具链', author: 'axios / express / marked / DOMPurify / crypto-js / jsencrypt / qrcode / tunajs 等',
     license: 'MIT 等', licenseType: 'mit', color: '#334155',
     logo: '',
-    tagline: 'axios / express / cors / marked / DOMPurify / crypto-js / jsencrypt / qrcode / tunajs / electron-store / electron-updater',
+    tagline: 'axios / express / cors / marked / DOMPurify / crypto-js / jsencrypt / qrcode / tunajs',
     desc: '网关服务、请求、渲染与加密等基础能力，以及 EQ 音效与配置持久化。',
     url: ''
   }
