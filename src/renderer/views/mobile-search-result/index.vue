@@ -96,7 +96,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -104,12 +104,7 @@ import { openExternalUrl } from '@/api/bilibili';
 import { crossPlatformSearch } from '@/api/crossPlatformSearch';
 import { searchPlatformMusic } from '@/api/platformQrApi';
 import { getSearch } from '@/api/search';
-import {
-  rankSearchResults,
-  searchServerSongs,
-  type ServerSong,
-  serverSongToSongResult
-} from '@/api/serverSongs';
+import { searchServerSongs, serverSongToSongResult } from '@/api/serverSongs';
 import { openSpotifyTrack } from '@/api/spotify';
 import { getUnlockKey, getUnlockSearchResults } from '@/api/unlockKey';
 import PlatformLogo from '@/components/common/PlatformLogo.vue';
@@ -128,6 +123,11 @@ import { usePlayerStore } from '@/store/modules/player';
 import { useSearchStore } from '@/store/modules/search';
 import type { SongResult } from '@/types/music';
 import { getImgUrl } from '@/utils';
+import {
+  createSongSearchResults,
+  type SearchSupplementSource,
+  type SongSearchResults
+} from '@/utils/searchSongRanking';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -248,7 +248,8 @@ const crossSearchLoading = ref(false);
 const activeSourceFilter = ref<SourceLabel | 'all'>(sourceFilter.value as SourceLabel | 'all');
 const sourceLabelVersion = ref(0);
 
-function classifySongs(songs: any[]) {
+function classifySongs(songs: SongResult[]) {
+  if (songs.length === 0) return;
   for (const song of songs) {
     const label = quickClassify(song);
     setLabel(String(song.id), label);
@@ -322,32 +323,42 @@ const ITEMS_PER_PAGE = 30;
 const page = ref(1);
 const hasMore = ref(true);
 const isLoadingMore = ref(false);
+let activeSearch: SongSearchResults | undefined;
 
 // 执行搜索
 const performSearch = async (isLoadMore = false) => {
-  if (!keyword.value) return;
+  const kw = keyword.value;
+  const type = searchType.value;
+  const search = isLoadMore ? activeSearch : createSongSearchResults(kw);
+  if (!search) return;
 
   if (isLoadMore) {
-    if (!hasMore.value || isLoadingMore.value) return;
+    if (loading.value || !hasMore.value || isLoadingMore.value) return;
     isLoadingMore.value = true;
   } else {
-    loading.value = true;
+    activeSearch = search;
+    loading.value = Boolean(kw);
+    isLoadingMore.value = false;
+    crossSearchLoading.value = false;
     results.value = [];
     artistResults.value = [];
     page.value = 1;
-    hasMore.value = true;
+    hasMore.value = Boolean(kw);
     activeSourceFilter.value = sourceFilter.value as SourceLabel | 'all';
   }
+  if (!kw) return;
+  const offset = (page.value - 1) * ITEMS_PER_PAGE;
 
   try {
     // 歌曲搜索
-    if (searchType.value === SEARCH_TYPE.MUSIC) {
+    if (type === SEARCH_TYPE.MUSIC) {
       const { data } = await getSearch({
-        keywords: keyword.value,
-        type: searchType.value,
+        keywords: kw,
+        type,
         limit: ITEMS_PER_PAGE,
-        offset: (page.value - 1) * ITEMS_PER_PAGE
+        offset
       });
+      if (search !== activeSearch) return;
 
       const songs = (data.result.songs || []).map((item: any) => ({
         ...item,
@@ -355,31 +366,26 @@ const performSearch = async (isLoadMore = false) => {
         artists: item.ar
       }));
 
-      if (isLoadMore) {
-        results.value = [...results.value, ...songs];
-      } else {
-        results.value = songs;
-        results.value = rankSearchResults(results.value, keyword.value);
-        classifySongs(songs);
-      }
-
+      if (isLoadMore) search.appendPage(songs);
+      else search.setFirstPage(songs);
+      results.value = search.getSongs();
+      classifySongs(songs);
       hasMore.value = songs.length === ITEMS_PER_PAGE;
 
-      // 第一页时触发跨平台搜索和云端搜索
       if (!isLoadMore) {
-        triggerCrossSearch(keyword.value, songs);
-        triggerServerSearch(keyword.value, songs);
-        triggerPlatformSearch(keyword.value, songs);
-        triggerUnlockSearch(keyword.value, songs);
+        void triggerCrossSearch(kw, search);
+        void triggerServerSearch(kw, search);
+        void triggerPlatformSearch(kw, search);
+        void triggerUnlockSearch(kw, search);
       }
     }
     // 歌手搜索
-    else if (searchType.value === SEARCH_TYPE.ARTIST) {
+    else if (type === SEARCH_TYPE.ARTIST) {
       // 先搜索歌曲，拿到最匹配歌曲的歌手信息
       let topSongArtist: { id: number; name: string; songName: string } | null = null;
       try {
         const songRes = await getSearch({
-          keywords: keyword.value,
+          keywords: kw,
           type: SEARCH_TYPE.MUSIC,
           limit: 1,
           offset: 0
@@ -399,13 +405,16 @@ const performSearch = async (isLoadMore = false) => {
         console.error('[歌曲搜索失败]:', e);
       }
 
+      if (search !== activeSearch) return;
+
       // 搜索歌手
       const { data } = await getSearch({
-        keywords: keyword.value,
-        type: searchType.value,
+        keywords: kw,
+        type,
         limit: ITEMS_PER_PAGE,
-        offset: (page.value - 1) * ITEMS_PER_PAGE
+        offset
       });
+      if (search !== activeSearch) return;
 
       const artists = (data.result?.artists || []).map((item: any) => ({
         ...item,
@@ -440,13 +449,14 @@ const performSearch = async (isLoadMore = false) => {
       hasMore.value = artists.length === ITEMS_PER_PAGE;
     }
     // 专辑搜索
-    else if (searchType.value === SEARCH_TYPE.ALBUM) {
+    else if (type === SEARCH_TYPE.ALBUM) {
       const { data } = await getSearch({
-        keywords: keyword.value,
-        type: searchType.value,
+        keywords: kw,
+        type,
         limit: ITEMS_PER_PAGE,
-        offset: (page.value - 1) * ITEMS_PER_PAGE
+        offset
       });
+      if (search !== activeSearch) return;
 
       const albums = (data.result.albums || []).map((item: any) => ({
         ...item,
@@ -463,13 +473,14 @@ const performSearch = async (isLoadMore = false) => {
       hasMore.value = albums.length === ITEMS_PER_PAGE;
     }
     // 歌单搜索
-    else if (searchType.value === SEARCH_TYPE.PLAYLIST) {
+    else if (type === SEARCH_TYPE.PLAYLIST) {
       const { data } = await getSearch({
-        keywords: keyword.value,
-        type: searchType.value,
+        keywords: kw,
+        type,
         limit: ITEMS_PER_PAGE,
-        offset: (page.value - 1) * ITEMS_PER_PAGE
+        offset
       });
+      if (search !== activeSearch) return;
 
       const playlists = (data.result.playlists || []).map((item: any) => ({
         ...item,
@@ -488,13 +499,14 @@ const performSearch = async (isLoadMore = false) => {
       hasMore.value = playlists.length === ITEMS_PER_PAGE;
     }
     // MV 搜索
-    else if (searchType.value === SEARCH_TYPE.MV) {
+    else if (type === SEARCH_TYPE.MV) {
       const { data } = await getSearch({
-        keywords: keyword.value,
-        type: searchType.value,
+        keywords: kw,
+        type,
         limit: ITEMS_PER_PAGE,
-        offset: (page.value - 1) * ITEMS_PER_PAGE
+        offset
       });
+      if (search !== activeSearch) return;
 
       const mvs = (data.result.mvs || []).map((item: any) => ({
         ...item,
@@ -517,150 +529,80 @@ const performSearch = async (isLoadMore = false) => {
   } catch (error) {
     console.error('搜索失败:', error);
   } finally {
-    loading.value = false;
-    isLoadingMore.value = false;
+    if (search === activeSearch) {
+      loading.value = false;
+      isLoadingMore.value = false;
+    }
   }
 };
 
-// 跨平台补充搜索
-const triggerCrossSearch = async (kw: string, neteaseSongs: any[]) => {
+const mergeSupplement = (
+  search: SongSearchResults,
+  source: SearchSupplementSource,
+  songs: SongResult[]
+) => {
+  if (search !== activeSearch || songs.length === 0) return;
+
+  search.setSupplement(source, songs);
+  const displayed = search.getSongs();
+  const visible = new Set(displayed);
+  classifySongs(songs.filter((song) => visible.has(song)));
+  results.value = displayed;
+};
+
+const triggerCrossSearch = async (kw: string, search: SongSearchResults) => {
   crossSearchLoading.value = true;
   try {
-    const existingSongs = neteaseSongs.map((s: any) => ({
-      ...s,
-      ar: s.artists || s.ar,
-      name: s.name,
-      id: String(s.id)
-    }));
-    const crossResults = await crossPlatformSearch(kw, existingSongs);
-    if (crossResults.length > 0) {
-      results.value = [...results.value, ...crossResults];
-      results.value = rankSearchResults(results.value, keyword.value, { aliasInsertIndex: 2 });
-      classifySongs(crossResults);
-    }
+    mergeSupplement(search, 'cross', await crossPlatformSearch(kw));
   } catch (e) {
     console.error('[跨平台搜索失败]:', e);
   } finally {
-    crossSearchLoading.value = false;
+    if (search === activeSearch) crossSearchLoading.value = false;
   }
 };
 
-/**
- * 将 ServerSong 转换为 SongResult 格式
- */
-function convertServerSongToSongResult(s: ServerSong): SongResult {
-  return serverSongToSongResult(s);
-}
-
-// Zephyrus 云端歌曲搜索
-const triggerServerSearch = async (kw: string, existingSongs: any[]) => {
+const triggerServerSearch = async (kw: string, search: SongSearchResults) => {
   try {
-    const serverSongs = await searchServerSongs(kw, 20);
-    if (serverSongs.length === 0) return;
-
-    // 转换为 SongResult
-    const songResults = serverSongs.map(convertServerSongToSongResult);
-
-    // 去重（与已有结果合并）
-    const existingKeys = new Set(
-      existingSongs.map((s: any) =>
-        `${(s.name || '').toLowerCase()}|${(s.ar || s.artists || []).map((a: any) => a.name).join(',')}`.toLowerCase()
-      )
-    );
-    const deduped = songResults.filter(
-      (s) =>
-        !existingKeys.has(
-          `${(s.name || '').toLowerCase()}|${s.ar?.map((a) => a.name).join(',')}`.toLowerCase()
-        )
-    );
-
-    if (deduped.length > 0) {
-      results.value = [...results.value, ...deduped];
-      results.value = rankSearchResults(results.value, keyword.value, { aliasInsertIndex: 2 });
-      classifySongs(deduped);
-    }
+    const songs = await searchServerSongs(kw, 20);
+    mergeSupplement(search, 'server', songs.map(serverSongToSongResult));
   } catch (e) {
     console.error('[云端歌曲搜索失败]:', e);
   }
 };
 
-// VIP 解锁搜索：有解锁口令时，通过服务器代理搜索 VIP 歌曲
-const triggerUnlockSearch = async (kw: string, existingSongs: any[]) => {
+const triggerUnlockSearch = async (kw: string, search: SongSearchResults) => {
   const unlockToken = getUnlockKey();
   if (!unlockToken) return;
 
   try {
-    const { songs: vipSongs, vipUnlocked } = await getUnlockSearchResults(kw, unlockToken, 30, 0);
-    if (!vipUnlocked || vipSongs.length === 0) return;
-
-    // 去重：与已有结果合并
-    const existingKeys = new Set(
-      existingSongs.map((s: any) =>
-        `${(s.name || '').toLowerCase()}|${(s.ar || s.artists || [])
-          .map((a: any) => a.name)
-          .join(',')}`.toLowerCase()
-      )
-    );
-    const deduped = vipSongs.filter(
-      (s: any) =>
-        !existingKeys.has(
-          `${(s.name || '').toLowerCase()}|${(s.ar || []).map((a: any) => a.name).join(',')}`.toLowerCase()
-        )
-    );
-
-    if (deduped.length > 0) {
-      // 标记为 VIP 来源
-      const formatted = deduped.map((s: any) => ({
-        ...s,
-        picUrl: s.al?.picUrl,
-        artists: s.ar
-      }));
-      results.value = [...results.value, ...formatted];
-      results.value = rankSearchResults(results.value, keyword.value, { aliasInsertIndex: 2 });
-      classifySongs(formatted);
+    const { songs, vipUnlocked } = await getUnlockSearchResults(kw, unlockToken, 30, 0);
+    if (vipUnlocked) {
+      mergeSupplement(
+        search,
+        'vip',
+        songs.map((song: SongResult) => ({
+          ...song,
+          picUrl: song.al?.picUrl ?? song.picUrl,
+          artists: song.ar
+        }))
+      );
     }
   } catch (e) {
     console.error('[VIP 解锁搜索失败]:', e);
   }
 };
 
-// 已登录平台（QQ/酷狗）搜索：登录后解锁对应平台搜索
-const triggerPlatformSearch = async (kw: string, existingSongs: any[]) => {
-  const platforms: Array<'qq' | 'kugou'> = [];
-  if (localStorage.getItem('platform-cookie-qq')) platforms.push('qq');
-  if (localStorage.getItem('platform-cookie-kugou')) platforms.push('kugou');
-  if (!platforms.length) return;
-
-  const existingKeys = new Set(
-    existingSongs.map((s: any) =>
-      `${(s.name || '').toLowerCase()}|${(s.ar || s.artists || [])
-        .map((a: any) => a.name)
-        .join(',')}`.toLowerCase()
-    )
-  );
-  for (const platform of platforms) {
+const triggerPlatformSearch = async (kw: string, search: SongSearchResults) => {
+  const platforms = ['qq', 'kugou'] as const;
+  await Promise.all(platforms.map(async (platform) => {
+    if (!localStorage.getItem(`platform-cookie-${platform}`)) return;
     try {
       const songs = await searchPlatformMusic(platform, kw, 15);
-      const deduped = songs.filter(
-        (s) =>
-          !existingKeys.has(
-            `${(s.name || '').toLowerCase()}|${s.ar?.map((a) => a.name).join(',')}`.toLowerCase()
-          )
-      );
-      if (deduped.length > 0) {
-        results.value = [...results.value, ...deduped];
-        classifySongs(deduped);
-        deduped.forEach((s) =>
-          existingKeys.add(
-            `${(s.name || '').toLowerCase()}|${s.ar?.map((a) => a.name).join(',')}`.toLowerCase()
-          )
-        );
-      }
+      mergeSupplement(search, platform, songs);
     } catch (e) {
       console.error(`[${platform} 搜索失败]:`, e);
     }
-  }
-  results.value = rankSearchResults(results.value, keyword.value, { aliasInsertIndex: 2 });
+  }));
 };
 
 // 滚动加载更多
@@ -703,8 +645,8 @@ const goToArtist = (id: number) => {
 watch(
   () => route.query,
   (query) => {
-    if (route.path === '/mobile-search-result' && query.keyword) {
-      const nextKeyword = query.keyword as string;
+    if (route.path === '/mobile-search-result') {
+      const nextKeyword = typeof query.keyword === 'string' ? query.keyword : '';
       const nextType = Number(query.type) || searchStore.searchType || 1;
       const shouldReload = nextKeyword !== keyword.value || nextType !== searchType.value;
       keyword.value = nextKeyword;
@@ -725,6 +667,10 @@ watch(activeSourceFilter, (source) => {
   if (route.path === '/mobile-search-result' && route.query.source !== source) {
     void router.replace({ path: route.path, query: { ...route.query, source } });
   }
+});
+
+onBeforeUnmount(() => {
+  activeSearch = undefined;
 });
 
 onMounted(() => {

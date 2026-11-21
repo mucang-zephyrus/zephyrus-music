@@ -1,7 +1,6 @@
-import PinyinMatch from 'pinyin-match';
-
 import { type ClimaxSegment, normalizeClimaxSegments } from '@/api/climax';
 import type { Artist, SongResult } from '@/types/music';
+import { normalizeSearchText, scoreSearchText } from '@/utils/searchText';
 import { resolveServerSongId } from '@/utils/serverSongIdentity';
 
 import { fetchLyricText } from './lyricResource';
@@ -109,149 +108,6 @@ export async function searchServerSongs(
     .map((item) => item.song);
 }
 
-function normalizeSearchText(value: string): string {
-  return value
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[\s\p{P}\p{S}]+/gu, '');
-}
-
-function subsequenceGap(value: string, query: string): number | null {
-  let queryIndex = 0;
-  let firstMatch = -1;
-  let lastMatch = -1;
-
-  for (let index = 0; index < value.length && queryIndex < query.length; index++) {
-    if (value[index] !== query[queryIndex]) continue;
-    if (firstMatch < 0) firstMatch = index;
-    lastMatch = index;
-    queryIndex++;
-  }
-
-  if (queryIndex !== query.length) return null;
-  return lastMatch - firstMatch + 1 - query.length;
-}
-
-function editDistance(left: string, right: string): number {
-  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
-
-  for (let leftIndex = 1; leftIndex <= left.length; leftIndex++) {
-    const current = [leftIndex];
-    for (let rightIndex = 1; rightIndex <= right.length; rightIndex++) {
-      current[rightIndex] = Math.min(
-        current[rightIndex - 1] + 1,
-        previous[rightIndex] + 1,
-        previous[rightIndex - 1] + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1)
-      );
-    }
-    previous.splice(0, previous.length, ...current);
-  }
-
-  return previous[right.length];
-}
-
-function scoreText(value: string, query: string, rawQuery: string): number {
-  const normalized = normalizeSearchText(value);
-  if (!normalized || !query) return Number.POSITIVE_INFINITY;
-  if (normalized === query) return 0;
-  if (normalized.startsWith(query)) return 4 + normalized.length - query.length;
-
-  const includesAt = normalized.indexOf(query);
-  if (includesAt >= 0) return 12 + includesAt;
-
-  if (PinyinMatch.match(value, rawQuery)) return 30;
-
-  const gap = subsequenceGap(normalized, query);
-  if (gap != null) return 48 + gap;
-
-  if (Math.abs(normalized.length - query.length) <= 3) {
-    const distance = editDistance(normalized, query);
-    const threshold = Math.min(3, Math.max(1, Math.ceil(query.length * 0.3)));
-    if (distance <= threshold) return 72 + distance;
-  }
-
-  return Number.POSITIVE_INFINITY;
-}
-
-/**
- * 统一的模糊匹配评分（越小越匹配），供搜索结果整体排序使用
- */
-export function fuzzyScoreText(value: string, rawQuery: string): number {
-  const trimmed = String(rawQuery || '').trim();
-  if (!value || !trimmed) return Number.POSITIVE_INFINITY;
-  return scoreText(value, normalizeSearchText(trimmed), trimmed);
-}
-
-/**
- * 把搜索结果按“与搜索词的匹配度”重新排序（稳定排序，等分保持原顺序）
- *
- * @param options.aliasInsertIndex 网易云别名检索保护（默认不启用）：
- * 网易云搜索自身已按相关性排序（含别名/翻译匹配），其结果中“歌名与歌手均与
- * 搜索词文本无关”的项即别名命中，全量相似度重排会把它们压到后面而丢失。
- * 启用后：常规项按相似度排序，别名组保持网易云原序整体插到 aliasInsertIndex 位（第三位）。
- */
-export function rankSearchResults(
-  songs: SongResult[],
-  keyword: string,
-  options?: { aliasInsertIndex?: number }
-): SongResult[] {
-  const trimmed = String(keyword || '').trim();
-  if (!trimmed || !songs?.length) return songs;
-  const aliasInsertIndex = options?.aliasInsertIndex;
-
-  const scored = songs.map((song, index) => {
-    const name = song.name || '';
-    const artistNames = (song.ar || song.artists || [])
-      .map((artist: any) => artist.name || '')
-      .join(' ');
-    const albumName = song.al?.name || (song as any).album?.name || '';
-    const matchScore = Math.min(
-      fuzzyScoreText(name, trimmed),
-      fuzzyScoreText(artistNames, trimmed) + 8,
-      fuzzyScoreText(albumName, trimmed) + 16,
-      fuzzyScoreText(`${name} ${artistNames} ${albumName}`, trimmed) + 24
-    );
-    const popularity = Number(
-      (song as any).popularity ??
-        (song as any).playCount ??
-        (song as any).hot ??
-        (song as any).score ??
-        0
-    );
-    // 热度只作为有限的次级因素，避免热门但不相关的歌曲压过精确命中。
-    const popularityBoost = Number.isFinite(popularity)
-      ? Math.min(8, Math.log10(Math.max(1, popularity)) * 2)
-      : 0;
-    const score = matchScore - popularityBoost;
-    return {
-      song,
-      index,
-      score,
-      // 别名命中判定：歌名与歌手均与搜索词文本无关（含拼音/子序列/编辑距离在内均不匹配）
-      isAlias:
-        aliasInsertIndex !== undefined &&
-        song.platform === 'netease' &&
-        Number.isFinite(fuzzyScoreText(name, trimmed)) === false &&
-        Number.isFinite(fuzzyScoreText(artistNames, trimmed)) === false
-    };
-  });
-
-  const sorted = scored
-    .sort((left, right) => left.score - right.score || left.index - right.index)
-    .map((item) => item.song);
-
-  if (aliasInsertIndex === undefined) return sorted;
-
-  // 常规项按相似度排序；别名组保持网易云原序，整体插到第三位
-  const aliasItems = scored
-    .filter((item) => item.isAlias)
-    .sort((a, b) => a.index - b.index)
-    .map((item) => item.song);
-  const regularItems = sorted.filter((song) => !aliasItems.includes(song));
-  const insertAt = Math.min(aliasInsertIndex, regularItems.length);
-  return [...regularItems.slice(0, insertAt), ...aliasItems, ...regularItems.slice(insertAt)];
-}
-
 function scoreServerSong(song: ServerSong, query: string, rawQuery: string): number {
   const candidates = [
     { value: song.name, weight: 0 },
@@ -261,7 +117,7 @@ function scoreServerSong(song: ServerSong, query: string, rawQuery: string): num
   ];
 
   const matchScore = Math.min(
-    ...candidates.map(({ value, weight }) => scoreText(value, query, rawQuery) + weight)
+    ...candidates.map(({ value, weight }) => scoreSearchText(value, query, rawQuery) + weight)
   );
   const popularity = Number(song.popularity ?? song.playCount ?? song.hot ?? 0);
   const popularityBoost = Number.isFinite(popularity)

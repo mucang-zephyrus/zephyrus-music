@@ -4,7 +4,6 @@
  * 职责：
  * 1. 当网易云搜索结果不足或为空时，调用多平台搜索进行补充
  * 2. 将各平台搜索结果统一映射为 SongResult 格式
- * 3. 与网易云结果去重（按歌名+歌手匹配）
  *
  * 两条搜索通道：
  * - 原生多平台搜索（通过主进程 IPC，支持 QQ/咪咕/酷狗/酷我/JOOX，可使用 Cookie 解锁高品质）
@@ -227,23 +226,6 @@ function convertNativeItemToSongResult(item: NativePlatformSong): SongResult {
 }
 
 /**
- * 生成歌曲去重 key（歌名+歌手，小写）
- */
-function makeDedupKey(name: string, artists: string[]): string {
-  const artistStr = artists.join(',').toLowerCase().trim();
-  return `${(name || '').toLowerCase().trim()}|${artistStr}`;
-}
-
-/**
- * 从 SongResult 提取去重 key
- */
-function getDedupKey(song: SongResult): string {
-  const artists =
-    song.ar?.map((a) => a.name) || song.artists?.map((a) => a.name) || [];
-  return makeDedupKey(song.name, artists);
-}
-
-/**
  * 原生多平台搜索（通过主进程 IPC）
  *
  * @param keyword 搜索关键词
@@ -319,13 +301,11 @@ async function gdMusicSearch(
  * 优先使用原生多平台搜索（主进程 IPC），若不可用则回退到 GD 音乐台。
  *
  * @param keyword 搜索关键词
- * @param existingSongs 已有的网易云搜索结果（用于去重）
  * @param config 搜索配置
  * @returns 跨平台搜索结果（已去重、已转换格式）
  */
 export async function crossPlatformSearch(
   keyword: string,
-  existingSongs: SongResult[] = [],
   config?: CrossPlatformSearchConfig
 ): Promise<SongResult[]> {
   const cfg = { ...DEFAULT_CONFIG, ...config };
@@ -334,16 +314,10 @@ export async function crossPlatformSearch(
     return [];
   }
 
-  // 构建已存在歌曲的去重 key 集合
-  const existingKeys = new Set<string>();
-  for (const song of existingSongs) {
-    existingKeys.add(getDedupKey(song));
-  }
-
   // 获取搜索结果
   let rawSongs: SongResult[] = [];
 
-  if (cfg.useNativeSearch && window.api?.multiPlatformSearch) {
+  if (cfg.useNativeSearch && typeof window.api?.multiPlatformSearch === 'function') {
     // 原生多平台搜索
     const platforms = [...cfg.nativePlatforms];
     if (!cfg.enableKuwo) {
@@ -373,23 +347,7 @@ export async function crossPlatformSearch(
     rawSongs = await gdMusicSearch(keyword, sources, cfg.perSourceLimit);
   }
 
-  // 去重
-  const mergedSongs: SongResult[] = [];
-  const seenKeys = new Set<string>(existingKeys);
-
-  for (const song of rawSongs) {
-    const key = getDedupKey(song);
-
-    // 去重：跳过与网易云结果重复的歌曲，以及跨平台内部重复
-    if (seenKeys.has(key)) {
-      continue;
-    }
-
-    seenKeys.add(key);
-    mergedSongs.push(song);
-  }
-
-  return mergedSongs;
+  return rawSongs;
 }
 
 /**

@@ -249,14 +249,14 @@
 
 <script lang="ts" setup>
 import { useDateFormat } from '@vueuse/core';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
 import { openExternalUrl } from '@/api/bilibili';
 import { crossPlatformSearch } from '@/api/crossPlatformSearch';
 import { getSearch } from '@/api/search';
-import { rankSearchResults, searchServerSongs, serverSongToSongResult } from '@/api/serverSongs';
+import { searchServerSongs, serverSongToSongResult } from '@/api/serverSongs';
 import { openSpotifyTrack } from '@/api/spotify';
 import GlowTabs from '@/components/common/GlowTabs.vue';
 import PlayBottom from '@/components/common/PlayBottom.vue';
@@ -280,6 +280,11 @@ import { usePlayerStore } from '@/store/modules/player';
 import { useSearchStore } from '@/store/modules/search';
 import type { SongResult } from '@/types/music';
 import { calculateAnimationDelay, isElectron, isMobile } from '@/utils';
+import {
+  createSongSearchResults,
+  type SearchSupplementSource,
+  type SongSearchResults
+} from '@/utils/searchSongRanking';
 
 defineOptions({
   name: 'SearchResult'
@@ -322,6 +327,7 @@ const page = ref(0);
 const hasMore = ref(true);
 const isLoadingMore = ref(false);
 const currentKeyword = computed(() => (route.query.keyword as string) || '');
+let activeSearch: SongSearchResults | undefined;
 
 const titleElRef = ref<HTMLElement | null>(null);
 useScrollTitle(currentKeyword, titleElRef);
@@ -397,24 +403,27 @@ const toggleLayout = () => {
 
 const loadSearch = async (isLoadMore = false) => {
   const keywords = currentKeyword.value;
-  if (!keywords) return;
-
   const type = searchType.value;
+  const search = isLoadMore ? activeSearch : createSongSearchResults(keywords);
+  if (!search) return;
 
   if (!isLoadMore) {
+    activeSearch = search;
     searchDetail.value = undefined;
     page.value = 0;
-    hasMore.value = true;
-    searchDetailLoading.value = true;
+    hasMore.value = Boolean(keywords);
+    searchDetailLoading.value = Boolean(keywords);
+    isLoadingMore.value = false;
     // 新搜索清除旧探测缓存和筛选状态
     clearProbeCache();
     activeSourceFilter.value = 'all';
     probeProgress.value = { done: 0, total: 0 };
     crossSearchLoading.value = false;
   } else {
-    if (isLoadingMore.value || !hasMore.value) return;
+    if (searchDetailLoading.value || isLoadingMore.value || !hasMore.value) return;
     isLoadingMore.value = true;
   }
+  if (!keywords) return;
 
   try {
     const { data } = await getSearch({
@@ -424,7 +433,9 @@ const loadSearch = async (isLoadMore = false) => {
       offset: page.value * ITEMS_PER_PAGE
     });
 
-    const songs = data.result.songs || [];
+    if (search !== activeSearch) return;
+
+    const songs: SongResult[] = data.result.songs || [];
     const albums = data.result.albums || [];
     const mvs = (data.result.mvs || []).map((item: any) => ({
       ...item,
@@ -458,29 +469,30 @@ const loadSearch = async (isLoadMore = false) => {
       item.desc = `${item.artist.name} ${item.company} ${dateFormat(item.publishTime)}`;
     });
 
+    let displayedSongs = songs;
+    if (type === SEARCH_TYPE.MUSIC) {
+      if (isLoadMore) search.appendPage(songs);
+      else search.setFirstPage(songs);
+      displayedSongs = search.getSongs();
+    }
+
     if (isLoadMore && searchDetail.value) {
-      searchDetail.value.songs = [...(searchDetail.value.songs || []), ...songs];
+      searchDetail.value.songs =
+        type === SEARCH_TYPE.MUSIC ? displayedSongs : [...(searchDetail.value.songs || []), ...songs];
       searchDetail.value.albums = [...(searchDetail.value.albums || []), ...albums];
       searchDetail.value.mvs = [...(searchDetail.value.mvs || []), ...mvs];
       searchDetail.value.playlists = [...(searchDetail.value.playlists || []), ...playlists];
       searchDetail.value.djRadios = [...(searchDetail.value.djRadios || []), ...djRadios];
     } else {
-      searchDetail.value = { songs, albums, mvs, playlists, djRadios };
-      // 第一页统一按匹配度排序（云端/跨平台补充结果稍后合并时也会重新排序）
-      searchDetail.value.songs = rankSearchResults(searchDetail.value.songs, keywords);
+      searchDetail.value = { songs: displayedSongs, albums, mvs, playlists, djRadios };
     }
 
-    // 对新加载的歌曲触发来源探测（仅单曲类型）
-    if (searchType.value === SEARCH_TYPE.MUSIC && songs.length > 0) {
-      probeSources(songs);
-    }
-
-    // ==================== 跨平台补充搜索 ====================
-    // 单曲搜索、第一页时始终触发跨平台搜索（并发进行，不阻塞网易云结果展示）
-    // 跨平台搜索结果会异步合并进来，去重逻辑保证不重复
-    if (searchType.value === SEARCH_TYPE.MUSIC && !isLoadMore) {
-      triggerCrossPlatformSearch(keywords, songs);
-      triggerServerSearch(keywords);
+    if (type === SEARCH_TYPE.MUSIC) {
+      probeSources(songs, search);
+      if (!isLoadMore) {
+        void triggerCrossPlatformSearch(keywords, search);
+        void triggerServerSearch(keywords, search);
+      }
     }
 
     hasMore.value =
@@ -494,8 +506,10 @@ const loadSearch = async (isLoadMore = false) => {
   } catch (error) {
     console.error(t('search.error.searchFailed'), error);
   } finally {
-    searchDetailLoading.value = false;
-    isLoadingMore.value = false;
+    if (search === activeSearch) {
+      searchDetailLoading.value = false;
+      isLoadingMore.value = false;
+    }
   }
 };
 
@@ -601,7 +615,7 @@ const sourceFilterOptions = computed(() => {
  * 对搜索结果进行来源探测
  * 先用 quickClassify 即时标注，再对 pending 的歌曲懒探测
  */
-const probeSources = (songs: any[]) => {
+const probeSources = (songs: SongResult[], search: SongSearchResults) => {
   if (!songs || songs.length === 0) return;
 
   // 第一层：即时分类（零请求）
@@ -630,61 +644,47 @@ const probeSources = (songs: any[]) => {
   probeSongsBatch(
     songResults,
     (done, total) => {
+      if (search !== activeSearch) return;
       probeProgress.value = { done, total };
       sourceLabelVersion.value++;
     },
     () => {
-      // 单首探测完成，触发响应式更新
-      sourceLabelVersion.value++;
+      if (search === activeSearch) sourceLabelVersion.value++;
     }
   );
 };
 
-const getSongIdentity = (song: any): string => {
-  const artists = (song.ar || song.artists || []).map((artist: any) => artist.name || artist);
-  return `${song.name || ''}|${artists.join(',')}`.toLowerCase();
+const mergeSupplement = (
+  search: SongSearchResults,
+  source: SearchSupplementSource,
+  songs: SongResult[]
+) => {
+  if (search !== activeSearch || songs.length === 0 || !searchDetail.value) return;
+
+  search.setSupplement(source, songs);
+  const displayed = search.getSongs();
+  const visible = new Set(displayed);
+  searchDetail.value.songs = displayed;
+  probeSources(songs.filter((song) => visible.has(song)), search);
 };
 
-const mergeSupplementalSongs = (songs: SongResult[]) => {
-  if (!searchDetail.value || songs.length === 0) return;
-
-  const existing = searchDetail.value.songs || [];
-  const existingKeys = new Set(existing.map(getSongIdentity));
-  const deduped = songs.filter((song) => !existingKeys.has(getSongIdentity(song)));
-  if (deduped.length === 0) return;
-
-  searchDetail.value.songs = [...existing, ...deduped];
-  searchDetail.value.songs = rankSearchResults(searchDetail.value.songs, currentKeyword.value);
-  probeSources(deduped);
-  sourceLabelVersion.value++;
-};
-
-const triggerServerSearch = async (keyword: string) => {
+const triggerServerSearch = async (keyword: string, search: SongSearchResults) => {
   try {
     const serverSongs = await searchServerSongs(keyword, 20);
-    mergeSupplementalSongs(serverSongs.map(serverSongToSongResult));
+    mergeSupplement(search, 'server', serverSongs.map(serverSongToSongResult));
   } catch (error) {
     console.error('[ServerSongs] 搜索失败:', error);
   }
 };
 
-/**
- * 触发跨平台补充搜索
- * 当网易云搜索结果不足时，调用 GD 音乐台 joox 音源搜索 QQ 独占内容
- */
-const triggerCrossPlatformSearch = async (keyword: string, neteaseSongs: any[]) => {
+const triggerCrossPlatformSearch = async (keyword: string, search: SongSearchResults) => {
   crossSearchLoading.value = true;
   try {
-    // 将网易云歌曲转换为 SongResult 格式用于去重
-    const existingSongs = neteaseSongs.map(formatSong).filter(Boolean) as SongResult[];
-
-    const crossResults = await crossPlatformSearch(keyword, existingSongs);
-
-    mergeSupplementalSongs(crossResults);
+    mergeSupplement(search, 'cross', await crossPlatformSearch(keyword));
   } catch (error) {
     console.error(t('search.crossSearch.failed'), error);
   } finally {
-    crossSearchLoading.value = false;
+    if (search === activeSearch) crossSearchLoading.value = false;
   }
 };
 
@@ -730,6 +730,10 @@ onMounted(() => {
   if (currentKeyword.value) {
     loadSearch();
   }
+});
+
+onBeforeUnmount(() => {
+  activeSearch = undefined;
 });
 
 watch(
