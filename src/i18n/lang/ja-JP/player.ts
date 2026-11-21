@@ -5,6 +5,10 @@ export default {
     fill: '歌詞を画面いっぱいに表示',
     uppercase: '英字をすべて大文字にする',
     wholeLine: '常に歌詞を行単位で表示',
+    reactiveDistress: '行全体の質感を音に合わせて変える',
+    jitter: '歌詞の揺れ',
+    lyricSaturation: '歌詞の彩度',
+    layoutSaturation: 'レイアウトの彩度',
     swapArtistLanguages: 'アーティスト名の中国語と英語を入れ替える'
   },
   dotMatrix: {

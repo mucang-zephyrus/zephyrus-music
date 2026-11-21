@@ -3,6 +3,8 @@
  * 每次启动拉取一次：?t= 时间戳 + no-cache 绕过启发式缓存；失败回退内存缓存。
  */
 
+import archive from '../../../server/announcements.json';
+
 const API_BASE = 'https://www.mucang.xyz';
 const ANNOUNCEMENTS_JSON_URL = `${API_BASE}/server-music/announcements.json`;
 
@@ -28,7 +30,9 @@ export interface Announcement {
   action?: AnnouncementAction;
 }
 
+export const announcementArchive: Announcement[] = archive;
 let cachedList: Announcement[] | null = null;
+export const cachedAnnouncements = () => cachedList ?? announcementArchive;
 
 export async function fetchAnnouncements(): Promise<Announcement[]> {
   if (cachedList) return cachedList;
@@ -41,7 +45,7 @@ export async function fetchAnnouncements(): Promise<Announcement[]> {
       : [];
   } catch (error) {
     console.error('[Announcements] 拉取失败：', error);
-    return cachedList ?? [];
+    return cachedAnnouncements();
   }
   return cachedList;
 }

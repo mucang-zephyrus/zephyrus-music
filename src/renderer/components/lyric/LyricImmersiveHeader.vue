@@ -9,12 +9,16 @@
       @pointerdown.stop
       @click.stop="emit('returnCover')"
     >
-      <img class="lih-cover" :src="coverUrl" alt="" draggable="false" />
+      <Transition name="song-change" mode="out-in">
+        <img :key="coverUrl" class="lih-cover" :src="coverUrl" alt="" draggable="false" />
+      </Transition>
     </button>
-    <div v-if="showInfo" class="lih-copy" :style="copyStyle">
-      <strong class="lih-title">{{ title }}</strong>
-      <span class="lih-artist">{{ artistText }}</span>
-    </div>
+    <Transition name="song-change" mode="out-in">
+      <div v-if="showInfo" :key="playMusic?.id" class="lih-copy" :style="copyStyle">
+        <strong class="lih-title">{{ title }}</strong>
+        <span class="lih-artist">{{ artistText }}</span>
+      </div>
+    </Transition>
     <div class="lih-actions" :style="actionsStyle">
       <button
         type="button"

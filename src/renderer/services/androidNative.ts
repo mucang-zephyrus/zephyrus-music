@@ -7,7 +7,14 @@
 import { watch } from 'vue';
 
 import { useWordTimedPlayback } from '@/composables/useWordTimedPlayback';
-import { allTime, artistList, displayLrcArray as lrcArray, nowIndex, nowTime, playMusic } from '@/hooks/MusicHook';
+import {
+  allTime,
+  artistList,
+  displayLrcArray as lrcArray,
+  nowIndex,
+  nowTime,
+  playMusic
+} from '@/hooks/MusicHook';
 import { usePlayerStore } from '@/store/modules/player';
 import { useSettingsStore } from '@/store/modules/settings';
 import {
@@ -50,6 +57,10 @@ type NativeBridge = {
   setStatusBarLyricTimeline?: (timelineJson: string) => void;
   installStatusBarLyricFont?: (name: string, base64Data: string) => string;
   saveBase64ImageToGallery?: (dataUrl: string, fileName: string) => boolean;
+  pickAudioFolder?: () => void;
+  readLocalLibrary?: (requestId: string, operation: string, input: string) => void;
+  scanAudioFiles?: (folder: string) => string;
+  getAudioMetadata?: (uri: string) => string;
   writeAudioMetadata?: (uriStr: string, changesJson: string) => void;
   setBackgroundKeepAlive: (enabled: boolean) => void;
   installApkFromCache: (fileName: string) => void;
@@ -86,6 +97,8 @@ declare global {
   interface Window {
     AndroidNative?: NativeBridge;
     __nativeAudioEvent?: (payload: string | Record<string, unknown>) => void;
+    __localMusicFolderPicked?: (uri: string | null) => void;
+    __localLibraryResult?: (requestId: string, json: string) => void;
     __metadataWriteResult?: ((json: string) => void) | null;
     __spotifyNativeResponse?: (requestId: string, payload: string) => void;
   }
@@ -145,8 +158,8 @@ export function injectSafeAreaInsets() {
     const rootStyle = document.documentElement.style;
     const setInset = (side: 'top' | 'bottom' | 'left' | 'right', rawValue?: number) => {
       const value = Number(rawValue);
-      if (!Number.isFinite(value) || value <= 0) return;
-      rootStyle.setProperty(`--safe-area-inset-${side}`, `${value / density}px`);
+      if (!Number.isFinite(value)) return;
+      rootStyle.setProperty(`--safe-area-inset-${side}`, `${Math.max(0, value) / density}px`);
     };
 
     setInset('top', insets.top);
@@ -415,7 +428,9 @@ export function refreshStatusBarLyric(applyConfig = true) {
     if (!enabled || !permitted) return;
 
     const song = playMusic?.value;
-    const line = wordTimedPlayback ? wordTimedPlayback.currentDisplayLine.value : lrcArray.value[nowIndex.value];
+    const line = wordTimedPlayback
+      ? wordTimedPlayback.currentDisplayLine.value
+      : lrcArray.value[nowIndex.value];
     const text = line?.text?.trim() || '';
     const accentColor = song?.primaryColor || '#ffffff';
     if (window.AndroidNative!.updateStatusBarLyricState) {

@@ -133,8 +133,8 @@ defineExpose({ showInvite });
   width: min(360px, calc(100vw - 40px));
   border-radius: 20px;
   padding: 28px 22px 22px;
-  color: #f5f5f7;
-  background: #1c1c20;
+  color: var(--floating-text);
+  background: var(--floating-surface);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow:
     0 16px 48px rgba(0, 0, 0, 0.5),
@@ -183,7 +183,7 @@ defineExpose({ showInvite });
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--floating-muted);
   }
 
   .card-title {
@@ -197,7 +197,7 @@ defineExpose({ showInvite });
     margin: 0;
     font-size: 13px;
     line-height: 1.5;
-    color: rgba(255, 255, 255, 0.66);
+    color: var(--floating-muted);
   }
 }
 
@@ -210,7 +210,7 @@ defineExpose({ showInvite });
     padding: 0 16px;
     border-radius: 999px;
     border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--floating-inset);
     color: inherit;
     font-size: 14px;
     outline: none;
@@ -261,8 +261,8 @@ defineExpose({ showInvite });
     }
 
     &.secondary {
-      background: rgba(255, 255, 255, 0.08);
-      color: rgba(255, 255, 255, 0.85);
+      background: var(--floating-control);
+      color: var(--floating-text);
     }
   }
 }

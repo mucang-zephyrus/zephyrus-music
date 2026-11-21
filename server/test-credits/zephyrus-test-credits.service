@@ -1,0 +1,18 @@
+[Unit]
+Description=Zephyrus Music tester credits
+After=network.target
+
+[Service]
+Type=simple
+User=zephyrus-test
+StateDirectory=zephyrus-test-credits
+StateDirectoryMode=0700
+ExecStart=/usr/bin/python3 /opt/zephyrus-test-credits/app.py
+Restart=on-failure
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

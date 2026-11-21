@@ -152,16 +152,16 @@ public class NativeBridge {
     public String getSafeAreaInsets() {
         JSONObject result = new JSONObject();
         try {
-            // 优先使用 DisplayCutout API 获取精确挖孔避让高度
-            int top = getCutoutSafeInsetTop();
-            // 回退：如果没有挖孔或获取失败，使用状态栏高度
-            if (top <= 0) {
-                top = getStatusBarHeight();
-            }
-            result.put("top", top);
-            result.put("bottom", 0);
-            result.put("left", 0);
-            result.put("right", 0);
+            androidx.core.view.WindowInsetsCompat insets = androidx.core.view.ViewCompat
+                    .getRootWindowInsets(activity.getWindow().getDecorView());
+            androidx.core.graphics.Insets safe = insets == null ? null : insets.getInsets(
+                    androidx.core.view.WindowInsetsCompat.Type.systemBars()
+                    | androidx.core.view.WindowInsetsCompat.Type.displayCutout()
+                    | androidx.core.view.WindowInsetsCompat.Type.mandatorySystemGestures());
+            result.put("top", safe == null ? getStatusBarHeight() : safe.top);
+            result.put("bottom", safe == null ? 0 : safe.bottom);
+            result.put("left", safe == null ? 0 : safe.left);
+            result.put("right", safe == null ? 0 : safe.right);
             result.put("density", activity.getResources().getDisplayMetrics().density);
         } catch (Exception e) {
             // ignore
@@ -281,34 +281,65 @@ public class NativeBridge {
      */
     @JavascriptInterface
     public String scanAudioFiles(String treeUriStr) {
-        JSONArray result = new JSONArray();
         try {
-            Uri treeUri = Uri.parse(treeUriStr);
-            ContentResolver resolver = activity.getContentResolver();
-            String rootDocId = DocumentsContract.getTreeDocumentId(treeUri);
-            Uri rootDocUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, rootDocId);
-            scanDirectory(resolver, treeUri, rootDocUri, result, 0);
+            return listAudioFiles(treeUriStr).toString();
         } catch (Exception e) {
             Log.e("NativeBridge", "scanAudioFiles error", e);
+            return "[]";
         }
-        return result.toString();
+    }
+
+    @JavascriptInterface
+    public void readLocalLibrary(String requestId, String operation, String input) {
+        new Thread(() -> {
+            JSONObject response = new JSONObject();
+            try {
+                if ("list".equals(operation)) {
+                    response.put("data", listAudioFiles(input));
+                } else if ("metadata".equals(operation)) {
+                    JSONObject file = new JSONObject(input);
+                    response.put("data", readAudioMetadata(file.getString("uri"), file));
+                } else {
+                    throw new IllegalArgumentException("Unknown library operation");
+                }
+            } catch (Exception e) {
+                Log.w("NativeBridge", "Local library " + operation + " failed", e);
+                try { response.put("error", e.getClass().getSimpleName()); }
+                catch (Exception ignored) { }
+            }
+            activity.runOnUiThread(() -> activity.evaluateJavascript(
+                    "window.__localLibraryResult && window.__localLibraryResult("
+                            + JSONObject.quote(requestId) + ", "
+                            + JSONObject.quote(response.toString()) + ")"));
+        }, "local-library").start();
+    }
+
+    private JSONArray listAudioFiles(String treeUriStr) throws Exception {
+        JSONArray result = new JSONArray();
+        Uri treeUri = Uri.parse(treeUriStr);
+        String rootDocId = DocumentsContract.getTreeDocumentId(treeUri);
+        Uri rootDocUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, rootDocId);
+        scanDirectory(activity.getContentResolver(), treeUri, rootDocUri, result, 0);
+        return result;
     }
 
     private void scanDirectory(ContentResolver resolver, Uri treeUri, Uri docUri,
-                                JSONArray result, int depth) {
+                                JSONArray result, int depth) throws Exception {
         if (depth > 5) return;
-        Cursor cursor = null;
-        try {
-            Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
-                    treeUri, DocumentsContract.getDocumentId(docUri));
-            cursor = resolver.query(childrenUri, new String[]{
-                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                    DocumentsContract.Document.COLUMN_MIME_TYPE,
-                    DocumentsContract.Document.COLUMN_SIZE,
-                    DocumentsContract.Document.COLUMN_LAST_MODIFIED
-            }, null, null, null);
-            if (cursor == null) return;
+        Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
+                treeUri, DocumentsContract.getDocumentId(docUri));
+        try (Cursor cursor = resolver.query(childrenUri, new String[]{
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                DocumentsContract.Document.COLUMN_MIME_TYPE,
+                DocumentsContract.Document.COLUMN_SIZE,
+                DocumentsContract.Document.COLUMN_LAST_MODIFIED
+        }, null, null, null)) {
+            if (cursor == null || (cursor.getExtras() != null
+                    && (cursor.getExtras().getBoolean(DocumentsContract.EXTRA_LOADING)
+                    || cursor.getExtras().containsKey(DocumentsContract.EXTRA_ERROR)))) {
+                throw new java.io.IOException("Folder listing unavailable");
+            }
 
             while (cursor.moveToNext()) {
                 String docId = cursor.getString(0);
@@ -329,10 +360,6 @@ public class NativeBridge {
                     result.put(fileObj);
                 }
             }
-        } catch (Exception e) {
-            Log.e("NativeBridge", "scanDirectory error (depth=" + depth + ")", e);
-        } finally {
-            if (cursor != null) cursor.close();
         }
     }
 
@@ -354,6 +381,28 @@ public class NativeBridge {
      */
     @JavascriptInterface
     public String getAudioMetadata(String uriStr) {
+        try {
+            return readAudioMetadata(uriStr, null).toString();
+        } catch (Exception e) {
+            Log.e("NativeBridge", "getAudioMetadata error: " + uriStr, e);
+            JSONObject fallback = new JSONObject();
+            try {
+                fallback.put("filePath", uriStr);
+                fallback.put("title", extractFileNameFromUri(Uri.parse(uriStr)));
+                fallback.put("artist", "未知艺术家");
+                fallback.put("album", "未知专辑");
+                fallback.put("duration", 0);
+                fallback.put("fileSize", 0);
+                fallback.put("modifiedTime", 0);
+                fallback.put("diskNumber", 0);
+                fallback.put("trackNumber", 0);
+                fallback.put("year", 0);
+            } catch (Exception ignored) { }
+            return fallback.toString();
+        }
+    }
+
+    private JSONObject readAudioMetadata(String uriStr, JSONObject file) throws Exception {
         JSONObject result = new JSONObject();
         MediaMetadataRetriever retriever = new MediaMetadataRetriever();
         try {
@@ -381,7 +430,7 @@ public class NativeBridge {
                 coverBase64 = "data:image/jpeg;base64," + Base64.encodeToString(coverBytes, Base64.NO_WRAP);
             }
 
-            String fileName = extractFileNameFromUri(uri);
+            String fileName = file != null ? file.optString("name") : extractFileNameFromUri(uri);
 
             result.put("filePath", uriStr);
             result.put("title", title != null ? title : fileName);
@@ -390,41 +439,20 @@ public class NativeBridge {
             result.put("duration", durationStr != null ? Long.parseLong(durationStr) : 0);
             result.put("cover", coverBase64 != null ? coverBase64 : JSONObject.NULL);
             // 尝试提取内嵌歌词
-            String lyrics = extractEmbeddedLyrics(uri);
+            String lyrics = extractEmbeddedLyrics(uri, retriever, fileName);
             result.put("lyrics", lyrics != null ? lyrics : JSONObject.NULL);
-            result.put("fileSize", queryFileSize(uri));
+            result.put("fileSize", file != null ? file.getLong("size") : queryFileSize(uri));
             result.put("bitrate", bitrate);
             result.put("sampleRate", sampleRate);
             result.put("mime", mime != null ? mime : JSONObject.NULL);
-            result.put("modifiedTime", 0);
+            result.put("modifiedTime", file != null ? file.getLong("lastModified") : 0);
             result.put("diskNumber", 0);
             result.put("trackNumber", parseTrackNumber(trackStr));
             result.put("year", yearStr != null ? tryParseInt(yearStr) : 0);
-        } catch (Exception e) {
-            Log.e("NativeBridge", "getAudioMetadata error: " + uriStr, e);
-            try {
-                result.put("filePath", uriStr);
-                result.put("title", extractFileNameFromUri(Uri.parse(uriStr)));
-                result.put("artist", "未知艺术家");
-                result.put("album", "未知专辑");
-                result.put("duration", 0);
-                result.put("cover", JSONObject.NULL);
-                result.put("lyrics", JSONObject.NULL);
-                result.put("fileSize", 0);
-                result.put("bitrate", 0);
-                result.put("sampleRate", 0);
-                result.put("mime", JSONObject.NULL);
-                result.put("modifiedTime", 0);
-                result.put("diskNumber", 0);
-                result.put("trackNumber", 0);
-                result.put("year", 0);
-            } catch (Exception e2) {
-                Log.e("NativeBridge", "getAudioMetadata fallback error", e2);
-            }
         } finally {
             try { retriever.release(); } catch (Exception e) { /* ignore */ }
         }
-        return result.toString();
+        return result;
     }
 
     /** 通过 AssetFileDescriptor 读取 SAF 文档的真实大小。 */
@@ -732,45 +760,24 @@ public class NativeBridge {
      * @param uri content URI
      * @return 歌词文本，失败返回 null
      */
-    private String extractEmbeddedLyrics(Uri uri) {
-        // 方案1：MediaMetadataRetriever 尝试 WRITER 字段（某些设备将歌词存于此）
-        MediaMetadataRetriever mmr = new MediaMetadataRetriever();
-        try {
-            mmr.setDataSource(activity, uri);
-            // 尝试 WRITER（部分厂商将歌词写入此字段）
-            String writer = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_WRITER);
-            if (writer != null && writer.contains("[") && writer.contains("]")
-                    && (writer.contains(":") || writer.contains("."))) {
-                return writer;
-            }
-            // 尝试 AUTHOR（某些编码器将歌词放在作者字段）
-            String author = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_AUTHOR);
-            if (author != null && author.contains("[") && author.contains("]")
-                    && (author.contains(":") || author.contains("."))) {
-                return author;
-            }
-        } catch (Exception e) {
-            // ignore
-        } finally {
-            try { mmr.release(); } catch (Exception e) { /* ignore */ }
+    private String extractEmbeddedLyrics(Uri uri, MediaMetadataRetriever retriever, String name) {
+        for (int key : new int[] { MediaMetadataRetriever.METADATA_KEY_WRITER,
+                MediaMetadataRetriever.METADATA_KEY_AUTHOR }) {
+            String value = retriever.extractMetadata(key);
+            if (value != null && value.contains("[") && value.contains("]")
+                    && (value.contains(":") || value.contains("."))) return value;
         }
-
-        // 方案2：直接解析文件二进制，查找 ID3v2 USLT 帧
-        try {
+        String lowerName = name.toLowerCase(java.util.Locale.ROOT);
+        if (lowerName.endsWith(".mp3")) return extractId3v2Lyrics(uri);
+        if (lowerName.endsWith(".flac")) {
             String lyrics = extractId3v2Lyrics(uri);
-            if (lyrics != null) return lyrics;
-        } catch (Exception e) {
-            Log.d("NativeBridge", "ID3v2 lyrics extraction failed", e);
+            return lyrics != null ? lyrics : extractFlacLyrics(uri);
         }
-
-        // 方案3：FLAC VORBIS_COMMENT 中的 LYRICS 字段
-        try {
-            String lyrics = extractFlacLyrics(uri);
-            if (lyrics != null) return lyrics;
-        } catch (Exception e) {
-            Log.d("NativeBridge", "FLAC lyrics extraction failed", e);
+        // Files without a recognized extension may still have ID3 or FLAC tags.
+        if (!lowerName.matches(".*\\.(wav|ogg|oga|opus|m4a|mp4|aac|wma|ape)$")) {
+            String lyrics = extractId3v2Lyrics(uri);
+            return lyrics != null ? lyrics : extractFlacLyrics(uri);
         }
-
         return null;
     }
 
@@ -1348,8 +1355,7 @@ public class NativeBridge {
             InputStream input = null;
             FileOutputStream output = null;
             try {
-                URL source = new URL(url);
-                connection = (HttpURLConnection) source.openConnection();
+                connection = (HttpURLConnection) new URL(url).openConnection();
                 connection.setConnectTimeout(15000);
                 connection.setReadTimeout(30000);
                 connection.setInstanceFollowRedirects(true);

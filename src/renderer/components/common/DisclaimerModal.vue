@@ -30,7 +30,7 @@
 
             <button
               @click="handleDisagree"
-              class="w-full py-2.5 rounded-full text-sm font-medium text-white/40 active:text-white/70 transition-colors"
+              class="w-full py-2.5 rounded-full text-sm font-medium text-[var(--floating-muted)] active:text-[var(--floating-text)] transition-colors"
             >
               不同意，退出应用
             </button>
@@ -93,7 +93,8 @@ onMounted(() => {
 <style scoped>
 /* 实色表面（毛玻璃已下线） */
 .disclaimer-sheet {
-  background: #1c1c20;
+  background: var(--floating-surface);
+  color: var(--floating-text);
   box-shadow:
     0 16px 48px rgba(0, 0, 0, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -132,7 +133,7 @@ onMounted(() => {
 .disclaimer-markdown {
   font-size: 13px;
   line-height: 1.75;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--floating-text);
   text-align: left;
 }
 
@@ -179,8 +180,8 @@ onMounted(() => {
 .disclaimer-markdown code {
   padding: 0.1em 0.4em;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--floating-control);
   font-size: 0.9em;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--floating-text);
 }
 </style>

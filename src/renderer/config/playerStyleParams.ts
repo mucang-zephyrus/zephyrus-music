@@ -201,7 +201,11 @@ export const STYLE_PARAM_SCHEMA: Record<string, PlayerStyleParamDef[]> = {
     num('cloudVertical', '竖句比例', '词云', 0.3, 0, 0.6, 0.05),
     num('cloudCameraSpeed', '镜头速度', '词云', 1, 0.5, 2, 0.05, '×')
   ],
-  impact: [num('impactDistress', '随机斑驳强度', '冲击', 35, 0, 100, 1, '%')],
+  impact: [
+    num('impactDistress', '随机斑驳强度', '冲击', 35, 0, 100, 1, '%'),
+    num('impactLyricSaturation', '歌词颜色饱和度', '冲击', 100, 0, 200, 1, '%'),
+    num('impactLayoutSaturation', '布局颜色饱和度', '冲击', 100, 0, 200, 1, '%')
+  ],
   dotMatrix: [
     num('dotSpacing', '点阵间距', '点阵', 8, 6, 14, 1, 'px'),
     num('dotRadius', '圆点半径', '点阵', 0.27, 0.16, 0.42, 0.01),

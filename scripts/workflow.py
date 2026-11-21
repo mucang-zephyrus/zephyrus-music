@@ -16,6 +16,8 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 BASE_URL = 'https://mucang.xyz/zephyrus/apks'
 REMOTE = '/var/www/zephyrus/apks'
+TEST_BASE_URL = 'https://mucang.xyz/zephyrus/webtest'
+TEST_REMOTE = '/var/www/mucang/zephyrus/webtest'
 
 
 def run(args, *, cwd=ROOT, capture=False, env=None):
@@ -29,11 +31,11 @@ def run(args, *, cwd=ROOT, capture=False, env=None):
     return result.stdout or ''
 
 
-def npm(*args):
+def npm(*args, env=None):
     executable = shutil.which('npm.cmd' if os.name == 'nt' else 'npm')
     if not executable:
         raise RuntimeError('Node.js 22+ and npm are required')
-    run([executable, *args])
+    run([executable, *args], env=env)
 
 
 def sha256(path):
@@ -48,6 +50,21 @@ def stable_version(value):
     if not re.fullmatch(r'\d+\.\d+\.\d+', value):
         raise ValueError('Use a stable version such as 1.4.2')
     return tuple(map(int, value.split('.')))
+
+
+def test_version(value):
+    match = re.fullmatch(r'(\d+\.\d+\.\d+)-test(\d+)', value)
+    if not match:
+        raise ValueError('Use a test version such as 1.4.3-test1')
+    return (*stable_version(match[1]), int(match[2]))
+
+
+def check_test_upgrade(previous, info):
+    previous_version = test_version(previous['tag_name'].removeprefix('v'))
+    if test_version(info['version']) < previous_version:
+        raise RuntimeError('The test version cannot go backwards')
+    if info['version_code'] <= previous['version_code']:
+        raise RuntimeError('The Android versionCode must increase for every test build')
 
 
 def android_tools():
@@ -84,7 +101,7 @@ def android_tools():
     return sdk_path, apksigner, aapt
 
 
-def apk_info(apk, tools):
+def apk_info(apk, tools, *, test=False):
     _, apksigner, aapt = tools
     signed = run([apksigner, 'verify', '--verbose', '--print-certs', apk], capture=True)
     certs = re.findall(r'Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]+)', signed)
@@ -94,7 +111,7 @@ def apk_info(apk, tools):
     match = re.search(r"package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'", badging)
     if not match or match[1] != 'com.zephyrus.player':
         raise RuntimeError('Wrong Android application ID')
-    stable_version(match[3])
+    (test_version if test else stable_version)(match[3])
     return {'version': match[3], 'version_code': int(match[2]),
             'certificate_sha256': certs[0].lower(), 'sha256': sha256(apk)}
 
@@ -108,21 +125,29 @@ def check_upgrade(previous, candidate):
         raise RuntimeError('Version must increase so installed clients can detect the update')
 
 
-def manifest_for(apk, info, notes):
+def manifest_for(apk, info, notes, *, test=False):
     return {
         'tag_name': 'v' + info['version'], 'version_code': info['version_code'],
         'certificate_sha256': info['certificate_sha256'],
         'body': notes, 'published_at': datetime.now(timezone.utc).isoformat(),
-        'html_url': 'https://mucang.xyz/zephyrus/',
-        'assets': [{'name': apk.name, 'browser_download_url': BASE_URL + '/' + apk.name,
+        'html_url': TEST_BASE_URL + '/' if test else 'https://mucang.xyz/zephyrus/',
+        'assets': [{'name': apk.name, 'browser_download_url': (TEST_BASE_URL if test else BASE_URL) + '/' + apk.name,
                     'size': apk.stat().st_size, 'sha256': info['sha256']}]
     }
 
 
 def build_apk(args):
     tools = android_tools()
-    version = json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))['version']
-    stable_version(version)
+    test = args.test_version is not None
+    version = args.test_version if test else json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))['version']
+    (test_version if test else stable_version)(version)
+    env = os.environ.copy()
+    env.pop('ZEPHYRUS_TEST_VERSION', None)
+    env.pop('ZEPHYRUS_TEST_VERSION_CODE', None)
+    env['ZEPHYRUS_RELEASE_CHANNEL'] = 'test' if test else 'stable'
+    if test:
+        env['ZEPHYRUS_TEST_VERSION'] = version
+        env['ZEPHYRUS_TEST_VERSION_CODE'] = str(args.version_code)
     if args.install:
         npm('ci')
     # Only the ignored machine-specific SDK path is updated; preserve other local properties.
@@ -136,22 +161,27 @@ def build_apk(args):
     run([*gradle_command, 'verifyReleaseSigning', '--no-daemon'], cwd=ROOT / 'android')
     npm('run', 'test:lyrics')
     npm('run', 'test:workflow')
-    npm('run', 'build')
+    npm('run', 'build', env=env)
     run([ROOT / 'node_modules/.bin' / ('cap.cmd' if os.name == 'nt' else 'cap'), 'sync', 'android'])
     run([*gradle_command, 'assembleRelease', '--no-daemon',
          f'-PtestVersionCode={args.version_code}', f'-PtestVersionName={version}'], cwd=ROOT / 'android')
     apk = ROOT / 'android/app/build/outputs/apk/release/app-release.apk'
-    info = apk_info(apk, tools)
+    info = apk_info(apk, tools, test=test)
     if info['version'] != version or info['version_code'] != args.version_code:
         raise RuntimeError('APK version differs from the requested version')
     output = ROOT / 'dist/releases' / f'{version}-{args.version_code}'
     output.mkdir(parents=True, exist_ok=True)
-    dest = output / f'zephyrus-player-v{version}-{args.version_code}.apk'
+    name = f'zephyrus-player-v{version}-{args.version_code}.apk'
+    dest = output / name
     shutil.copy2(apk, dest)
-    notes = (ROOT / args.notes).read_text(encoding='utf-8-sig')
-    (output / 'latest.json').write_text(json.dumps(manifest_for(dest, info, notes), ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    notes = (ROOT / args.notes).read_text(encoding='utf-8-sig') if args.notes else (
+        '此版本可能不稳定。' if test else (ROOT / 'RELEASE_NOTES.md').read_text(encoding='utf-8-sig')
+    )
+    manifest = manifest_for(dest, info, notes, test=test)
+    (output / 'latest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     print(f'Verified signed release: {dest}')
-    print('Build complete. Publish separately with: npm run release:publish -- ' + str(output))
+    command = 'npm run workflow -- webtest' if test else 'npm run release:publish --'
+    print(f'Build complete. Publish separately with: {command} "{output}"')
 
 
 def publish(args):
@@ -188,6 +218,13 @@ def publish(args):
             previous = Path(temp) / 'previous.apk'
             sftp.get(REMOTE + '/zephyrus-player-latest.apk', str(previous))
             check_upgrade(apk_info(previous, tools), info)
+        try:
+            with sftp.open(TEST_REMOTE + '/latest.json') as source:
+                latest_test = json.load(source)
+        except FileNotFoundError:
+            latest_test = None
+        if latest_test and info['version_code'] <= latest_test['version_code']:
+            raise RuntimeError('versionCode must also exceed the published test APK versionCode')
         if args.dry_run:
             print('Publication preflight passed: signature, version, manifest and server access')
             return
@@ -253,7 +290,10 @@ def main():
             item.add_argument('--deploy', action='store_true')
         if action == 'apk':
             item.add_argument('--version-code', required=True, type=int)
-            item.add_argument('--notes', default='RELEASE_NOTES.md')
+            item.add_argument('--notes')
+            item.add_argument('--test-version')
+    item = sub.add_parser('webtest')
+    item.add_argument('directory')
     sub.add_parser('doctor')
     sub.add_parser('test')
     item = sub.add_parser('publish')
@@ -273,12 +313,15 @@ def main():
         build_apk(args)
     elif args.action == 'publish':
         publish(args)
+    elif args.action == 'webtest':
+        run([sys.executable, ROOT / 'deploy_web.py', '--test-release', args.directory])
     else:
         if args.install:
             npm('ci')
         npm('run', 'test:lyrics')
         npm('run', 'test:workflow')
-        npm('run', 'build:web' if args.action == 'web' else 'build')
+        npm('run', 'build:web' if args.action == 'web' else 'build',
+            env={**os.environ, 'ZEPHYRUS_RELEASE_CHANNEL': 'stable'})
         if args.action == 'web' and args.deploy:
             run([sys.executable, ROOT / 'deploy_web.py'])
 

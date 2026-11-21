@@ -89,13 +89,27 @@ describe('impact song cards', () => {
 });
 
 describe('impact artist credit', () => {
-  it.each(['犬儒乐队 Cynic', 'Cynic 犬儒乐队', 'Cynic（犬儒乐队）', '犬儒乐队 (Cynic)'])(
-    'displays both names of %s and swaps their roles',
-    (name) => {
-      expect(impactArtistCredit([name], false)).toEqual({ main: '犬儒乐队', outline: 'Cynic' });
-      expect(impactArtistCredit([name], true)).toEqual({ main: 'Cynic', outline: '犬儒乐队' });
-    }
-  );
+  it.each([
+    '犬儒乐队 Cynic',
+    'Cynic 犬儒乐队',
+    'Cynic（犬儒乐队）',
+    '犬儒乐队 (Cynic)',
+    '犬儒乐队Cynic',
+    'Cynic犬儒乐队'
+  ])('displays both names of %s and swaps their roles', (name) => {
+    expect(impactArtistCredit([name], false)).toEqual({ main: '犬儒乐队', outline: 'Cynic' });
+    expect(impactArtistCredit([name], true)).toEqual({ main: 'Cynic', outline: '犬儒乐队' });
+  });
+  it('splits an attached English name with spaces inside it', () => {
+    expect(impactArtistCredit(['野肆乐队Reckless Abandon'], false)).toEqual({
+      main: '野肆乐队',
+      outline: 'Reckless Abandon'
+    });
+    expect(impactArtistCredit(['Reckless Abandon野肆乐队'], true)).toEqual({
+      main: 'Reckless Abandon',
+      outline: '野肆乐队'
+    });
+  });
   it('preserves unpaired names and collaboration order', () => {
     expect(
       impactArtistCredit(

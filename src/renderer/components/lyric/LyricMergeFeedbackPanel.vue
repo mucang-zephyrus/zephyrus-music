@@ -69,8 +69,7 @@ import {
   setLyricMergeEnabled
 } from '@/services/lyricMergePolicy';
 import { registerMobileBackLayer } from '@/services/mobileBackStack';
-
-import config from '../../../../package.json';
+import { APP_VERSION } from '@/utils/appVersion';
 
 const { t } = useI18n();
 const description = ref('');
@@ -100,7 +99,7 @@ async function submit() {
       type: 'bug',
       content,
       contact: contact.value.trim() || undefined,
-      appVersion: config.version,
+      appVersion: APP_VERSION,
       device: navigator.userAgent,
       osVersion: navigator.platform
     });

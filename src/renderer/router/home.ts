@@ -13,6 +13,12 @@ const layoutRouter = [
     component: () => import('@/views/home/index.vue')
   },
   {
+    path: '/announcements',
+    name: 'announcements',
+    meta: { title: '历史公告', isMobile: true, back: true },
+    component: () => import('@/views/home/AnnouncementHistory.vue')
+  },
+  {
     path: '/search',
     name: 'search',
     meta: {

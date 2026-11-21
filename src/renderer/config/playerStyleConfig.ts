@@ -72,6 +72,8 @@ const STYLE_SPECIFIC_DEFAULTS: Record<MobilePlayerStyleKey, Record<string, unkno
   },
   impact: {
     impactRough: true,
+    impactReactiveDistress: false,
+    impactJitter: false,
     impactFill: false,
     impactUppercase: false,
     impactWholeLine: false,
@@ -417,6 +419,8 @@ export function resolvePlayerStyleConfig(
   }
   if (styleKey === 'impact') {
     config.impactRough = config.impactRough !== false;
+    config.impactReactiveDistress = config.impactReactiveDistress === true;
+    config.impactJitter = config.impactJitter === true;
     config.impactFill = config.impactFill === true;
     config.impactUppercase = config.impactUppercase === true;
     config.impactWholeLine = config.impactWholeLine === true;

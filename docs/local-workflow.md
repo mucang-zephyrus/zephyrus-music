@@ -28,12 +28,29 @@ npm run ci:local -- --install
 
 ## Web
 
+正式大版本发布到 `/zephyrus/web/`。小更新用 `X.Y.Z-testN` 编号，发布到 `/zephyrus/webtest/`。
+
 ```bash
 npm run workflow -- web
 npm run workflow -- web --deploy
 ```
 
 第二条在测试、构建成功后调用仓库的 `deploy_web.py`。设置 `ZEPHYRUS_SSH_PASSWORD`（或现有部署环境提供的值）；不要把密码写进受 Git 追踪的文件。Web 输出仍是 `src/renderer/dist`。
+
+## 测试版
+
+```bash
+npm run release:android -- --test-version 1.4.3-test2 --version-code 18
+npm run workflow -- webtest dist/releases/1.4.3-test2-18
+```
+
+第一条用指定版本构建 Web 和正式签名 APK。第二条把这次生成的两份产物发到测试站。部署前保留对应的 `src/renderer/dist/`，下一次 Web 构建会覆盖它。每个测试版首次打开时会显示版本提示，包括 Bug 反馈入口。
+
+界面打磨、文案调整和小修复沿用当前测试版本号。重大 Bug 修复、明显的界面更新或功能更新才递增后缀，例如 `1.4.3-test2`。Android `versionCode` 每次都要高于已发布的正式包和测试包，即使测试版本号相同。APK 文件名包含 `versionCode`，例如 `zephyrus-player-v1.4.3-test1-14.apk`。测试站可直接访问和下载 APK。正式包查询正式清单，Android 测试包查询 `/zephyrus/webtest/latest.json`。
+
+鸣谢服务使用 `server/test-credits/app.py`。服务器将它放在 `/opt/zephyrus-test-credits/app.py`，用 `zephyrus-test` 系统用户运行 `server/test-credits/zephyrus-test-credits.service`，将 `server/test-credits/nginx-location.conf` 和 `server/webtest/nginx-location.conf` 加入站点 HTTPS 配置。数据库位于 `/var/lib/zephyrus-test-credits/credits.sqlite3`。`ZEPHYRUS_CREDITS_RELEASE` 指定鸣谢对应的正式版本，默认 `1.4.3`。
+
+测试人员可以从已登录音乐账号选用昵称和头像，也可以自己填写。服务器使用账号标识的摘要识别已有选择，不读取平台登录凭据。鸣谢可在登记设备的「关于」修改或取消公开。
 
 ## Android 签名
 
@@ -50,8 +67,8 @@ keyPassword=填写原密码
 
 ## 构建与发布 APK
 
-1. 在 `package.json` 与锁文件更新版本号，更新 `RELEASE_NOTES.md`。仓库当前版本为 `1.4.1`；下方以准备发布 `1.4.2` 为例，不能直接把示例当作线上版本信息。
-2. 选择高于服务器现有 APK 的 `versionCode` 并显式传入。工程调试回退值为 11，不代表服务器始终停留在该版本。
+1. 在 `package.json` 与锁文件更新版本号，更新 `RELEASE_NOTES.md`。下方以 `1.4.2` 为例。
+2. 选择高于服务器已发正式包和测试包的 `versionCode` 并显式传入。
 3. 构建会运行测试、`npm run build`、Capacitor sync 和 Gradle，验证签名、包名、版本，产出 APK 与更新清单。
 4. 发布前先运行 `--dry-run`：实际连接服务器、下载旧 APK、验证签名一致且版本递增；不替换任何发布文件。
 
@@ -80,7 +97,7 @@ APK 使用不可变的版本文件名，SHA-256 校验上传内容后，再依�
 
 - `npm run build:web` 输出 `src/renderer/dist/`，只供浏览器 Web 使用。
 - `npm run build` 的渲染产物为 `src/renderer/dist/`，与 `capacitor.config.ts` 的 `webDir` 一致，APK 工作流在此之后执行 Capacitor sync。
-- `versionName` 取自 `package.json`，`versionCode` 来自命令参数，由工作流注入 Gradle；不需要为了每次发版手动改写 Gradle 调试回退值。
+- 正式包 `versionName` 取自 `package.json`，测试包从 `--test-version` 读取。`versionCode` 来自命令参数，由工作流注入 Gradle；不需要为了每次发版手动改写 Gradle 调试回退值。
 - 当前工程最低 API 为 24（Android 7.0），编译及目标 API 为 36，见 `android/variables.gradle`。
 - 文档更新、Git 提交或 Web 部署不自动生成或发布 Android APK。发布前以服务器实际包信息和预演结果为准。
 

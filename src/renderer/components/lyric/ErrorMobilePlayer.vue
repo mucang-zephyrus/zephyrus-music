@@ -323,6 +323,7 @@ import { usePlayerStore } from '@/store/modules/player';
 import { useStyleEngineStore } from '@/store/modules/styleEngine';
 import { probeEtherSupport } from '@/utils/etherFluid';
 import { ensureFontLoaded } from '@/utils/fontLoader';
+import { LYRIC_JITTER_INTERVAL_MS, lyricBeatSpike, sampleLyricJitter } from '@/utils/lyricJitter';
 import { acquirePlayerResource } from '@/utils/playerResourceDiagnostics';
 
 const PHOTOSENSITIVITY_ACK_KEY = 'photosensitivity-warning-acked';
@@ -591,8 +592,7 @@ let releaseTimerResource: (() => void) | null = null;
 onMounted(async () => {
   const { drumDetector } = await import('@/services/drumDetector');
   drumUnsubscribe = drumDetector.onBeat((info) => {
-    const spikeAmount = info.isStrong ? 0.5 : 0.28;
-    beatSpike.value = spikeAmount * (0.6 + info.kickEnergy * 0.4);
+    beatSpike.value = lyricBeatSpike(info.isStrong, info.kickEnergy);
     // 强拍对齐：高潮段内的强拍立即触发一次超大错误，让爆点压在节奏上
     if (info.isStrong && styleEngine.isInClimax) triggerMegaGlitch(0.85);
     if (spikeTimer) clearTimeout(spikeTimer);
@@ -610,16 +610,12 @@ let jitterTimer: number | null = null;
 function jitterTick() {
   const configured = Number(styleCfg.value.errorJitter);
   const base = Number.isFinite(configured) ? Math.min(1, Math.max(0, configured)) : 0.4;
-  if (base <= 0.02) {
-    jitterOffset.value = { x: 0, y: 0 };
-    return;
-  }
-  const climaxMul = styleEngine.isInClimax ? 2.2 : 1;
-  const amp = base * errorFrameAmp.value * climaxMul + beatSpike.value * 1.2;
-  jitterOffset.value = {
-    x: (Math.random() * 2 - 1) * amp,
-    y: (Math.random() * 2 - 1) * amp
-  };
+  jitterOffset.value = sampleLyricJitter(
+    base,
+    errorFrameAmp.value,
+    styleEngine.isInClimax,
+    beatSpike.value
+  );
 }
 
 const jitterStyle = computed(() => ({
@@ -878,7 +874,7 @@ const edgeGlowEnabled = computed(() => styleCfg.value.errorEdgeGlow !== false);
 // ==================== 生命周期 ====================
 
 function startIdleTimers() {
-  if (!jitterTimer) jitterTimer = window.setInterval(jitterTick, 90);
+  if (!jitterTimer) jitterTimer = window.setInterval(jitterTick, LYRIC_JITTER_INTERVAL_MS);
   if (!noiseTimer) noiseTimer = window.setInterval(paintNoise, 100);
 }
 

@@ -15,7 +15,11 @@
         'controls-docked': controlsDocked,
         'controls-visible': controlsShown
       }"
-      :style="{ ...surfaceStyle, ...lyricsSwipeStyle }"
+      :style="{
+        ...surfaceStyle,
+        ...lyricsSwipeStyle,
+        '--immersive-blur-progress': immersiveProgress
+      }"
       @click="handleTapToggle"
       @pointerdown.capture="onRootPointerDown($event)"
       @pointermove.capture="
@@ -84,6 +88,8 @@
           :paused="playerTransitionBusy"
         />
       </div>
+
+      <div class="immersive-background-veil" aria-hidden="true" />
 
       <div v-if="playMusic?.playLoading" class="loading-state" aria-live="polite">
         <i class="ri-loader-4-line"></i>
@@ -1074,6 +1080,25 @@ onBeforeUnmount(() => {
     brightness(var(--player-style-background-brightness, 1));
   content: '';
   pointer-events: none;
+}
+
+.immersive-background-veil {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--immersive-blur-progress, 0);
+  -webkit-backdrop-filter: blur(calc(12px * var(--immersive-blur-progress, 0)));
+  backdrop-filter: blur(calc(12px * var(--immersive-blur-progress, 0)));
+  background: rgb(0 0 0 / 0.24);
+  transition:
+    opacity 0.28s ease,
+    backdrop-filter 0.28s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .immersive-background-veil {
+    transition: none;
+  }
 }
 
 .default-player-v2.player-transitioning::before {

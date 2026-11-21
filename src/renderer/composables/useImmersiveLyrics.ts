@@ -180,7 +180,12 @@ export function useStyleImmersiveLyrics(options: {
   /** rise 变体的背景遮罩：与横滑 backdropStyle 同为 0.82 封顶；同样带 progress 守卫 */
   const riseMaskStyle = computed<CSSProperties | undefined>(() => {
     if (!riseStyleAllowed.value) return undefined;
-    return { opacity: String(immersive.progress.value * 0.82), transition: 'none' };
+    const progress = Math.max(0, Math.min(1, immersive.progress.value));
+    return {
+      opacity: String(progress * 0.82),
+      '--immersive-backdrop-blur': `${progress * 12}px`,
+      transition: 'none'
+    };
   });
 
   const openerFn = () => {

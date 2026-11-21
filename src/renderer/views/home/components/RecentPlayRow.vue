@@ -35,7 +35,13 @@ async function play(song: SongResult) {
 <template>
   <section class="recent-row">
     <h2>{{ t('comp.homeHero.recentPlays') }}</h2>
-    <div class="recent-track" data-horizontal-scroll v-horizontal-wheel>
+    <TransitionGroup
+      tag="div"
+      name="recent"
+      class="recent-track"
+      data-horizontal-scroll
+      v-horizontal-wheel
+    >
       <button
         v-for="song in recentSongs"
         :key="song.id"
@@ -52,7 +58,7 @@ async function play(song: SongResult) {
         <span class="recent-name">{{ song.name }}</span>
         <span class="recent-artist">{{ artistOf(song) }}</span>
       </button>
-    </div>
+    </TransitionGroup>
   </section>
 </template>
 
@@ -70,6 +76,7 @@ h2 {
 }
 
 .recent-track {
+  position: relative;
   display: flex;
   gap: 10px;
   overflow-x: auto;
@@ -99,6 +106,27 @@ h2 {
 
   .recent-track .recent-card {
     width: auto;
+  }
+}
+
+.recent-move,
+.recent-enter-active {
+  transition:
+    transform 360ms cubic-bezier(0.2, 0.75, 0.25, 1),
+    opacity 240ms ease;
+}
+.recent-enter-from {
+  opacity: 0;
+  transform: translateX(-18px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .recent-move,
+  .recent-enter-active {
+    transition: none;
+  }
+  .recent-enter-from {
+    opacity: 1;
+    transform: none;
   }
 }
 

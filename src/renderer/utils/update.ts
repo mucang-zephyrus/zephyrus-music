@@ -1,7 +1,8 @@
 import { useDateFormat } from '@vueuse/core';
 import axios from 'axios';
 
-import config from '../../../package.json';
+import { isAndroidNative } from '@/services/androidNative';
+import { APP_VERSION, isTestVersion, TEST_SITE } from '@/utils/appVersion';
 
 interface ReleaseInfo {
   tag_name: string;
@@ -34,15 +35,18 @@ export interface UpdateResult {
 // 本地签名产物发布到自有服务器；更新链路不再依赖 GitHub 账号或代理。
 const SERVER_RELEASE_INFO_URL = 'https://mucang.xyz/zephyrus/apks/latest.json';
 
-export const getLatestReleaseInfo = async (): Promise<ReleaseInfo | null> => {
+export const getLatestReleaseInfo = async (version = APP_VERSION): Promise<ReleaseInfo | null> => {
+  const test = isTestVersion(version);
+  const manifestUrl = test ? `${TEST_SITE}latest.json` : SERVER_RELEASE_INFO_URL;
+  const assetPath = test ? '/zephyrus/webtest/' : '/zephyrus/apks/';
   try {
-    const { data } = await axios.get<ReleaseInfo>(SERVER_RELEASE_INFO_URL, {
+    const { data } = await axios.get<ReleaseInfo>(manifestUrl, {
       timeout: 8000,
       params: { t: Date.now() }
     });
     if (
       typeof data?.tag_name !== 'string' ||
-      !/^v?\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(data.tag_name) ||
+      !(test ? isTestVersion(data.tag_name) : /^v?\d+\.\d+\.\d+$/.test(data.tag_name)) ||
       !Array.isArray(data.assets) ||
       !data.assets.some((asset) => asset.name?.endsWith('.apk'))
     ) {
@@ -51,15 +55,15 @@ export const getLatestReleaseInfo = async (): Promise<ReleaseInfo | null> => {
     return {
       ...data,
       body: typeof data.body === 'string' ? data.body : '',
-      html_url: 'https://mucang.xyz/zephyrus/',
+      html_url: test ? TEST_SITE : 'https://mucang.xyz/zephyrus/',
       assets: data.assets.filter((asset) => {
         try {
           const url = new URL(asset.browser_download_url);
           return (
             asset.name?.endsWith('.apk') &&
             url.protocol === 'https:' &&
-            ['mucang.xyz', 'www.mucang.xyz'].includes(url.hostname) &&
-            url.pathname.startsWith('/zephyrus/apks/')
+            (url.hostname === 'mucang.xyz' || (!test && url.hostname === 'www.mucang.xyz')) &&
+            url.pathname.startsWith(assetPath)
           );
         } catch {
           return false;
@@ -111,6 +115,9 @@ export const compareVersions = (v1: string, v2: string): number => {
   const v2Suffix = String(v2).replace(/^v?[\d.]+/, '');
   if (!v1Suffix && v2Suffix) return 1;
   if (v1Suffix && !v2Suffix) return -1;
+  const test1 = /^-test(\d+)$/.exec(v1Suffix);
+  const test2 = /^-test(\d+)$/.exec(v2Suffix);
+  if (test1 && test2) return Math.sign(Number(test1[1]) - Number(test2[1]));
   return 0;
 };
 
@@ -118,10 +125,11 @@ export const compareVersions = (v1: string, v2: string): number => {
  * 检查更新
  */
 export const checkUpdate = async (
-  currentVersion: string = config.version
+  currentVersion: string = APP_VERSION
 ): Promise<UpdateResult | null> => {
+  if (isTestVersion(currentVersion) && !isAndroidNative()) return null;
   try {
-    const releaseInfo = await getLatestReleaseInfo();
+    const releaseInfo = await getLatestReleaseInfo(currentVersion);
     if (!releaseInfo || releaseInfo.assets.length === 0) {
       return null;
     }
@@ -138,7 +146,7 @@ export const checkUpdate = async (
       currentVersion,
       releaseInfo: {
         tag_name: latestVersion,
-        body: `## 更新内容\n\n- 版本: ${latestVersion}\n${releaseInfo.body}`,
+        body: releaseInfo.body,
         html_url: releaseInfo.html_url,
         assets: releaseInfo.assets.map((asset) => ({
           browser_download_url: asset.browser_download_url,

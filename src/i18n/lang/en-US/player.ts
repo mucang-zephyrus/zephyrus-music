@@ -5,6 +5,10 @@ export default {
     fill: 'Fill screen with lyrics',
     uppercase: 'Force English lyrics to uppercase',
     wholeLine: 'Always show full lyric lines',
+    reactiveDistress: 'Audio-reactive full-line texture',
+    jitter: 'Lyric jitter',
+    lyricSaturation: 'Lyric saturation',
+    layoutSaturation: 'Layout saturation',
     swapArtistLanguages: 'Swap Chinese and English artist names'
   },
   dotMatrix: {

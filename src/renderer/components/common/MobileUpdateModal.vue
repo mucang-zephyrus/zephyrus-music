@@ -1,16 +1,14 @@
 <template>
   <Teleport to="body">
     <Transition name="update-modal">
-      <div
-        v-if="showModal"
-        class="fixed inset-0 z-[999999] flex items-end justify-center bg-black/50 backdrop-blur-sm"
-      >
-        <div class="w-full max-w-lg rounded-t-3xl overflow-hidden animate-slide-up update-sheet">
-          <div class="flex justify-center pt-3 pb-2">
-            <div class="w-10 h-1 rounded-full update-sheet-grabber"></div>
-          </div>
-
-          <div class="px-6 pb-5">
+      <div v-if="showModal" class="update-backdrop">
+        <section
+          class="update-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="update-title"
+        >
+          <div class="px-6 pt-6 pb-5">
             <div class="flex items-center gap-4">
               <div
                 class="w-20 h-20 rounded-2xl overflow-hidden shadow-lg flex-shrink-0 ring-2 ring-[var(--accent-color)]/20"
@@ -27,7 +25,9 @@
                     {{ t('comp.update.title') }}
                   </span>
                 </div>
-                <h2 class="text-2xl font-bold update-sheet-title truncate">v{{ latestVersion }}</h2>
+                <h2 id="update-title" class="text-2xl font-bold update-sheet-title truncate">
+                  v{{ latestVersion }}
+                </h2>
                 <p class="text-sm update-sheet-subtitle mt-1">
                   {{ t('comp.update.currentVersion') }}: v{{ currentVersion }}
                 </p>
@@ -35,7 +35,22 @@
             </div>
           </div>
 
-          <div class="mx-6 mb-6 max-h-72 overflow-y-auto rounded-2xl update-sheet-notes">
+          <div class="mx-6 mb-3 update-testers" v-if="testers.length">
+            <tester-credits
+              :testers="testers"
+              :expanded="showTesters"
+              @expand="showTesters = true"
+            />
+            <button
+              v-if="showTesters"
+              type="button"
+              class="credits-back"
+              @click="showTesters = false"
+            >
+              返回更新公告
+            </button>
+          </div>
+          <div v-if="!showTesters" class="mx-6 mb-5 overflow-y-auto rounded-2xl update-sheet-notes">
             <div
               class="p-5 text-sm leading-relaxed update-sheet-notes-text"
               v-html="parsedReleaseNotes"
@@ -60,10 +75,7 @@
             {{ t('comp.update.downloadFailed') }}：{{ downloadError }}
           </p>
 
-          <div
-            class="px-6 pb-8 flex gap-3"
-            :style="{ paddingBottom: `calc(32px + var(--safe-area-inset-bottom, 0px))` }"
-          >
+          <div class="px-6 pb-6 flex gap-3">
             <button
               @click="handleLater"
               :disabled="downloadState === 'downloading'"
@@ -90,18 +102,19 @@
               </span>
             </button>
           </div>
-        </div>
+        </section>
       </div>
     </Transition>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { marked } from 'marked';
 import { useMessage } from 'naive-ui';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
+import { fetchTesterCredits, type TesterCredit } from '@/api/testerCredits';
+import TesterCredits from '@/components/common/TesterCredits.vue';
 import { closeUpdateModal, openUpdateModal, updateModalState } from '@/composables/useUpdateModal';
 import {
   getApkDownloadState,
@@ -109,9 +122,9 @@ import {
   isAndroidNative,
   startApkDownload
 } from '@/services/androidNative';
+import { APP_VERSION, IS_TEST_BUILD } from '@/utils/appVersion';
+import { renderReleaseNotes } from '@/utils/releaseNotes';
 import { checkUpdate, type UpdateResult } from '@/utils/update';
-
-import config from '../../../../package.json';
 
 const { t } = useI18n();
 const message = useMessage();
@@ -120,12 +133,10 @@ const REMIND_LATER_KEY = 'update_remind_later_timestamp';
 const APK_READY_KEY = 'apk_update_ready';
 const SERVER_DOWNLOAD_URL = 'https://mucang.xyz/zephyrus/apks/zephyrus-player-latest.apk';
 
-marked.setOptions({ breaks: true, gfm: true });
-
 const showModal = computed(() => updateModalState.value.show);
 const updateInfo = computed<UpdateResult | null>(() => updateModalState.value.info);
 const latestVersion = computed(() => updateInfo.value?.latestVersion || '');
-const currentVersion = computed(() => updateInfo.value?.currentVersion || config.version);
+const currentVersion = computed(() => updateInfo.value?.currentVersion || APP_VERSION);
 
 const downloadState = ref<'idle' | 'downloading' | 'ready' | 'error'>('idle');
 const downloadProgress = ref(0);
@@ -150,14 +161,21 @@ const downloadSpeedText = computed(() => {
   return '';
 });
 
-const parsedReleaseNotes = computed(() => {
-  const body = updateInfo.value?.releaseInfo?.body;
-  if (!body) return '';
-  try {
-    return marked.parse(body);
-  } catch {
-    return body;
-  }
+const parsedReleaseNotes = computed(() =>
+  renderReleaseNotes(updateInfo.value?.releaseInfo?.body || '')
+);
+const testers = ref<TesterCredit[]>([]);
+const showTesters = ref(false);
+watch([showModal, latestVersion], async ([visible, version], _, onCleanup) => {
+  showTesters.value = false;
+  testers.value = [];
+  if (!visible || !version || IS_TEST_BUILD) return;
+  let current = true;
+  onCleanup(() => {
+    current = false;
+  });
+  const list = await fetchTesterCredits(version);
+  if (current) testers.value = list;
 });
 
 const shouldShowReminder = (): boolean => {
@@ -275,7 +293,7 @@ const handlePrimaryAction = () => {
 const checkForUpdates = async () => {
   if (!shouldShowReminder()) return;
   try {
-    const result = await checkUpdate(config.version);
+    const result = await checkUpdate(APP_VERSION);
     if (result?.hasUpdate) {
       downloadState.value = 'idle';
       downloadProgress.value = 0;
@@ -302,26 +320,44 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 实色表面（毛玻璃已下线；Teleport 到 body，不依赖 .mobile 令牌作用域） */
+.update-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: grid;
+  place-items: center;
+  padding: max(16px, var(--safe-area-inset-top, 0px)) max(16px, var(--safe-area-inset-right, 0px))
+    max(16px, var(--safe-area-inset-bottom, 0px)) max(16px, var(--safe-area-inset-left, 0px));
+  background: #0008;
+}
 .update-sheet {
-  background: #1c1c20;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-bottom: none;
-  box-shadow:
-    0 -16px 48px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  width: min(100%, 34rem);
+  max-height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  color: var(--floating-text);
+  background: var(--floating-surface);
+  border: 1px solid var(--floating-line);
+  border-radius: 28px;
+  box-shadow: 0 16px 48px #0004;
 }
-
-.update-sheet-grabber {
-  background: rgba(255, 255, 255, 0.22);
+.update-sheet > :not(.update-sheet-notes, .update-testers) {
+  flex-shrink: 0;
 }
-
 .update-sheet-title {
-  color: #f5f5f7;
+  color: var(--floating-text);
 }
-
 .update-sheet-subtitle {
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--floating-muted);
+}
+.update-testers {
+  overflow: auto;
+}
+.credits-back {
+  margin-top: 12px;
+  color: var(--floating-muted);
 }
 
 .update-version-pill {
@@ -334,15 +370,16 @@ onUnmounted(() => {
 }
 
 .update-sheet-notes {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--floating-inset);
+  min-height: min(6rem, 22dvh);
 }
 
 .update-sheet-notes-text {
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--floating-text);
 }
 
 .update-sheet-track {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--floating-inset);
 }
 
 .update-progress-fill {
@@ -367,8 +404,8 @@ onUnmounted(() => {
 }
 
 .update-btn-secondary {
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--floating-text);
+  background: var(--floating-control);
 }
 
 .update-btn-secondary:disabled {
@@ -399,13 +436,21 @@ onUnmounted(() => {
   opacity: 0;
 }
 
-.update-modal-enter-active .animate-slide-up,
-.update-modal-leave-active .animate-slide-up {
+.update-modal-enter-active .update-sheet,
+.update-modal-leave-active .update-sheet {
   transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.update-modal-enter-from .animate-slide-up,
-.update-modal-leave-to .animate-slide-up {
-  transform: translateY(100%);
+.update-modal-enter-from .update-sheet,
+.update-modal-leave-to .update-sheet {
+  transform: translateY(12px) scale(0.98);
+}
+@media (prefers-reduced-motion: reduce) {
+  .update-modal-enter-active,
+  .update-modal-leave-active,
+  .update-modal-enter-active .update-sheet,
+  .update-modal-leave-active .update-sheet {
+    transition: none;
+  }
 }
 </style>

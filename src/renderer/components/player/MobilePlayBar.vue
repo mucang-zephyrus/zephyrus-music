@@ -41,36 +41,36 @@
     >
       <!-- 歌曲信息 -->
       <div class="mini-song-info" @click="onMiniSongInfoClick">
-        <n-image
-          :src="getImgUrl(playMusic?.picUrl, '100y100')"
-          class="mini-song-cover"
-          lazy
-          preview-disabled
-          @click.stop="onMiniCoverClick"
-          @pointerdown="startCoverLongPress"
-          @pointerup="cancelCoverLongPress"
-          @pointercancel="cancelCoverLongPress"
-        />
-        <div class="mini-song-text">
-          <span class="mini-song-title"
-            ><song-title-text :name="playMusic.name" :song-id="playMusic.id"
-          /></span>
-          <span class="mini-song-separator">-</span>
-          <span class="mini-song-artist">
-            <template v-for="(artists, artistsindex) in artistList" :key="artistsindex">
-              {{ artists.name }}{{ artistsindex < artistList.length - 1 ? ' / ' : '' }}
-            </template>
-          </span>
-        </div>
+        <Transition name="song-change" mode="out-in">
+          <n-image
+            :key="getImgUrl(playMusic?.picUrl, '100y100')"
+            :src="getImgUrl(playMusic?.picUrl, '100y100')"
+            class="mini-song-cover"
+            lazy
+            preview-disabled
+            @click.stop="onMiniCoverClick"
+            @pointerdown="startCoverLongPress"
+            @pointerup="cancelCoverLongPress"
+            @pointercancel="cancelCoverLongPress"
+          />
+        </Transition>
+        <Transition name="song-change" mode="out-in">
+          <div :key="playMusic.id" class="mini-song-text">
+            <span class="mini-song-title"
+              ><song-title-text :name="playMusic.name" :song-id="playMusic.id"
+            /></span>
+            <span class="mini-song-separator">-</span>
+            <span class="mini-song-artist">
+              <template v-for="(artists, artistsindex) in artistList" :key="artistsindex">
+                {{ artists.name }}{{ artistsindex < artistList.length - 1 ? ' / ' : '' }}
+              </template>
+            </span>
+          </div>
+        </Transition>
       </div>
 
       <div class="mini-playback-controls" :style="miniPlaybackControlsStyle" @pointerdown.stop>
-        <div
-          class="mini-control-btn play"
-          role="button"
-          tabindex="0"
-          @click.stop="playMusicEvent"
-        >
+        <div class="mini-control-btn play" role="button" tabindex="0" @click.stop="playMusicEvent">
           <i v-if="playMusic?.playLoading" class="mini-play-spinner ri-loader-4-line" />
           <i v-else class="iconfont icon" :class="play ? 'icon-stop' : 'icon-play'"></i>
         </div>
@@ -121,7 +121,8 @@ import {
 } from '@/utils/mobileGestureThresholds';
 
 const shouldShowMobileMenu = inject('shouldShowMobileMenu') as Ref<boolean>;
-const setDockMerged = inject<((value: boolean) => void) | null>('setDockMerged', null);const playlistSurfaceMounted = inject('playlistSurfaceMounted', ref(false)) as Ref<boolean>;
+const setDockMerged = inject<((value: boolean) => void) | null>('setDockMerged', null);
+const playlistSurfaceMounted = inject('playlistSurfaceMounted', ref(false)) as Ref<boolean>;
 const playlistSurfaceExpanded = inject('playlistSurfaceExpanded', ref(false)) as Ref<boolean>;
 const playlistSongSheetActive = inject('playlistSongSheetActive', ref(false)) as Ref<boolean>;
 const capturePlayerTransitionOrigin = inject<() => void>('capturePlayerTransitionOrigin', () => {});
@@ -297,9 +298,10 @@ const dockMerge = useDockMergeGesture();
 const miniSwipeStyle = computed(() => ({
   transform: `translate3d(${miniSwipeOffset.value}px, ${miniVerticalOffset.value}px, 0) scale(${1 - miniSwipeProgress.value * 0.012})`,
   opacity: miniSurfaceHidden.value ? '0' : String(1 - miniSwipeProgress.value * 0.12),
-  pointerEvents: miniSurfaceHidden.value || playerTransition.progress.value > 0.08
-    ? ('none' as const)
-    : undefined,
+  pointerEvents:
+    miniSurfaceHidden.value || playerTransition.progress.value > 0.08
+      ? ('none' as const)
+      : undefined,
   '--mini-swipe-rotation': `${miniSwipeOffset.value * 0.018}deg`,
   '--mini-swipe-content-shift': `${miniSwipeOffset.value * 0.05}px`,
   '--mini-swipe-stretch': String(1 + miniSwipeProgress.value * 0.08),
@@ -419,8 +421,7 @@ const onMiniPointerMove = (event: PointerEvent) => {
       // 展开态下滑：滑动直接映射收起动画的帧（mergeProgress 0..1），
       // 越过行程的部分走 rubber-band 过冲阻尼（mp 可达 1.18，几何弹性放大）
       const raw = deltaY / COLLAPSE_TRAVEL;
-      const mp =
-        raw <= 1 ? raw : 1 + rubberband(raw - 1, 1.6) * 0.6;
+      const mp = raw <= 1 ? raw : 1 + rubberband(raw - 1, 1.6) * 0.6;
       dockMerge.setMergeProgress(mp);
       miniVerticalOffset.value = 0;
     } else {
@@ -512,10 +513,7 @@ const onMiniPointerUp = (event: PointerEvent) => {
   const collapseVelocity =
     miniSwipeAxis.value === 'vertical' && verticalSamples.length > 1
       ? (verticalSamples[verticalSamples.length - 1].y - verticalSamples[0].y) /
-        Math.max(
-          1,
-          verticalSamples[verticalSamples.length - 1].time - verticalSamples[0].time
-        )
+        Math.max(1, verticalSamples[verticalSamples.length - 1].time - verticalSamples[0].time)
       : 0;
   if (miniSwipeAxis.value === 'vertical' && !miniPointerStartedCollapsed) {
     // 下滑预览结束：清过冲伸长（提交/回弹的布局落位由 dockMerge 弹簧与 class 接管）

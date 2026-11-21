@@ -23,6 +23,14 @@ class ReleaseTests(unittest.TestCase):
             with self.subTest(changed=changed), self.assertRaises((ValueError, RuntimeError)):
                 workflow.check_upgrade(self.old, {**self.new, **changed})
 
+    def test_rebuild_can_keep_test_version_when_build_code_increases(self):
+        previous = {'tag_name': 'v1.4.3-test1', 'version_code': 13}
+        workflow.check_test_upgrade(previous, {'version': '1.4.3-test1', 'version_code': 14})
+        workflow.check_test_upgrade(previous, {'version': '1.4.3-test2', 'version_code': 14})
+        for version, code in [('1.4.3-test1', 13), ('1.4.3-test2', 12), ('1.4.2-test9', 14)]:
+            with self.subTest(version=version, code=code), self.assertRaises(RuntimeError):
+                workflow.check_test_upgrade(previous, {'version': version, 'version_code': code})
+
     def test_manifest_has_real_size_hash_and_immutable_url(self):
         with tempfile.TemporaryDirectory() as temp:
             apk = Path(temp) / 'zephyrus-player-v1.4.2-12.apk'

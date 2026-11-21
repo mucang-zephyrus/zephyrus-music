@@ -5,6 +5,10 @@ export default {
     fill: '가사로 화면 채우기',
     uppercase: '영문 가사를 모두 대문자로 표시',
     wholeLine: '가사를 항상 한 줄씩 표시',
+    reactiveDistress: '음악에 따라 한 줄의 질감 변경',
+    jitter: '가사 흔들림',
+    lyricSaturation: '가사 채도',
+    layoutSaturation: '레이아웃 채도',
     swapArtistLanguages: '아티스트 이름의 중국어와 영어 위치 바꾸기'
   },
   dotMatrix: {

@@ -89,9 +89,9 @@ function handleDecline() {
 .photosensitivity-card {
   width: min(92vw, 400px);
   padding: 28px 24px 22px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--floating-line);
   border-radius: 20px;
-  background: #1c1c20;
+  background: var(--floating-surface);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   box-shadow:
@@ -114,7 +114,7 @@ function handleDecline() {
 
 h3 {
   margin: 0 0 12px;
-  color: rgba(255, 255, 255, 0.95);
+  color: var(--floating-text);
   font-size: 18px;
   font-weight: 700;
 }
@@ -126,7 +126,7 @@ h3 {
 
   p {
     margin: 0;
-    color: rgba(255, 255, 255, 0.66);
+    color: var(--floating-muted);
     font-size: 13px;
     line-height: 1.65;
     text-align: left;
@@ -153,8 +153,8 @@ h3 {
   }
 
   .action-decline {
-    color: rgba(255, 255, 255, 0.82);
-    background: rgba(255, 255, 255, 0.08);
+    color: var(--floating-text);
+    background: var(--floating-control);
   }
 
   .action-confirm {

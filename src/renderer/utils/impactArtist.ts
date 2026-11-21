@@ -1,4 +1,4 @@
-const hanName = /^(?=.*\p{Script=Han})[\p{Script=Han}\p{M}\d\s·・.'’&!\-]+$/u;
+const hanName = /^(?=.*\p{Script=Han})[\p{Script=Han}\p{M}\d\s·・.'’&!-]+$/u;
 const latinName = /^(?=.*\p{Script=Latin})[\p{Script=Latin}\p{M}\d\s.'’&!?+\-·]+$/u;
 
 function bilingualAlias(first: string, second: string) {
@@ -18,6 +18,15 @@ function parseArtist(name: string) {
     if (/^(?:dj|mc)$/iu.test(first) || /^(?:乐队|樂隊|组合|組合)$/u.test(second)) continue;
     const pair = bilingualAlias(first, second);
     if (pair) return pair;
+  }
+  // An unspaced script boundary alone can also be part of a band's name.
+  const unspaced =
+    name.match(/^(.*\p{Script=Han})(\p{Script=Latin}.*)$/u) ??
+    name.match(/^(.*\p{Script=Latin})(\p{Script=Han}.*)$/u);
+  if (!unspaced) return null;
+  const pair = bilingualAlias(unspaced[1], unspaced[2]);
+  if (pair && (/(?:乐队|樂隊|组合|組合)$/u.test(pair.chinese) || /\S\s+\S/u.test(pair.english))) {
+    return pair;
   }
   return null;
 }

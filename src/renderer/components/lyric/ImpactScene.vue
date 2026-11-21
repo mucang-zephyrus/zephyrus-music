@@ -13,7 +13,12 @@
         displayText(line.text)
       }}</span>
     </p>
-    <div v-if="bottomLyrics.length" ref="subtitles" class="impact-subtitles">
+    <div
+      v-if="bottomLyrics.length"
+      ref="subtitles"
+      class="impact-subtitles"
+      :style="{ color: palette.subtitle }"
+    >
       <p v-for="line in bottomLyrics" :key="line.key" :data-impact-field="line.field">
         {{ displayText(line.text) }}
       </p>
@@ -27,9 +32,16 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import { drumDetector } from '@/services/drumDetector';
 import type { PlayerStyleCustomConfig } from '@/types/playerStyle';
-import { impactArtistCredit } from '@/utils/impactArtist';
 import { loadFontById } from '@/utils/fontLoader';
-import { drawCracks, drawGlass, drawShards, glassPalette, printGlyph } from '@/utils/impactGlass';
+import { impactArtistCredit } from '@/utils/impactArtist';
+import {
+  drawCracks,
+  drawGlass,
+  drawShards,
+  glassPalette,
+  INK_GRAIN_VARIANTS,
+  printGlyph
+} from '@/utils/impactGlass';
 import {
   buildImpactAccompaniment,
   buildImpactTimeline,
@@ -38,11 +50,13 @@ import {
   glassGeometry,
   impactAccompanimentAt,
   impactFrame,
-  impactSceneAt,
   type ImpactLine,
+  impactRandom,
+  impactSceneAt,
   impactShatters,
   impactText
 } from '@/utils/impactTimeline';
+import { LYRIC_JITTER_INTERVAL_MS, lyricBeatSpike, sampleLyricJitter } from '@/utils/lyricJitter';
 import type { CloudInput } from '@/utils/wordCloud';
 
 const props = defineProps<{
@@ -111,7 +125,17 @@ const geometry = computed(() => {
   const line = frame.value?.line;
   return line ? geometryFor(line) : undefined;
 });
-const palette = computed(() => glassPalette(props.theme));
+const palette = computed(() =>
+  glassPalette(props.theme, props.config.impactLyricSaturation, props.config.impactLayoutSaturation)
+);
+const still = { x: 0, y: 0 };
+const staticGrain = { variant: 0, strength: 1 };
+const grainTickSeconds = 0.15;
+let lastGrainTick = -Infinity;
+let grain = staticGrain;
+let lastJitterTick = -Infinity;
+let jitter = still;
+let jitterBeat = 0;
 const glyphs = new Map<string, HTMLCanvasElement>();
 let texture: HTMLCanvasElement | undefined;
 let textureContext: CanvasRenderingContext2D | null | undefined;
@@ -151,6 +175,56 @@ function lyricRows(accompaniments: number, hasSubtitles: boolean) {
   );
 }
 
+function currentGrain(wholeLine: boolean) {
+  if (
+    !wholeLine ||
+    !props.config.impactReactiveDistress ||
+    props.reduced ||
+    !props.config.impactDistress
+  ) {
+    lastGrainTick = -Infinity;
+    grain = staticGrain;
+    return grain;
+  }
+  const tick = Math.floor(props.time / grainTickSeconds);
+  if (tick !== lastGrainTick && props.playing) {
+    lastGrainTick = tick;
+    const { low, mid, high } = drumDetector.running
+      ? drumDetector.getBandEnergies()
+      : { low: 0, mid: 0, high: 0 };
+    const energy = low * 0.42 + mid * 0.43 + high * 0.15;
+    const level = Math.round(clampUnit(energy) * 6);
+    grain =
+      level > 0
+        ? {
+            variant: ((tick % INK_GRAIN_VARIANTS) + INK_GRAIN_VARIANTS) % INK_GRAIN_VARIANTS,
+            strength: 0.66 + level * 0.15
+          }
+        : staticGrain;
+  }
+  return grain;
+}
+
+function currentJitter(hasLyrics: boolean, beatAge: number) {
+  if (!hasLyrics || !props.config.impactJitter || props.reduced) {
+    lastJitterTick = -Infinity;
+    jitter = still;
+    return jitter;
+  }
+  const tick = Math.floor((props.time * 1000) / LYRIC_JITTER_INTERVAL_MS);
+  if (tick !== lastJitterTick && props.playing) {
+    lastJitterTick = tick;
+    jitter = sampleLyricJitter(
+      0.4,
+      2.2,
+      props.climax,
+      beatAge >= 0 && beatAge < 0.12 ? jitterBeat : 0,
+      impactRandom(`${props.songKey}:jitter:${tick}`)
+    );
+  }
+  return jitter;
+}
+
 function drawInk(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -159,21 +233,23 @@ function drawInk(
   outline: boolean,
   row: InkRow,
   scale = 1,
-  cardOutline = false
+  cardOutline = false,
+  inkGrain = staticGrain
 ) {
   const ink = displayText(text);
-  const cacheKey = `${key}:${outline}:${ink}:${customInkFont.value || ''}`;
+  const cacheKey = `${key}:${outline}:${ink}:${customInkFont.value || ''}:${inkGrain.variant}:${inkGrain.strength}`;
   let glyph = glyphs.get(cacheKey);
   if (!glyph) {
     glyph = printGlyph(
       ink,
       palette.value.ink,
       key,
-      Number(props.config.impactDistress ?? 35) / 100,
+      (Number(props.config.impactDistress ?? 35) / 100) * inkGrain.strength,
       props.config.impactRough !== false,
       outline,
       customInkFont.value,
-      cardOutline ? 2.6 : undefined
+      cardOutline ? 2.6 : undefined,
+      inkGrain.variant
     );
     if (glyphs.size >= 36) glyphs.delete(glyphs.keys().next().value!);
     glyphs.set(cacheKey, glyph);
@@ -216,11 +292,14 @@ function drawImpressions(
   cracks: ReturnType<typeof glassGeometry>['cracks'],
   landed: number,
   hitAge: number,
-  row: InkRow
+  row: InkRow,
+  offset = still
 ) {
   if (!landed) return;
   const shattered = landed === line.words.length;
-  drawCracks(ctx, cracks, landed / line.words.length, shattered);
+  drawCracks(ctx, cracks, landed / line.words.length, shattered, palette.value);
+  ctx.save();
+  ctx.translate(offset.x, offset.y);
   const firstVisible = Math.max(0, landed - 16);
   for (let index = 0; index < landed; index++) {
     const opacity = index === landed - 1 ? 0.86 : index < firstVisible ? 0.14 : 0.28;
@@ -229,6 +308,7 @@ function drawImpressions(
   const alpha = props.reduced ? 0.86 : Math.max(0, (shattered ? 0.85 : 1) * (1 - hitAge / 0.18));
   if (alpha > 0)
     drawInk(ctx, line.words[landed - 1].text, `${line.key}:${landed - 1}`, alpha, false, row);
+  ctx.restore();
 }
 
 function applyShock(ctx: CanvasRenderingContext2D, age: number, strength: number) {
@@ -255,7 +335,12 @@ function render() {
   const glass = textureContext;
   const delta = props.time - lastTime;
   const discontinuity = delta < -0.015 || delta > 0.3;
-  if (discontinuity && lastBeat !== props.time) lastBeat = -Infinity;
+  if (discontinuity) {
+    if (lastBeat !== props.time) lastBeat = -Infinity;
+    lastGrainTick = lastJitterTick = -Infinity;
+    grain = staticGrain;
+    jitter = still;
+  }
   const targetClimax = Number(props.climax);
   if (discontinuity || props.reduced || !props.playing) climaxMix = targetClimax;
   else if (delta > 0 || lastClimax !== props.climax) {
@@ -268,6 +353,15 @@ function render() {
   const age = props.time - lastBeat;
   const beat = !props.reduced && age >= 0 && age < 0.32 ? beatPower * Math.exp(-age / 0.075) : 0;
   const current = frame.value;
+  const inkGrain = currentGrain(Boolean(current && !current.line.words.length));
+  const offset = currentJitter(
+    Boolean((current && !current.shattered) || activeLyrics.value.length),
+    age
+  );
+  if (subtitles.value) {
+    subtitles.value.style.transform =
+      offset === still ? '' : `translate3d(${offset.x}px, ${offset.y}px, 0)`;
+  }
   const lightTime = props.reduced ? 0 : props.time;
   const { card, opacity, edgeLight } = scene.value;
   const paintGlass = (context: CanvasRenderingContext2D) =>
@@ -280,10 +374,13 @@ function render() {
     const { line, landed, active, hitAge } = current;
     ctx.save();
     if (applyShock(ctx, hitAge, 6)) paintGlass(ctx);
-    if (!line.words.length) drawInk(ctx, line.text, line.key, 1, false, rows[0]);
-    else {
-      drawImpressions(ctx, line, geometry.value.cracks, landed, hitAge, rows[0]);
+    if (!line.words.length) {
+      ctx.translate(offset.x, offset.y);
+      drawInk(ctx, line.text, line.key, 1, false, rows[0], 1, false, inkGrain);
+    } else {
+      drawImpressions(ctx, line, geometry.value.cracks, landed, hitAge, rows[0], offset);
       if (!props.reduced && active >= landed) {
+        ctx.translate(offset.x, offset.y);
         const word = line.words[active];
         const t = clampUnit((props.time - word.begin) / (word.hit - word.begin));
         drawInk(
@@ -333,12 +430,17 @@ function render() {
     drawImpressions(glass, line, cracks, line.words.length, age, shardRows[0]);
     ctx.save();
     applyShock(ctx, age, 10);
-    drawShards(ctx, texture, shards, w, h, age, props.reduced);
+    drawShards(ctx, texture, shards, w, h, age, props.reduced, palette.value);
     ctx.restore();
   }
-  centerLyrics.value.forEach((line, index) => {
-    drawInk(ctx, line.text, line.key, 0.88, false, rows[index + 1]);
-  });
+  if (centerLyrics.value.length) {
+    ctx.save();
+    ctx.translate(offset.x, offset.y);
+    centerLyrics.value.forEach((line, index) => {
+      drawInk(ctx, line.text, line.key, 0.88, false, rows[index + 1]);
+    });
+    ctx.restore();
+  }
 }
 
 function schedule() {
@@ -356,7 +458,7 @@ watch([() => props.songKey, () => props.active], () => {
 });
 watch(
   [
-    () => props.theme,
+    () => palette.value.ink,
     () => props.config.impactDistress,
     () => props.config.impactRough,
     fontReady,
@@ -394,9 +496,11 @@ watch(
     () => props.active,
     () => props.climax,
     () => props.reduced,
-    () => props.theme,
+    palette,
     () => props.config.impactDistress,
     () => props.config.impactRough,
+    () => props.config.impactReactiveDistress,
+    () => props.config.impactJitter,
     () => props.config.impactFill,
     () => props.config.impactUppercase,
     () => props.controls
@@ -412,6 +516,7 @@ onMounted(() => {
   unsubscribe = drumDetector.onBeat((info) => {
     if (!props.active || !props.playing || props.reduced) return;
     lastBeat = props.time;
+    jitterBeat = lyricBeatSpike(info.isStrong, info.kickEnergy);
     beatPower = Math.min(1, 0.25 + info.kickEnergy * 0.8 + (info.isStrong ? 0.2 : 0));
     schedule();
   });

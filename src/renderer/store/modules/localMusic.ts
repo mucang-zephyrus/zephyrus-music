@@ -7,17 +7,10 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 
 import useIndexedDB from '@/hooks/IndexDBHook';
+import { listLocalAudioFiles, readLocalAudioMetadata } from '@/services/localMusicNative';
 import type { LocalMusicEntry } from '@/types/localMusic';
 
-// 扫描版本号，代码变更后递增可强制重新解析所有文件（解决封面/歌词提取逻辑变更后的缓存问题）
-const SCAN_VERSION = 5;
-
-import { removeStaleEntries } from '@/utils/localMusicUtils';
-
 const { message } = createDiscreteApi(['message']);
-
-/** 是否为移动端环境 */
-const isMobileNative = typeof (window as any).AndroidNative !== 'undefined';
 
 /** IndexedDB store 名称 */
 const LOCAL_MUSIC_STORE = 'local_music' as const;
@@ -73,15 +66,20 @@ export const useLocalMusicStore = defineStore(
     const scanProgress = ref(0);
 
     /** IndexedDB 实例（延迟初始化） */
-    let db: Awaited<ReturnType<typeof initLocalMusicDB>> | null = null;
+    let db: ReturnType<typeof initLocalMusicDB> | undefined;
+    let cacheLoad: Promise<void> | undefined;
+    let scan: Promise<boolean> | undefined;
+    let activeFolders: string[] = [];
+    let triedRecovery = false;
 
     /**
      * 获取 IndexedDB 实例，首次调用时初始化
      */
-    async function getDB() {
-      if (!db) {
-        db = await initLocalMusicDB();
-      }
+    function getDB() {
+      db ??= initLocalMusicDB().catch((error) => {
+        db = undefined;
+        throw error;
+      });
       return db;
     }
 
@@ -103,171 +101,174 @@ export const useLocalMusicStore = defineStore(
      * 移除文件夹路径
      * @param path 要移除的文件夹路径
      */
-    function removeFolder(path: string): void {
-      const index = folderPaths.value.indexOf(path);
-      if (index !== -1) {
-        folderPaths.value.splice(index, 1);
-      }
+    async function removeFolder(path: string): Promise<void> {
+      if (scan) await scan;
+      await loadFromCache();
+      const localDB = await getDB();
+      const entries = musicList.value;
+      const removed = entries.filter((entry) => belongsToFolder(entry.filePath, path));
+      await localDB.updateBatch(
+        LOCAL_MUSIC_STORE,
+        [],
+        removed.map((entry) => entry.id)
+      );
+      folderPaths.value = folderPaths.value.filter((folder) => folder !== path);
+      const removedIds = new Set(removed.map((entry) => entry.id));
+      musicList.value = musicList.value.filter((entry) => !removedIds.has(entry.id));
     }
 
-    /**
-     * 扫描所有已配置的文件夹
-     * 流程：扫描文件 → 增量对比 → 解析变更文件元数据 → 存入 IndexedDB → 更新列表
-     * 支持浏览器导入和 Android 扫描
-     */
-    async function scanFolders(): Promise<void> {
-      if (!isMobileNative || scanning.value || folderPaths.value.length === 0) {
-        return;
-      }
+    function belongsToFolder(uri: string, folder: string) {
+      return uri.startsWith(`${folder.replace(/\/$/, '')}/document/`);
+    }
 
+    function scanFolders(paths = [...folderPaths.value]): Promise<boolean> {
+      if (!window.AndroidNative || !paths.length) return Promise.resolve(false);
+      if (scan) {
+        const remaining = paths.filter((path) => !activeFolders.includes(path));
+        return remaining.length
+          ? scan.then(() =>
+              scanFolders(remaining.filter((path) => folderPaths.value.includes(path)))
+            )
+          : scan;
+      }
+      activeFolders = paths;
       scanning.value = true;
       scanProgress.value = 0;
+      scan = refreshFolders(paths).finally(() => {
+        scanning.value = false;
+        scan = undefined;
+        activeFolders = [];
+      });
+      return scan;
+    }
 
+    async function refreshFolders(paths: string[]): Promise<boolean> {
+      let complete = true;
       try {
+        await loadFromCache();
         const localDB = await getDB();
-
-        // 检查扫描版本，版本变化时强制重扫所有文件
-        const lastVersion = parseInt(localStorage.getItem('localMusicScanVersion') || '0', 10);
-        const forceRescan = lastVersion < SCAN_VERSION;
-        if (forceRescan) {
-          localStorage.setItem('localMusicScanVersion', SCAN_VERSION.toString());
-        }
-
-        // 加载当前缓存数据用于增量对比
-        const cachedEntries = await localDB.getAllData(LOCAL_MUSIC_STORE);
-        const cachedMap = new Map<string, LocalMusicEntry>();
-        for (const entry of cachedEntries) {
-          cachedMap.set(entry.filePath, entry);
-        }
-
-        // 遍历每个文件夹进行扫描
-        for (const folderPath of folderPaths.value) {
+        const entries = new Map(musicList.value.map((entry) => [entry.filePath, entry]));
+        let lastListUpdate = 0;
+        let listChanged = false;
+        for (const folder of paths) {
           try {
-            if (isMobileNative) {
-              // ==================== 移动端扫描 ====================
-              const native = (window as any).AndroidNative;
-              const filesJson = native.scanAudioFiles(folderPath);
-              const files = JSON.parse(filesJson) as Array<{
-                uri: string; name: string; size: number; lastModified: number;
-              }>;
-              scanProgress.value += files.length;
-
-              // 增量扫描：基于修改时间筛选需重新解析的文件
-              const parseTargets: string[] = [];
-              for (const file of files) {
-                const cached = cachedMap.get(file.uri);
-                if (forceRescan || !cached || cached.modifiedTime !== file.lastModified) {
-                  parseTargets.push(file.uri);
+            const { files, reliable } = await listLocalAudioFiles(folder);
+            const seen = new Set(files.map((file) => file.uri));
+            const pending: LocalMusicEntry[] = [];
+            for (const file of files) {
+              const cached = entries.get(file.uri);
+              if (
+                !cached ||
+                cached.modifiedTime !== file.lastModified ||
+                cached.fileSize !== file.size
+              ) {
+                try {
+                  const meta = await readLocalAudioMetadata(file);
+                  pending.push({
+                    ...meta,
+                    filePath: file.uri,
+                    modifiedTime: file.lastModified,
+                    fileSize: file.size,
+                    id: cached?.id ?? generateId(file.uri)
+                  });
+                } catch (error) {
+                  console.warn('读取本地歌曲失败:', file.name, error);
+                  complete = false;
                 }
               }
-
-              // 解析元数据（逐个调用 NativeBridge）
-              for (const uri of parseTargets) {
-                try {
-                  const metaJson = native.getAudioMetadata(uri);
-                  const meta = JSON.parse(metaJson);
-                  const entry: LocalMusicEntry = {
-                    ...meta,
-                    cover: meta.cover ?? null,
-                    lyrics: meta.lyrics ?? null,
-                    id: generateId(meta.filePath)
-                  };
-                  await localDB.saveData(LOCAL_MUSIC_STORE, entry);
-                  cachedMap.set(entry.filePath, entry);
-                } catch (e) {
-                  console.error('解析元数据失败:', uri, e);
+              scanProgress.value++;
+              if (pending.length >= 24) {
+                await localDB.updateBatch(LOCAL_MUSIC_STORE, pending);
+                for (const entry of pending) entries.set(entry.filePath, entry);
+                pending.length = 0;
+                listChanged = true;
+                if (performance.now() - lastListUpdate > 250) {
+                  musicList.value = [...entries.values()];
+                  lastListUpdate = performance.now();
+                  listChanged = false;
                 }
               }
             }
+            // Older Android builds cannot distinguish an empty folder from a listing error.
+            const stale = reliable
+              ? [...entries.values()].filter(
+                  (entry) => belongsToFolder(entry.filePath, folder) && !seen.has(entry.filePath)
+                )
+              : [];
+            await localDB.updateBatch(
+              LOCAL_MUSIC_STORE,
+              pending,
+              stale.map((entry) => entry.id)
+            );
+            for (const entry of pending) entries.set(entry.filePath, entry);
+            for (const entry of stale) entries.delete(entry.filePath);
+            listChanged ||= pending.length > 0 || stale.length > 0;
           } catch (error) {
-            console.error(`扫描文件夹出错: ${folderPath}`, error);
-            message.error(`扫描文件夹出错: ${folderPath}`);
+            console.warn('扫描本地音乐目录失败:', folder, error);
+            complete = false;
           }
         }
-
-        // 从 IndexedDB 重新加载完整列表
-        musicList.value = await localDB.getAllData(LOCAL_MUSIC_STORE);
+        if (listChanged) musicList.value = [...entries.values()];
       } catch (error) {
         console.error('扫描本地音乐失败:', error);
-        message.error('扫描本地音乐失败');
-      } finally {
-        scanning.value = false;
+        complete = false;
       }
+      if (!complete) message.warning('部分本地歌曲未能读取，请刷新重试。');
+      return complete;
     }
 
-    /**
-     * 从 IndexedDB 缓存加载音乐列表
-     * 应用启动时或进入本地音乐页面时调用
-     */
-    async function loadFromCache(): Promise<void> {
-      try {
-        const localDB = await getDB();
-        musicList.value = await localDB.getAllData(LOCAL_MUSIC_STORE);
-      } catch (error) {
-        console.error('从缓存加载本地音乐失败:', error);
-        // 降级：缓存加载失败时保持空列表，用户可手动触发扫描
-        musicList.value = [];
-      }
+    function loadFromCache(): Promise<void> {
+      cacheLoad ??= getDB()
+        .then(async (localDB) => {
+          const entries = await localDB.getAllData(LOCAL_MUSIC_STORE);
+          // Blob URLs only work in the document where they were created.
+          const stale = entries.filter((entry) => entry.isSession);
+          await localDB.updateBatch(
+            LOCAL_MUSIC_STORE,
+            [],
+            stale.map((entry) => entry.id)
+          );
+          musicList.value = entries.filter((entry) => !entry.isSession);
+        })
+        .catch((error) => {
+          cacheLoad = undefined;
+          throw error;
+        });
+      return cacheLoad;
     }
 
-    /**
-     * 清理缓存：检查文件存在性，移除已不存在的文件条目
-     */
-    async function clearCache(): Promise<void> {
-      try {
-        const localDB = await getDB();
-        const allEntries = await localDB.getAllData(LOCAL_MUSIC_STORE);
-
-        if (allEntries.length === 0) {
-          return;
-        }
-
-        const existsMap: Record<string, boolean> = {};
-        for (const entry of allEntries) {
-          try {
-            if (isMobileNative) {
-              const result = (window as any).AndroidNative.checkFileExists(entry.filePath);
-              existsMap[entry.filePath] = result === 'true';
-            } else {
-              existsMap[entry.filePath] = true;
-            }
-          } catch {
-            existsMap[entry.filePath] = true;
-          }
-        }
-
-        const validEntries = removeStaleEntries(allEntries, existsMap);
-        const removedEntries = allEntries.filter(
-          (entry) => !validEntries.some((v) => v.id === entry.id)
-        );
-
-        for (const entry of removedEntries) {
-          await localDB.deleteData(LOCAL_MUSIC_STORE, entry.id);
-        }
-
-        musicList.value = validEntries;
-      } catch (error) {
-        console.error('清理缓存失败:', error);
+    async function restoreLibrary(): Promise<void> {
+      await loadFromCache();
+      if (
+        window.AndroidNative &&
+        !triedRecovery &&
+        !musicList.value.length &&
+        folderPaths.value.length
+      ) {
+        triedRecovery = true;
+        await scanFolders();
       }
     }
-
-    /**
-     * 从目录批量绑定歌词文件到本地歌曲
-     * @param dirPath 歌词文件所在目录
-     * @returns 绑定结果 { total: 歌词文件总数, matched: 匹配成功数 }
-     */
 
     /** 元数据写回文件成功后，用原生复检返回的新元数据更新 IndexedDB 与列表。 */
     async function applyEntryMetadata(metadataJson: string) {
+      await loadFromCache();
+      if (scan) await scan;
       const meta = JSON.parse(metadataJson) as LocalMusicEntry;
       const entry: LocalMusicEntry = {
         ...meta,
         cover: meta.cover ?? null,
         lyrics: meta.lyrics ?? null,
+        modifiedTime:
+          meta.modifiedTime ||
+          musicList.value.find((item) => item.filePath === meta.filePath)?.modifiedTime ||
+          0,
         id: generateId(meta.filePath)
       };
-      const db = await initLocalMusicDB();
-      await db.saveData(LOCAL_MUSIC_STORE, entry);
+      if (!entry.isSession) {
+        const localDB = await getDB();
+        await localDB.updateBatch(LOCAL_MUSIC_STORE, [entry]);
+      }
       const index = musicList.value.findIndex((item) => item.id === entry.id);
       if (index >= 0) musicList.value.splice(index, 1, entry);
       else musicList.value.push(entry);
@@ -286,7 +287,7 @@ export const useLocalMusicStore = defineStore(
       removeFolder,
       scanFolders,
       loadFromCache,
-      clearCache,
+      restoreLibrary,
       applyEntryMetadata
     };
   },

@@ -24,9 +24,6 @@ export function registerExternalAudioHandler(): void {
       const native = (window as any).AndroidNative;
       if (!native?.getAudioMetadata) return;
 
-      // 确保列表缓存已加载(入库前查重需要)
-      await localMusicStore.loadFromCache();
-
       // 原生元数据 → 入库(applyEntryMetadata 内部按 filePath 去重更新)
       const metaJson = native.getAudioMetadata(filePath);
       if (!metaJson) return;

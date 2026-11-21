@@ -8,14 +8,34 @@ import {
   SHARD_LIFETIME
 } from './impactTimeline';
 
-export function glassPalette(color: string) {
+export function impactSaturation(color: string, percent: number) {
+  const tint = tinycolor(color);
+  if (percent === 100 || !tint.isValid()) return color;
+  const hsl = tint.toHsl();
+  return tinycolor({ ...hsl, s: clampUnit((hsl.s * percent) / 100) }).toRgbString();
+}
+
+export function glassPalette(color: string, lyricSaturation = 100, layoutSaturation = 100) {
   const theme = tinycolor(color);
   const tint = theme.isValid() ? theme : tinycolor('#90c6fa');
-  const rgb = tint.toRgb();
+  const layoutColor = (color: string) => impactSaturation(color, layoutSaturation);
+  const layoutLight = (color: string) => {
+    const { r, g, b } = tinycolor(layoutColor(color)).toRgb();
+    return (alpha: number) => `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  };
   return {
-    light: (alpha: number) => `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`,
-    ink: tinycolor.mix(tint, '#ffffff', 23).toHexString(),
-    glass: tinycolor.mix('#070d16', tint, 9).toHexString()
+    light: layoutLight(tint.toHexString()),
+    edge: layoutLight('#e1f1ff'),
+    rim: layoutLight('#dcefff'),
+    crackShadow: layoutLight('#030912')(0.8),
+    crackLight: layoutLight('#edf9ff')(0.72),
+    crackDim: layoutLight('#b4d4ee')(0.39),
+    crackBranch: layoutLight('#b9d3eb')(0.31),
+    shardEdge: layoutLight('#d6ecff')(0.42),
+    ink: impactSaturation(tinycolor.mix(tint, '#ffffff', 23).toHexString(), lyricSaturation),
+    subtitle: impactSaturation('#f4f7ff', lyricSaturation),
+    glass: layoutColor(tinycolor.mix('#070d16', tint, 9).toHexString()),
+    glassCenter: layoutColor('#0b111b')
   };
 }
 
@@ -32,7 +52,7 @@ export function drawGlass(
 ) {
   const base = ctx.createLinearGradient(0, 0, width, height);
   base.addColorStop(0, palette.glass);
-  base.addColorStop(0.5, '#0b111b');
+  base.addColorStop(0.5, palette.glassCenter);
   base.addColorStop(1, palette.glass);
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, width, height);
@@ -103,14 +123,14 @@ export function drawGlass(
       x === 0 && y === height * 0.29 ? width * 0.17 : x === width ? width * 0.83 : x,
       y === 0 && x !== width ? height * 0.17 : y === height ? height * 0.83 : y
     );
-    edge.addColorStop(0, `rgba(225, 241, 255, ${0.085 + beat * 0.46})`);
-    edge.addColorStop(0.18, `rgba(225, 241, 255, ${0.024 + beat * 0.2})`);
-    edge.addColorStop(1, 'rgba(225, 241, 255, 0)');
+    edge.addColorStop(0, palette.edge(0.085 + beat * 0.46));
+    edge.addColorStop(0.18, palette.edge(0.024 + beat * 0.2));
+    edge.addColorStop(1, palette.edge(0));
     ctx.fillStyle = edge;
     ctx.fillRect(0, 0, width, height);
   }
   ctx.globalCompositeOperation = 'source-over';
-  ctx.strokeStyle = `rgba(220, 239, 255, ${0.2 + beat * 0.42})`;
+  ctx.strokeStyle = palette.rim(0.2 + beat * 0.42);
   ctx.lineWidth = 1.4;
   ctx.strokeRect(0.7, 0.7, width - 1.4, height - 1.4);
   ctx.strokeStyle = palette.light(0.16);
@@ -129,7 +149,8 @@ export function drawCracks(
   ctx: CanvasRenderingContext2D,
   cracks: ReturnType<typeof glassGeometry>['cracks'],
   progress: number,
-  shattered: boolean
+  shattered: boolean,
+  palette: Palette
 ) {
   const rays = Math.min(cracks.length, Math.ceil(progress * cracks.length));
   ctx.lineJoin = 'round';
@@ -140,11 +161,11 @@ export function drawCracks(
       : Math.min(points.length - 1, 3 + Math.floor(progress * 4) + (index % 2));
     const path = points.slice(0, reach);
     trace(ctx, path);
-    ctx.strokeStyle = 'rgba(3, 9, 18, 0.8)';
+    ctx.strokeStyle = palette.crackShadow;
     ctx.lineWidth = 2.5;
     ctx.stroke();
     trace(ctx, path);
-    ctx.strokeStyle = index % 3 === 0 ? 'rgba(237, 249, 255, 0.72)' : 'rgba(180, 212, 238, 0.39)';
+    ctx.strokeStyle = index % 3 === 0 ? palette.crackLight : palette.crackDim;
     ctx.lineWidth = 0.85;
     ctx.stroke();
     if (reach < 4) continue;
@@ -155,7 +176,7 @@ export function drawCracks(
       [x + (nextX - x) * 0.53 + (nextY - y) * 0.35, y + (nextY - y) * 0.48 - (nextX - x) * 0.35],
       [(x + nextX) / 2 + (nextY - y) * 0.76, (y + nextY) / 2 - (nextX - x) * 0.76]
     ]);
-    ctx.strokeStyle = 'rgba(185, 211, 235, 0.31)';
+    ctx.strokeStyle = palette.crackBranch;
     ctx.lineWidth = 0.65;
     ctx.stroke();
   }
@@ -168,7 +189,8 @@ export function drawShards(
   width: number,
   height: number,
   age: number,
-  reduced: boolean
+  reduced: boolean,
+  palette: Palette
 ) {
   const part = reduced ? 0.25 : clampUnit(age / SHARD_LIFETIME);
   const travel = 1 - 0.965 * (1 - part) ** 2;
@@ -191,7 +213,7 @@ export function drawShards(
     ctx.clip();
     ctx.globalAlpha = opacity;
     ctx.drawImage(texture, 0, 0, width, height);
-    ctx.strokeStyle = 'rgba(214, 236, 255, 0.42)';
+    ctx.strokeStyle = palette.shardEdge;
     ctx.lineWidth = 1.65;
     ctx.stroke();
     ctx.restore();
@@ -199,6 +221,57 @@ export function drawShards(
 }
 
 const INK_FONT = `900 160px 'ZephyrusNotoSerifSC', 'Noto Serif SC', 'Songti SC', SimSun, serif`;
+
+export const INK_GRAIN_VARIANTS = 6;
+const INK_GRAIN_SIZE = 128;
+const inkGrainTiles = new Map<number, HTMLCanvasElement>();
+
+function inkGrainTile(variant: number) {
+  const existing = inkGrainTiles.get(variant);
+  if (existing) return existing;
+  const random = impactRandom(`ink-grain:${variant}`);
+  const size = INK_GRAIN_SIZE;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const pixels = ctx.createImageData(size, size);
+
+  // Repeatable fields give the ink patchy coverage and short, frayed paper fibres.
+  function grainField(columns: number, rows: number) {
+    const field = Float32Array.from({ length: columns * rows }, random);
+    function interpolate(from: number, to: number, fraction: number) {
+      return from + (to - from) * fraction;
+    }
+    return (x: number, y: number) => {
+      const col = (x * columns) / size;
+      const row = (y * rows) / size;
+      const left = Math.floor(col);
+      const top = Math.floor(row);
+      const right = (left + 1) % columns;
+      const bottom = (top + 1) % rows;
+      return interpolate(
+        interpolate(field[top * columns + left], field[top * columns + right], col - left),
+        interpolate(field[bottom * columns + left], field[bottom * columns + right], col - left),
+        row - top
+      );
+    };
+  }
+
+  const patches = grainField(14, 13);
+  const fibres = grainField(39, 83);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const paper = fibres((x + ((y * 29) >> 7)) % size, y);
+      const density = paper * 0.48 + patches(x, y) * 0.36 + random() * 0.16;
+      pixels.data[(y * size + x) * 4 + 3] = Math.round(
+        255 * clampUnit((density - 0.42) * 4.4) ** 1.35
+      );
+    }
+  }
+  ctx.putImageData(pixels, 0, 0);
+  inkGrainTiles.set(variant, canvas);
+  return canvas;
+}
 
 export function printGlyph(
   text: string,
@@ -208,7 +281,8 @@ export function printGlyph(
   rough: boolean,
   outline: boolean,
   font = INK_FONT,
-  outlineWidth = 1.85
+  outlineWidth = 1.85,
+  grainFrame = 0
 ) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d')!;
@@ -240,19 +314,21 @@ export function printGlyph(
   const random = impactRandom(seed);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = 'destination-out';
-  // Reproduce the same grain in the fill and the imprint for this word.
-  const ratio = distress === 0 ? 0 : distress * (0.7 + random() * 0.58);
-  const particles = Math.round(
-    ((canvas.width * canvas.height) / 420) * ratio * (outline ? 0.7 : 1)
-  );
-  for (let i = 0; i < particles; i++) {
-    const x = random() * canvas.width;
-    const y = random() * canvas.height;
-    const radius = 1 + random() ** 3 * (outline ? 4.4 : 9);
-    ctx.fillStyle = `rgba(0,0,0,${0.36 + random() * 0.64})`;
-    ctx.beginPath();
-    ctx.ellipse(x, y, radius, radius * (0.55 + random() * 0.5), random() * Math.PI, 0, Math.PI * 2);
-    ctx.fill();
+  // Keep the grain aligned between the fill and the imprint of a word.
+  const variant = (Math.floor(random() * INK_GRAIN_VARIANTS) + grainFrame) % INK_GRAIN_VARIANTS;
+  const originX = Math.floor(random() * INK_GRAIN_SIZE);
+  const originY = Math.floor(random() * INK_GRAIN_SIZE);
+  if (distress > 0) {
+    const grain = ctx.createPattern(inkGrainTile(variant), 'repeat');
+    if (grain) {
+      ctx.save();
+      ctx.translate(-originX, -originY);
+      const opacity = Math.sqrt(distress) * (0.93 + random() * 0.22);
+      ctx.globalAlpha = clampUnit(opacity * (outline ? 0.72 : 1));
+      ctx.fillStyle = grain;
+      ctx.fillRect(originX, originY, canvas.width, canvas.height);
+      ctx.restore();
+    }
   }
   if (rough) {
     const notches = Math.round(canvas.width / 1.8);

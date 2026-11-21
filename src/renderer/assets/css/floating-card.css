@@ -1,0 +1,56 @@
+:root {
+  --floating-surface: #faf8f4;
+  --floating-inset: #fff;
+  --floating-text: #282620;
+  --floating-muted: #635f57;
+  --floating-line: #dedad2;
+  --floating-control: #ede9e2;
+  --floating-primary: #3f5240;
+  --floating-on-primary: #fff;
+  --floating-danger: #a1252c;
+}
+:root.dark {
+  --floating-surface: #252526;
+  --floating-inset: #2e2e30;
+  --floating-text: #f3f0eb;
+  --floating-muted: #c0bbb3;
+  --floating-line: #484644;
+  --floating-control: #3b3937;
+  --floating-primary: #c7d9ba;
+  --floating-on-primary: #242c22;
+  --floating-danger: #ff9c9c;
+}
+
+.player-style-surface :is(.lyrics-mask, .lyrics-backdrop) {
+  -webkit-backdrop-filter: blur(var(--immersive-backdrop-blur, 12px));
+  backdrop-filter: blur(var(--immersive-backdrop-blur, 12px));
+  transition:
+    opacity 260ms ease,
+    backdrop-filter 260ms ease,
+    display 260ms allow-discrete;
+}
+.player-style-surface :is(.lyrics-mask, .lyrics-backdrop)[style*='display: none'] {
+  --immersive-backdrop-blur: 0px;
+  opacity: 0;
+}
+@starting-style {
+  .player-style-surface :is(.lyrics-mask, .lyrics-backdrop) {
+    --immersive-backdrop-blur: 0px;
+    opacity: 0;
+  }
+}
+.song-change-enter-active,
+.song-change-leave-active {
+  transition: opacity 140ms ease;
+}
+.song-change-enter-from,
+.song-change-leave-to {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .player-style-surface :is(.lyrics-mask, .lyrics-backdrop),
+  .song-change-enter-active,
+  .song-change-leave-active {
+    transition: none;
+  }
+}

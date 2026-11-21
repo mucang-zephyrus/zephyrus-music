@@ -213,12 +213,11 @@ export function useLyricSwipeGesture(options: LyricSwipeGestureOptions) {
 
   const backdropStyle = computed<CSSProperties>(() => {
     if (!previewing.value || !phase.value) return {};
+    const visible = phase.value === 'opening' ? progress.value : 1 - progress.value;
     return {
-      opacity: String(
-        phase.value === 'opening' ? progress.value * 0.82 : (1 - progress.value) * 0.82
-      ),
-      transition: 'none',
-      willChange: 'opacity'
+      opacity: String(visible * 0.82),
+      '--immersive-backdrop-blur': `${visible * 12}px`,
+      transition: 'none'
     };
   });
 

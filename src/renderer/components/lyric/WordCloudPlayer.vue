@@ -13,6 +13,7 @@
         }"
         :style="{
           ...styleVars,
+          ...impactAccentVars,
           '--player-style-resolved-font': cloudFont,
           background: visualStyle === 'dotMatrix' ? '#ffffff' : '#101215',
           ...lyricsSwipeStyle
@@ -238,6 +239,7 @@ import { allTime, playMusic } from '@/hooks/MusicHook';
 import { usePlayerStore } from '@/store/modules/player';
 import { useStyleEngineStore } from '@/store/modules/styleEngine';
 import { DEFAULT_LYRIC_CONFIG } from '@/types/lyric';
+import { impactSaturation } from '@/utils/impactGlass';
 
 // ==================== Props ====================
 
@@ -337,6 +339,14 @@ const {
   coverGrayRatio,
   customFontActive
 } = usePlayerStyleAppearance(props.visualStyle);
+const impactAccentVars = computed(() => {
+  const saturation = styleCfg.value.impactLayoutSaturation ?? 100;
+  if (props.visualStyle !== 'impact' || saturation === 100) return undefined;
+  const accent = getComputedStyle(document.documentElement)
+    .getPropertyValue('--accent-color')
+    .trim();
+  return { '--accent-color': impactSaturation(accent || '#ffffff', saturation) };
+});
 const cloudPlayback = useWordCloudPlayback();
 
 if (props.visualStyle === 'impact') {

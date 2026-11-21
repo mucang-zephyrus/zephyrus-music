@@ -16,6 +16,7 @@
           <mobile-update-modal />
           <onboarding-overlay ref="onboardingRef" />
           <ios-audio-protection-prompt />
+          <test-version-notice v-if="IS_TEST_BUILD && !startupSplashVisible" />
           <splash-screen v-if="startupSplashVisible" @finish="startupSplashVisible = false" />
         </n-message-provider>
       </n-dialog-provider>
@@ -36,6 +37,7 @@ import MobileUpdateModal from '@/components/common/MobileUpdateModal.vue';
 import OnboardingOverlay from '@/components/common/OnboardingOverlay.vue';
 import SharedSongCard from '@/components/common/SharedSongCard.vue';
 import ShareLinkImport from '@/components/common/ShareLinkImport.vue';
+import TestVersionNotice from '@/components/common/TestVersionNotice.vue';
 import LyricMergeFeedbackPanel from '@/components/lyric/LyricMergeFeedbackPanel.vue';
 import SplashScreen from '@/components/splash/SplashScreen.vue';
 import TrafficWarningDrawer from '@/components/TrafficWarningDrawer.vue';
@@ -49,6 +51,7 @@ import { usePlayerStore } from '@/store/modules/player';
 import { usePlayerCoreStore } from '@/store/modules/playerCore';
 import { useSettingsStore } from '@/store/modules/settings';
 import { useUserStore } from '@/store/modules/user';
+import { IS_TEST_BUILD } from '@/utils/appVersion';
 import { checkLoginStatus } from '@/utils/auth';
 
 import { initAudioListeners, initMusicHook } from './hooks/MusicHook';
@@ -243,25 +246,24 @@ const handleSetLanguage = (value: string) => {
 // 并注册为全局单例供 audioService.crossfadeToNext 在过渡时调用三级策略。
 const smartAudio = useSmartAudio();
 let smartAudioRegistered = false;
-setSmartAudioInstance(smartAudio);
-smartAudioRegistered = true;
 
 settingsStore.initializeSettings();
 settingsStore.initializeTheme();
 
-// 初始化登录状态 - 从 localStorage 恢复用户信息和登录类型
-const loginInfo = checkLoginStatus();
-if (loginInfo.isLoggedIn) {
-  if (loginInfo.user && !userStore.user) {
-    userStore.setUser(loginInfo.user);
+function initializeAccount() {
+  const loginInfo = checkLoginStatus();
+  if (loginInfo.isLoggedIn) {
+    if (loginInfo.user && !userStore.user) {
+      userStore.setUser(loginInfo.user);
+    }
+    if (loginInfo.loginType && !userStore.loginType) {
+      userStore.setLoginType(loginInfo.loginType);
+    }
+    // 异步加载歌单、专辑、收藏列表（不阻塞渲染）
+    userStore.initializeUser().catch((err) => {
+      console.error('[App] 初始化用户数据失败:', err);
+    });
   }
-  if (loginInfo.loginType && !userStore.loginType) {
-    userStore.setLoginType(loginInfo.loginType);
-  }
-  // 异步加载歌单、专辑、收藏列表（不阻塞渲染）
-  userStore.initializeUser().catch((err) => {
-    console.error('[App] 初始化用户数据失败:', err);
-  });
 }
 
 handleSetLanguage(settingsStore.setData.language);
@@ -273,25 +275,26 @@ if (isAndroidNative()) {
 
 let focusTrapObserver: MutationObserver | null = null;
 
-onMounted(async () => {
+watchEffect(() => setSharedSongCardRef(sharedSongCardRef.value || null));
+watchEffect(() => setListenTogetherInviteRef(listenTogetherInviteRef.value || null));
+
+let started = false;
+function openLocalMusic() {
+  void router.push('/local-music');
+}
+
+async function startApp() {
+  if (started) return;
+  started = true;
+  setSmartAudioInstance(smartAudio);
+  smartAudioRegistered = true;
+  initializeAccount();
   // 启动保险丝降档提示（上次会话背景引擎崩溃）
   if (backgroundHealthStore.startupDegraded) {
     showBottomToast(t('player.backgroundDegradedStartup'));
   }
 
-  registerExternalAudioHandler();
   playerStore.setIsPlay(false);
-
-  // 注册 SharedSongCard 引用到 deepLink 模块
-  // 使剪贴板分享检测可以弹出歌曲卡片
-  watchEffect(() => {
-    setSharedSongCardRef(sharedSongCardRef.value || null);
-  });
-
-  // 注册一起听邀请弹窗到 deepLink 模块
-  watchEffect(() => {
-    setListenTogetherInviteRef(listenTogetherInviteRef.value || null);
-  });
 
   // 初始化一起听同步服务（幂等）：注册 seek/暂停/切歌插桩
   listenTogetherService.init();
@@ -321,9 +324,7 @@ onMounted(async () => {
   }
 
   // 监听网络状态变化，断网时跳转到本地音乐页面
-  window.addEventListener('offline', () => {
-    router.push('/local-music');
-  });
+  window.addEventListener('offline', openLocalMusic);
 
   // 初始化 MusicHook，注入 playerStore
   initMusicHook(playerStore);
@@ -331,6 +332,7 @@ onMounted(async () => {
   initCoverColor();
   // 初始化播放状态
   await playerStore.initializePlayState();
+  registerExternalAudioHandler();
 
   // 初始化音频设备变化监听器
   playerCoreStore.initAudioDeviceListener();
@@ -354,7 +356,6 @@ onMounted(async () => {
     // 使用 nextTick 确保 DOM 更新后再初始化
     await nextTick();
     initAudioListeners();
-
   }
 
   audioService.releaseOperationLock();
@@ -376,9 +377,14 @@ onMounted(async () => {
 
   // 控制中心歌词(网易云式):媒体会话标题实时替换为当前歌词行(iOS/桌面浏览器)
   setupMediaSessionLyric();
+}
+
+onMounted(() => {
+  void startApp();
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener('offline', openLocalMusic);
   styleEngine.dispose();
   focusTrapObserver?.disconnect();
   if (smartAudioRegistered) {

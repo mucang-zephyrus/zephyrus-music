@@ -29,6 +29,10 @@ export interface PlayerStyleClimaxColors {
 export interface PlayerStyleCustomConfig {
   impactRough?: boolean;
   impactDistress?: number;
+  impactReactiveDistress?: boolean;
+  impactJitter?: boolean;
+  impactLyricSaturation?: number;
+  impactLayoutSaturation?: number;
   impactFill?: boolean;
   impactUppercase?: boolean;
   impactWholeLine?: boolean;

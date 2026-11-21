@@ -524,13 +524,13 @@ import {
   isAndroidNative,
   requestStatusBarLyricPermission
 } from '@/services/androidNative';
+import { pickLocalAudioFolder } from '@/services/localMusicNative';
 import { useLocalMusicStore } from '@/store/modules/localMusic';
 import { usePlayerStore } from '@/store/modules/player';
 import { useSettingsStore } from '@/store/modules/settings';
 import { useUserStore } from '@/store/modules/user';
 import type { SongResult } from '@/types/music';
 import type { MobilePlayerStyleKey, PlayerStyleCustomConfig } from '@/types/playerStyle';
-
 import { applyTheme } from '@/utils/theme';
 import StatusBarLyricSettings from '@/views/set/components/StatusBarLyricSettings.vue';
 
@@ -748,44 +748,20 @@ function onThemeCardClick(choice: ThemeChoice, event: MouseEvent) {
 
 // ==================== 本地文件夹（Android） ====================
 
-let prevFolderPickHandler: ((uri: string | null) => void) | null | undefined;
-
-function waitForFolderPick(): Promise<string | null> {
-  return new Promise((resolve) => {
-    prevFolderPickHandler =
-      typeof (window as any).__localMusicFolderPicked === 'function'
-        ? (window as any).__localMusicFolderPicked
-        : null;
-    (window as any).__localMusicFolderPicked = (treeUri: string | null) => {
-      restoreFolderPickHandler();
-      resolve(treeUri);
-    };
-  });
-}
-
-function restoreFolderPickHandler() {
-  if (prevFolderPickHandler === undefined) return;
-  if (prevFolderPickHandler) (window as any).__localMusicFolderPicked = prevFolderPickHandler;
-  else delete (window as any).__localMusicFolderPicked;
-  prevFolderPickHandler = undefined;
-}
-
 async function pickLocalFolder() {
   if (folderPicking.value) return;
   // 纯浏览器环境（Web 版）没有文件夹访问能力
   if (!(window as any).AndroidNative) return;
   folderPicking.value = true;
   try {
-    (window as any).AndroidNative.pickAudioFolder();
-    const treeUri = await waitForFolderPick();
+    const treeUri = await pickLocalAudioFolder();
     if (!treeUri) return;
     localMusicStore.addFolder(treeUri);
-    await localMusicStore.scanFolders();
+    await localMusicStore.scanFolders([treeUri]);
   } catch (error) {
     console.warn('[Onboarding] 选择本地音乐文件夹失败:', error);
   } finally {
     folderPicking.value = false;
-    restoreFolderPickHandler();
   }
 }
 
@@ -1373,7 +1349,6 @@ function show() {
 
 function finish() {
   localStorage.setItem(STORAGE_KEY, '1');
-  restoreFolderPickHandler();
   stopGreetingLoop();
   clearThemeRevealTimers();
   themeReveal.value = null;
@@ -1404,7 +1379,6 @@ onBeforeUnmount(() => {
   motionQuery?.removeEventListener('change', handleMotionChange);
   window.removeEventListener('resize', resizeHandler!);
   document.removeEventListener('visibilitychange', handleVisibilityReturn);
-  restoreFolderPickHandler();
 });
 
 defineExpose({ show });

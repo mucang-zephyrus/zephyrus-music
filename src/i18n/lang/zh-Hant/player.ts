@@ -5,6 +5,10 @@ export default {
     fill: '歌詞填滿螢幕',
     uppercase: '英文強制全部大寫',
     wholeLine: '強制顯示整句歌詞',
+    reactiveDistress: '整句紋理隨音樂變化',
+    jitter: '歌詞抖動',
+    lyricSaturation: '歌詞色彩飽和度',
+    layoutSaturation: '版面色彩飽和度',
     swapArtistLanguages: '互換中英文位置'
   },
   dotMatrix: {

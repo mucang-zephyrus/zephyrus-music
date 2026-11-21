@@ -82,6 +82,23 @@ const useIndexedDB = async <T extends string, S extends Record<T, Record<string,
     });
   };
 
+  const updateBatch = <K extends T>(
+    storeName: K,
+    values: S[K][],
+    keysToDelete: Array<string | number> = []
+  ) => {
+    if (!values.length && !keysToDelete.length) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      if (!db.value) return reject(new Error('数据库未初始化'));
+      const tx = db.value.transaction(storeName, 'readwrite');
+      const store = tx.objectStore(storeName);
+      tx.oncomplete = () => resolve();
+      tx.onabort = () => reject(tx.error ?? new Error('数据库更新已中止'));
+      for (const key of keysToDelete) store.delete(key);
+      for (const value of values) store.put(value);
+    });
+  };
+
   // 通用获取数据
   const getData = <K extends T>(storeName: K, key: string | number) => {
     return new Promise<S[K]>((resolve, reject) => {
@@ -180,6 +197,7 @@ const useIndexedDB = async <T extends string, S extends Record<T, Record<string,
     initDB,
     addData,
     saveData,
+    updateBatch,
     getData,
     deleteData,
     getAllData,

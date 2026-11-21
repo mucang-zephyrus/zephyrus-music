@@ -4,7 +4,7 @@
  * 两张卡横向分页吸附，右缘露出下一张卡；漫游卡随明暗、云卡恒定深色。
  */
 import { useDocumentVisibility, usePreferredReducedMotion } from '@vueuse/core';
-import { computed, inject, onMounted, type Ref, ref } from 'vue';
+import { computed, inject, nextTick, onMounted, type Ref, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
@@ -99,6 +99,23 @@ const announcement = ref<Announcement | null>(null);
 function isPhoneDevice(): boolean {
   if (isIosSafari()) return true;
   return /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+}
+
+async function openAnnouncementHistory() {
+  const item = announcement.value;
+  if (!item) return;
+  const go = async () => {
+    await router.push({ name: 'announcements', query: { selected: String(item.id) } });
+    await nextTick();
+  };
+  if (
+    document.startViewTransition &&
+    !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  ) {
+    document.startViewTransition(go);
+  } else {
+    await go();
+  }
 }
 
 function openAnnouncement() {
@@ -267,10 +284,21 @@ onMounted(async () => {
       </article>
 
       <!-- 第三张卡：启动时拉取最新公告，支持内部设置及外部专辑链接。 -->
-      <article v-if="announcement" class="hero-card announce" @click="openAnnouncement">
+      <article
+        v-if="announcement"
+        class="hero-card announce"
+        style="view-transition-name: current-announcement"
+      >
         <span class="announce-badge">{{ announcement.title }}</span>
         <span v-if="announcement.date" class="announce-date">{{ announcement.date }}</span>
-        <p class="announce-body">{{ announcement.body }}</p>
+        <button
+          type="button"
+          class="announce-body"
+          aria-label="查看历史公告"
+          @click="openAnnouncementHistory"
+        >
+          {{ announcement.body }}
+        </button>
         <button
           v-if="announcement.action"
           class="hero-play"

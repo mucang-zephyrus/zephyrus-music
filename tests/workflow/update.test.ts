@@ -1,8 +1,10 @@
 import axios from 'axios';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { isAndroidNative } from '@/services/androidNative';
 import { checkUpdate } from '@/utils/update';
 
+vi.mock('@/services/androidNative', () => ({ isAndroidNative: vi.fn(() => false) }));
 vi.mock('axios', () => ({ default: { get: vi.fn() } }));
 const release = {
   tag_name: 'v1.4.2',
@@ -52,5 +54,41 @@ describe('server updates', () => {
     vi.mocked(axios.get).mockResolvedValue({ data: release });
     expect(await checkUpdate('1.4.2')).toBeNull();
     expect(await checkUpdate('1.4.3')).toBeNull();
+  });
+});
+
+describe('test APK updates', () => {
+  const testRelease = {
+    ...release,
+    tag_name: 'v1.4.3-test10',
+    assets: [
+      {
+        name: 'zephyrus-player-v1.4.3-test10.apk',
+        browser_download_url:
+          'https://mucang.xyz/zephyrus/webtest/zephyrus-player-v1.4.3-test10.apk',
+        size: 100
+      }
+    ]
+  };
+
+  it('does not check for a test APK update from the test website', async () => {
+    vi.mocked(isAndroidNative).mockReturnValue(false);
+    expect(await checkUpdate('1.4.3-test2')).toBeNull();
+    expect(axios.get).not.toHaveBeenCalled();
+  });
+
+  it('offers a newer test number from the test channel only', async () => {
+    vi.mocked(isAndroidNative).mockReturnValue(true);
+    vi.mocked(axios.get).mockResolvedValue({ data: testRelease });
+    const update = await checkUpdate('1.4.3-test2');
+    expect(update?.latestVersion).toBe('1.4.3-test10');
+    expect(update?.releaseInfo?.assets).toEqual(testRelease.assets);
+    expect(axios.get).toHaveBeenCalledWith(
+      'https://mucang.xyz/zephyrus/webtest/latest.json',
+      expect.objectContaining({ timeout: 8000 })
+    );
+    expect(vi.mocked(axios.get).mock.calls[0]?.[1]?.headers).toBeUndefined();
+    expect(await checkUpdate('1.4.3-test10')).toBeNull();
+    expect(await checkUpdate('1.4.2')).toBeNull();
   });
 });

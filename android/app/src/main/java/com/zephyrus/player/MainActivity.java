@@ -146,20 +146,21 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQUEST_PICK_AUDIO_FOLDER && resultCode == RESULT_OK && data != null) {
-            Uri treeUri = data.getData();
-            if (treeUri != null) {
-                try {
-                    getContentResolver().takePersistableUriPermission(treeUri,
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                } catch (Exception e) {
-                    Log.w("NativeBridge", "Failed to take persistable permission", e);
-                }
-                String js = "window.__localMusicFolderPicked && window.__localMusicFolderPicked('"
-                        + treeUri.toString() + "');";
-                evaluateJavascript(js);
+        if (requestCode != REQUEST_PICK_AUDIO_FOLDER) return;
+        Uri treeUri = resultCode == RESULT_OK && data != null ? data.getData() : null;
+        if (treeUri != null) {
+            try {
+                getContentResolver().takePersistableUriPermission(treeUri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } catch (SecurityException e) {
+                Log.w("NativeBridge", "Failed to take persistable permission", e);
+                android.widget.Toast.makeText(this, "无法保留此文件夹的读取权限",
+                        android.widget.Toast.LENGTH_LONG).show();
+                treeUri = null;
             }
         }
+        evaluateJavascript("window.__localMusicFolderPicked && window.__localMusicFolderPicked("
+                + (treeUri == null ? "null" : JSONObject.quote(treeUri.toString())) + ");");
     }
 
     @Override

@@ -763,10 +763,11 @@ export const usePlayerCoreStore = defineStore(
             playMusic.value = snapshot.song;
           }
 
-          const isPlaying = settingStore.setData.autoPlay;
-
           // 本地音乐和云端歌曲不需要重新获取 URL，保留原始路径
           const isLocalMusic = playMusic.value.playMusicUrl?.startsWith('local://');
+          // Returning from Android's system picker can recreate the process. Restore the
+          // selected track and position without playing a file the user has not tapped.
+          const isPlaying = settingStore.setData.autoPlay && !isLocalMusic;
           const isServerMusic = Boolean(resolveServerSongId(playMusic.value));
 
           await handlePlayMusic(

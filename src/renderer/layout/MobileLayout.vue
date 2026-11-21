@@ -198,6 +198,7 @@
     <div
       v-if="playerMorphLayerActive"
       class="player-morph-layer"
+      :class="{ 'player-morph-layer-android': androidPlayerMorph }"
       :style="playerMorphLayerStyle"
       aria-hidden="true"
     >
@@ -259,6 +260,7 @@ import { useSharedCoverTransition } from '@/composables/useSharedCoverTransition
 import { MOBILE_DOCK } from '@/config/mobileGeometry';
 import homeRouter from '@/router/home';
 import otherRouter from '@/router/other';
+import { isAndroidNative } from '@/services/androidNative';
 import { installMobileBackBridge, registerMobileBackLayer } from '@/services/mobileBackStack';
 import { useMenuStore } from '@/store/modules/menu';
 import { usePlayerStore } from '@/store/modules/player';
@@ -293,6 +295,7 @@ const settingsStore = useSettingsStore();
 const menuStore = useMenuStore();
 const { t } = useI18n();
 const playerTransition = useMobilePlayerTransition();
+const androidPlayerMorph = isAndroidNative();
 const songActionSurface = useMobileSongActionSurface();
 const mobileSongActionRequest = computed(() => songActionSurface.request.value);
 // 歌曲信息与播放列表共用 Dock 玻璃容器：页面长按时若列表未展开，先记为
@@ -367,10 +370,10 @@ const backgroundSuspended = computed(
 );
 let playerSourceReleaseFrame = 0;
 let playerSurfaceClassReleaseTimer: ReturnType<typeof setTimeout> | undefined;
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 let lastPlayerSurfaceProgress = '';
 let lastPlayerSurfaceReveal = '';
-// 两个转场变量挂 #layout-main 而非 :root:所有消费点(底栏/迷你条/全屏表面,
-// 含 Teleport 目标)都在其子树内,把逐帧样式失效范围从全文档缩到布局子树
+// Dock and header progress is local. Reveal also reaches players teleported to body.
 const layoutMainRef = ref<HTMLElement | null>(null);
 const capturePlayerTransitionOrigin = () => {
   if (playerSourceReleaseFrame) {
@@ -414,20 +417,18 @@ provide('playerTransitionStartedWithMenu', playerTransitionStartedWithMenu);
 const syncPlayerSurfaceProgress = () => {
   const progress = playerTransition.progress.value;
   const state = playerTransition.state.value;
-  const reveal = Math.min(1, Math.max(0, (progress - 0.035) / 0.62));
+  const revealStart = androidPlayerMorph && !reduceMotion.matches ? 0.72 : 0.035;
+  const revealRange = androidPlayerMorph && !reduceMotion.matches ? 0.28 : 0.62;
+  const reveal = Math.min(1, Math.max(0, (progress - revealStart) / revealRange));
   const surfaceActive = progress > 0 || state !== 'idle';
   const progressValue = String(progress);
   const revealValue = String(reveal);
   const surfaceEl = layoutMainRef.value;
-  // 变量同时写 #layout-main 与 body：播放面可能 Teleport 到 body 的 drawer 容器，
-  // 只挂 layout-main 会让那条路径的 CSS 拿不到进度（fallback 值导致裁切/透明失效）
   if (progressValue !== lastPlayerSurfaceProgress) {
     surfaceEl?.style.setProperty('--player-open-progress', progressValue);
-    document.body.style.setProperty('--player-open-progress', progressValue);
     lastPlayerSurfaceProgress = progressValue;
   }
   if (revealValue !== lastPlayerSurfaceReveal) {
-    surfaceEl?.style.setProperty('--player-surface-reveal', revealValue);
     document.body.style.setProperty('--player-surface-reveal', revealValue);
     lastPlayerSurfaceReveal = revealValue;
   }
@@ -461,8 +462,6 @@ onBeforeUnmount(() => {
   if (playerSourceReleaseFrame) cancelAnimationFrame(playerSourceReleaseFrame);
   if (playerSurfaceClassReleaseTimer) clearTimeout(playerSurfaceClassReleaseTimer);
   layoutMainRef.value?.style.removeProperty('--player-open-progress');
-  layoutMainRef.value?.style.removeProperty('--player-surface-reveal');
-  document.body.style.removeProperty('--player-open-progress');
   document.body.style.removeProperty('--player-surface-reveal');
   for (const key of [
     '--clip-top',
@@ -475,10 +474,12 @@ onBeforeUnmount(() => {
     document.body.style.removeProperty(key);
   }
   document.body.classList.remove('mobile-player-surface-active');
-  document.body.classList.remove('mobile-player-surface-morphing');
+  document.body.classList.remove('mobile-player-surface-morphing', 'mobile-player-android');
 });
 onMounted(() => {
   // setup 期的 immediate watch 触发时 #layout-main 还未挂载,挂载后补写基线值
+  document.body.classList.toggle('mobile-player-android', androidPlayerMorph);
+  lastPlayerSurfaceProgress = '';
   syncPlayerSurfaceProgress();
 });
 watch(
@@ -561,6 +562,11 @@ const computeMorphRect = () => {
 const playerMorphLayerStyle = computed(() => {
   const rect = computeMorphRect();
   if (!rect) return undefined;
+  if (androidPlayerMorph) {
+    return {
+      transform: `translate3d(${rect.left}px, ${rect.top}px, 0) scale(${rect.width / morphViewport.w}, ${rect.height / morphViewport.h})`
+    };
+  }
   // 直接布局插值（不用 scale）：非等比缩放会把圆角拉成椭圆角，
   // 逐帧写 left/top/width/height 让 border-radius 始终是标准圆角
   return {
@@ -748,7 +754,9 @@ const syncMorphClip = () => {
   surface.setProperty('--clip-left', `${Math.max(0, rect.left)}px`);
   surface.setProperty('--clip-radius', `${rect.radius}px`);
 };
-watch([playerTransition.progress, playerTransition.stretch], syncMorphClip, { flush: 'post' });
+if (!androidPlayerMorph) {
+  watch([playerTransition.progress, playerTransition.stretch], syncMorphClip, { flush: 'post' });
+}
 // 伸长量弹簧：松手后从当前值指数衰减到 0（与 progress 弹簧同量级的收敛节奏）
 let stretchFrame = 0;
 let stretchLast = 0;
@@ -1928,7 +1936,8 @@ onBeforeUnmount(() => {
 :global(body.mobile-player-surface-active .word-cloud-mobile-player),
 :global(body.mobile-player-surface-active .eerie-mobile-player),
 :global(body.mobile-player-surface-active .neon-mobile-player),
-:global(body.mobile-player-surface-active .smoke-mobile-player) {
+:global(body.mobile-player-surface-active .smoke-mobile-player),
+:global(body.mobile-player-android.mobile-player-surface-active .player-style-surface) {
   opacity: var(--player-surface-reveal, 1) !important;
   transition: none !important;
   animation: none !important;
@@ -2229,6 +2238,17 @@ $spring-smooth: cubic-bezier(0.32, 0.72, 0, 1);
   pointer-events: none;
 }
 
+.player-morph-layer-android {
+  inset: 0;
+  border-radius: 32px;
+  transform-origin: top left;
+  will-change: transform;
+}
+
+.player-morph-layer-android .player-morph-skin {
+  display: none;
+}
+
 .player-morph-fill,
 .player-morph-skin {
   position: absolute;
@@ -2245,27 +2265,36 @@ $spring-smooth: cubic-bezier(0.32, 0.72, 0, 1);
 
 /* 转场期全屏播放面：背景透明（由胶囊放大层承担）+ 内容被胶囊矩形 clip-path
  * 裁切、随 progress 放大逐步揭示；open 态（morphing 移除）裁切与透明一并解除 */
-:global(body.mobile-player-surface-morphing .n-drawer-container:has(#mobile-drawer-target)),
-:global(body.mobile-player-surface-morphing #mobile-drawer-target.default-player-v2),
-:global(body.mobile-player-surface-morphing .error-mobile-player),
-:global(body.mobile-player-surface-morphing .stage-mobile-player),
-:global(body.mobile-player-surface-morphing .rain-mobile-player),
-:global(body.mobile-player-surface-morphing .star-chart-player),
-:global(body.mobile-player-surface-morphing .word-cloud-mobile-player),
-:global(body.mobile-player-surface-morphing .eerie-mobile-player),
-:global(body.mobile-player-surface-morphing .neon-mobile-player),
-:global(body.mobile-player-surface-morphing .smoke-mobile-player) {
+:global(
+  body.mobile-player-surface-morphing:not(.mobile-player-android)
+    .n-drawer-container:has(#mobile-drawer-target)
+),
+:global(
+  body.mobile-player-surface-morphing:not(.mobile-player-android)
+    #mobile-drawer-target.default-player-v2
+),
+:global(body.mobile-player-surface-morphing:not(.mobile-player-android) .error-mobile-player),
+:global(body.mobile-player-surface-morphing:not(.mobile-player-android) .stage-mobile-player),
+:global(body.mobile-player-surface-morphing:not(.mobile-player-android) .rain-mobile-player),
+:global(body.mobile-player-surface-morphing:not(.mobile-player-android) .star-chart-player),
+:global(body.mobile-player-surface-morphing:not(.mobile-player-android) .word-cloud-mobile-player),
+:global(body.mobile-player-surface-morphing:not(.mobile-player-android) .eerie-mobile-player),
+:global(body.mobile-player-surface-morphing:not(.mobile-player-android) .neon-mobile-player),
+:global(body.mobile-player-surface-morphing:not(.mobile-player-android) .smoke-mobile-player) {
   background: transparent !important;
 }
 
-:global(body.mobile-player-surface-morphing #mobile-drawer-target.default-player-v2),
-:global(body.mobile-player-surface-morphing .stage-mobile-player),
-:global(body.mobile-player-surface-morphing .rain-mobile-player),
-:global(body.mobile-player-surface-morphing .star-chart-player),
-:global(body.mobile-player-surface-morphing .word-cloud-mobile-player),
-:global(body.mobile-player-surface-morphing .eerie-mobile-player),
-:global(body.mobile-player-surface-morphing .neon-mobile-player),
-:global(body.mobile-player-surface-morphing .smoke-mobile-player) {
+:global(
+  body.mobile-player-surface-morphing:not(.mobile-player-android)
+    #mobile-drawer-target.default-player-v2
+),
+:global(body.mobile-player-surface-morphing:not(.mobile-player-android) .stage-mobile-player),
+:global(body.mobile-player-surface-morphing:not(.mobile-player-android) .rain-mobile-player),
+:global(body.mobile-player-surface-morphing:not(.mobile-player-android) .star-chart-player),
+:global(body.mobile-player-surface-morphing:not(.mobile-player-android) .word-cloud-mobile-player),
+:global(body.mobile-player-surface-morphing:not(.mobile-player-android) .eerie-mobile-player),
+:global(body.mobile-player-surface-morphing:not(.mobile-player-android) .neon-mobile-player),
+:global(body.mobile-player-surface-morphing:not(.mobile-player-android) .smoke-mobile-player) {
   /* 裁切矩形由 JS 逐帧写入 body 变量（与 morph 层三段几何+阻尼伸长一致）；
    * 挂 body 保证 Teleport 到 body 的播放面（drawer 容器路径）同样可达 */
   clip-path: inset(

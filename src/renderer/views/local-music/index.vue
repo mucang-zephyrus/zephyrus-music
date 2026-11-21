@@ -73,7 +73,7 @@
       </div>
 
       <!-- Content -->
-      <div v-else-if="!localMusicStore.scanning" class="content-area">
+      <div v-else-if="localMusicStore.musicList.length" class="content-area">
         <!-- Songs tab -->
         <template v-if="activeTab === 'songs'">
           <div v-if="displayedSongResults.length === 0" class="no-results">
@@ -210,11 +210,11 @@ import {
   unregisterMobileTopbarAction,
   unregisterMobileTopbarPresentation
 } from '@/composables/useMobileTopbarMenu';
+import { pickLocalAudioFolder } from '@/services/localMusicNative';
 import { useLocalMusicStore } from '@/store/modules/localMusic';
 import { usePlayerStore } from '@/store/modules/player';
 import type { LocalMusicEntry } from '@/types/localMusic';
 import type { SongResult } from '@/types/music';
-
 import { parseAudioFileMetadata } from '@/utils/audioMetadata';
 import type { SortKey } from '@/utils/localMusicUtils';
 import { filterByKeyword, sortMusicList, toSongResult } from '@/utils/localMusicUtils';
@@ -233,8 +233,7 @@ const isMobileNative = true;
 // ==================== 网页版:本地音频文件导入 + 拖拽 ====================
 // 会话级能力(blob URL 刷新失效):条目入 IndexedDB 但标记 fileUrl,
 // 播放走 blob URL;刷新后这些条目自动清除
-const isWebBrowser =
-  typeof window !== 'undefined' && !(window as any).AndroidNative;
+const isWebBrowser = typeof window !== 'undefined' && !(window as any).AndroidNative;
 const dropActive = ref(false);
 const audioFileInput = ref<HTMLInputElement | null>(null);
 const sessionFiles = ref<Set<string>>(new Set());
@@ -516,29 +515,25 @@ function enterDetailView(type: 'artist' | 'album', name: string): void {
 
 // ==================== Folder picker ====================
 async function handleAddFolder(): Promise<void> {
-  // 纯浏览器环境（Web 版）没有文件夹访问能力
-  if (!(window as any).AndroidNative) {
-    message.warning('网页版暂不支持扫描本地音乐，请使用客户端');
-    return;
-  }
-  if (isMobileNative) {
-    // 移动端：使用 NativeBridge 的文件夹选择器
-    (window as any).AndroidNative.pickAudioFolder();
-    // 等待用户选择文件夹（回调由 window.__localMusicFolderPicked 触发）
-    const treeUri = await waitForFolderPick();
-    if (!treeUri) {
-      message.error('未选择文件夹');
-      return;
-    }
+  if (localMusicStore.scanning || isWebBrowser) return;
+  try {
+    const treeUri = await pickLocalAudioFolder();
+    if (!treeUri) return;
     localMusicStore.addFolder(treeUri);
-    await localMusicStore.scanFolders();
-    message.success(t('localMusic.scanComplete'));
-    return;
+    if (await localMusicStore.scanFolders([treeUri])) message.success(t('localMusic.scanComplete'));
+  } catch (error) {
+    console.error('选择本地音乐文件夹失败:', error);
+    message.error('无法打开文件夹选择器');
   }
 }
 
-function handleRemoveFolder(folder: string): void {
-  localMusicStore.removeFolder(folder);
+async function handleRemoveFolder(folder: string): Promise<void> {
+  try {
+    await localMusicStore.removeFolder(folder);
+  } catch (error) {
+    console.error('移除本地音乐文件夹失败:', error);
+    message.error('移除文件夹失败，请重试');
+  }
 }
 
 async function handleScan(): Promise<void> {
@@ -546,8 +541,7 @@ async function handleScan(): Promise<void> {
     await handleAddFolder();
     return;
   }
-  await localMusicStore.scanFolders();
-  if (isMobileNative) {
+  if (await localMusicStore.scanFolders()) {
     message.success(t('localMusic.scanComplete'));
   }
 }
@@ -557,30 +551,17 @@ async function handlePlaySong(song: SongResult): Promise<void> {
   await playerStore.setPlay(song);
 }
 
-// ==================== Mobile folder picker callback ====================
-let folderPickerResolver: ((treeUri: string | null) => void) | null = null;
-
-function waitForFolderPick(): Promise<string | null> {
-  return new Promise((resolve) => {
-    folderPickerResolver = resolve;
-  });
-}
-
-// Register global callback for folder picker result
-if (typeof window !== 'undefined') {
-  (window as any).__localMusicFolderPicked = (treeUri: string | null) => {
-    if (folderPickerResolver) {
-      folderPickerResolver(treeUri);
-      folderPickerResolver = null;
-    }
-  };
-}
-
 // ==================== Lifecycle ====================
 onMounted(async () => {
   if (!isMobileNative) return;
-  await localMusicStore.loadFromCache();
   syncTopbarActions();
+  try {
+    await localMusicStore.restoreLibrary();
+    syncTopbarActions();
+  } catch (error) {
+    console.error('加载本地曲库失败:', error);
+    message.error('无法加载本地曲库，请重试');
+  }
 });
 
 onBeforeUnmount(() => {
@@ -588,17 +569,7 @@ onBeforeUnmount(() => {
   unregisterMobileTopbarAction(`${topbarActionPrefix}-folders`);
   unregisterMobileTopbarAction(`${topbarActionPrefix}-refresh`);
   unregisterMobileTopbarPresentation('/local-music/*');
-  if (typeof window !== 'undefined') {
-    delete (window as any).__localMusicFolderPicked;
-  }
 });
-
-// Watch for mobile folder picker callback to trigger scan
-watch(
-  () => (window as any).__localMusicFolderPicked,
-  () => {},
-  { immediate: false }
-);
 </script>
 
 <style lang="scss" scoped>

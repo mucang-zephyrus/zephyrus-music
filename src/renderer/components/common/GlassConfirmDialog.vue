@@ -74,9 +74,9 @@ function handleCancel() {
 .glass-confirm-card {
   width: min(88vw, 340px);
   padding: 24px 20px 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--floating-line);
   border-radius: 20px;
-  background: #1c1c20;
+  background: var(--floating-surface);
   box-shadow:
     0 16px 48px rgba(0, 0, 0, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -84,7 +84,7 @@ function handleCancel() {
 
 .confirm-title {
   margin: 0 0 8px;
-  color: #f5f5f7;
+  color: var(--floating-text);
   font-size: 17px;
   font-weight: 700;
   text-align: center;
@@ -92,7 +92,7 @@ function handleCancel() {
 
 .confirm-message {
   margin: 0 0 20px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--floating-muted);
   font-size: 13px;
   line-height: 1.6;
   text-align: center;
@@ -121,8 +121,8 @@ function handleCancel() {
 }
 
 .action-btn.secondary {
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--floating-text);
+  background: var(--floating-control);
 }
 
 .action-btn.primary {

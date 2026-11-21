@@ -4,6 +4,7 @@
       <template #description>
         <div class="flex flex-wrap items-center gap-2">
           <span>{{ updateInfo.currentVersion }}</span>
+          <span v-if="IS_TEST_BUILD" class="test-version-badge">测试版</span>
           <n-tag v-if="updateInfo.hasUpdate" type="success">
             {{ t('settings.about.hasUpdate') }} {{ updateInfo.latestVersion }}
           </n-tag>
@@ -20,6 +21,24 @@
         </div>
       </template>
     </setting-item>
+
+    <setting-item v-if="IS_TEST_BUILD && !isAndroidNative()" title="Android 测试包">
+      <template #action>
+        <a v-if="testDownload" :href="testDownload" download
+          >下载 APK <i class="ri-download-line"
+        /></a>
+        <span v-else>暂时无法获取下载链接</span>
+      </template>
+    </setting-item>
+
+    <setting-item v-if="IS_TEST_BUILD" title="测试人员鸣谢">
+      <template #action><s-btn @click="editingTesterCredit = true">管理展示资料</s-btn></template>
+    </setting-item>
+    <test-version-notice
+      v-if="IS_TEST_BUILD && editingTesterCredit"
+      edit
+      @close="editingTesterCredit = false"
+    />
 
     <setting-item
       :title="t('settings.about.author')"
@@ -159,13 +178,15 @@
 
 <script setup lang="ts">
 import { marked } from 'marked';
-import { inject, ref } from 'vue';
+import { inject, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { type FeedbackResult, type FeedbackType, submitFeedback } from '@/api/feedback';
+import TestVersionNotice from '@/components/common/TestVersionNotice.vue';
 import { openUpdateModal } from '@/composables/useUpdateModal';
-
-import { checkUpdate, UpdateResult } from '@/utils/update';
+import { isAndroidNative } from '@/services/androidNative';
+import { APP_VERSION, IS_TEST_BUILD } from '@/utils/appVersion';
+import { checkUpdate, getLatestReleaseInfo, UpdateResult } from '@/utils/update';
 
 import licenseText from '../../../../../LICENSE?raw';
 import config from '../../../../../package.json';
@@ -180,6 +201,14 @@ const { t } = useI18n();
 const message = inject(SETTINGS_MESSAGE_KEY)!;
 
 const checking = ref(false);
+const testDownload = ref('');
+const editingTesterCredit = ref(false);
+onMounted(async () => {
+  if (IS_TEST_BUILD && !isAndroidNative()) {
+    const release = await getLatestReleaseInfo();
+    testDownload.value = release?.assets[0]?.browser_download_url || '';
+  }
+});
 
 // 内嵌内容弹窗
 const modalVisible = ref(false);
@@ -198,7 +227,7 @@ function closeModal() {
 const webUpdateInfo = ref<UpdateResult>({
   hasUpdate: false,
   latestVersion: '',
-  currentVersion: `v${config.version}`,
+  currentVersion: `v${APP_VERSION}`,
   releaseInfo: null
 });
 
@@ -207,8 +236,7 @@ const updateInfo = webUpdateInfo;
 const checkForUpdates = async (isClick = false) => {
   checking.value = true;
   try {
-
-    const result = await checkUpdate(config.version);
+    const result = await checkUpdate(APP_VERSION);
     if (result) {
       webUpdateInfo.value = result;
       if (result.hasUpdate) {
@@ -231,7 +259,6 @@ const checkForUpdates = async (isClick = false) => {
 };
 
 const openReleasePage = () => {
-
   // 移动端：打开应用内更新弹窗（展示更新内容 + 应用内下载安装）
   openUpdateModal(updateInfo.value);
 };
@@ -274,7 +301,7 @@ async function submitFeedbackAction() {
       type: feedbackType.value,
       content: feedbackContent.value.trim(),
       contact: feedbackContact.value.trim() || undefined,
-      appVersion: config.version,
+      appVersion: APP_VERSION,
       device: navigator.userAgent || 'unknown',
       osVersion: navigator.platform || 'unknown'
     });
@@ -295,6 +322,19 @@ defineExpose({ checkForUpdates });
 </script>
 
 <style scoped>
+.test-version-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  color: color-mix(in srgb, var(--m-text-primary, currentColor) 55%, var(--accent-color));
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 .feedback-type-btn {
   flex: 1;
   padding: 6px 10px;

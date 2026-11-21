@@ -91,6 +91,40 @@
           <input v-model.number="local.impactDistress" type="range" min="0" max="100" step="1" />
         </label>
         <label class="setting-row">
+          <span>{{ tr('player.impact.reactiveDistress', '整句纹理随音乐变化') }}</span>
+          <input v-model="local.impactReactiveDistress" type="checkbox" />
+        </label>
+        <label class="setting-row">
+          <span>{{ tr('player.impact.jitter', '歌词抖动') }}</span>
+          <input v-model="local.impactJitter" type="checkbox" />
+        </label>
+        <label class="range-row">
+          <span
+            >{{ tr('player.impact.lyricSaturation', '歌词颜色饱和度') }}
+            {{ local.impactLyricSaturation }}%</span
+          >
+          <input
+            v-model.number="local.impactLyricSaturation"
+            type="range"
+            min="0"
+            max="200"
+            step="1"
+          />
+        </label>
+        <label class="range-row">
+          <span
+            >{{ tr('player.impact.layoutSaturation', '布局颜色饱和度') }}
+            {{ local.impactLayoutSaturation }}%</span
+          >
+          <input
+            v-model.number="local.impactLayoutSaturation"
+            type="range"
+            min="0"
+            max="200"
+            step="1"
+          />
+        </label>
+        <label class="setting-row">
           <span>{{ tr('player.impact.fill', '歌词填满屏幕') }}</span>
           <input v-model="local.impactFill" type="checkbox" />
         </label>
