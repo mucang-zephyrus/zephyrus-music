@@ -5,9 +5,11 @@ import {
   fallbackPageChrome,
   getPageChromeForCover,
   pageChromeVariables,
-  resolvePageChrome} from '@/utils/pageChrome';
+  resolvePageChrome
+} from '@/utils/pageChrome';
 
-vi.mock('@/utils/linearColor', () => ({
+vi.mock('@/utils/linearColor', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/utils/linearColor')>()),
   getImageLinearBackground: vi.fn(async () => ({
     backgroundColor: 'linear-gradient(#333, #222)',
     primaryColor: 'rgb(30, 30, 34)'
@@ -57,6 +59,28 @@ describe('getPageChromeForCover', () => {
     expect(first).toBe(second);
     expect(getImageLinearBackground).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    ['T001', '001UeB5t0QikN1'],
+    ['T002', '0034iwRd2KpQBu']
+  ])('samples standard QQ %s art through the gateway', async (type, mid) => {
+    await getPageChromeForCover(
+      `https://y.gtimg.cn/music/photo_new/${type}R500x500M000${mid}.jpg?n=1`
+    );
+    expect(getImageLinearBackground).toHaveBeenCalledWith(
+      expect.stringContaining(`/platform/qq/cover-sample?type=${type}&mid=${mid}`)
+    );
+  });
+
+  it.each(['muted', 'vivid'] as const)(
+    'skips pixel reads for QQ album art (%s)',
+    async (strategy) => {
+      expect(await getPageChromeForCover('https://y.gtimg.cn/music/cover.jpg', strategy)).toEqual(
+        fallbackPageChrome(strategy)
+      );
+      expect(getImageLinearBackground).not.toHaveBeenCalled();
+    }
+  );
 
   it('falls back gracefully when color extraction fails', async () => {
     vi.mocked(getImageLinearBackground).mockRejectedValueOnce(new Error('cors'));

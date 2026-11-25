@@ -255,6 +255,7 @@ import { artistList, nowTime, playMusic } from '@/hooks/MusicHook';
 import { useCoverColor } from '@/hooks/useCoverColor';
 import { usePlayerStore } from '@/store/modules/player';
 import { useStyleEngineStore } from '@/store/modules/styleEngine';
+import { loadCoverSample } from '@/utils/coverSample';
 import { ensureFontLoaded } from '@/utils/fontLoader';
 import { shouldSkipMobilePlayerFrame } from '@/utils/mobilePlayerPerformance';
 import { acquirePlayerResource } from '@/utils/playerResourceDiagnostics';
@@ -672,16 +673,6 @@ function openPlaylist() {
 
 onBeforeUnmount(cancelCoverLongPress);
 
-function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    if (/^https?:/i.test(url)) image.crossOrigin = 'anonymous';
-    image.onload = () => resolve(image);
-    image.onerror = reject;
-    image.src = url;
-  });
-}
-
 function hashText(value: string): number {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index++) {
@@ -822,7 +813,7 @@ async function renderChart() {
   chartSize = size;
 
   try {
-    const image = await loadImage(coverUrl.value);
+    const image = await loadCoverSample(coverUrl.value);
     if (version !== renderVersion) return;
     sampleCoverTints(image);
   } catch {

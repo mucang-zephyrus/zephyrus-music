@@ -6,6 +6,7 @@ import { usePlayerStore, useRecommendStore } from '@/store';
 import type { SongResult } from '@/types/music';
 import { getImgUrl } from '@/utils';
 import { getImageBackground } from '@/utils/linearColor';
+import { albumPath, qqArtistPath } from '@/utils/qqDetailRoute';
 
 import { dislikeRecommendedSong } from '../api/music';
 import { isServerSongResult } from '../api/serverSongs';
@@ -210,21 +211,18 @@ export function useSongItem(props: { item: SongResult; canRemove?: boolean }) {
   const handleArtistClick = (id: number | string) => {
     // QQ/酷狗等跨平台歌曲：歌手 id 为非数字 mid 时跳平台歌手页（网关 qq/singer/songs）
     const platform = (props.item as any).platform;
-    if (platform && platform !== 'netease' && typeof id === 'string' && !/^\d+$/.test(id)) {
+    if (platform === 'qq') {
       const artist = (props.item.ar || props.item.artists || []).find(
-        (item) => String(item.id) === id
+        (item) => String(item.id) === String(id)
       );
       const name = artist?.name || '';
-      navigate(
-        `/artist/detail/${id}?platform=qq&name=${encodeURIComponent(name)}`
-      );
+      navigate(qqArtistPath(id, name));
       return;
     }
     navigateToArtist(Number(id), {
       name:
-        (props.item.ar || props.item.artists || []).find(
-          (item) => String(item.id) === String(id)
-        )?.name || ''
+        (props.item.ar || props.item.artists || []).find((item) => String(item.id) === String(id))
+          ?.name || ''
     });
   };
 
@@ -243,7 +241,7 @@ export function useSongItem(props: { item: SongResult; canRemove?: boolean }) {
     }
     // 无有效专辑 id(如纯本地文件缺元数据)时不跳转,避免落到无效页面
     if (id === -1 || id === 0 || id === '') return;
-    navigate(`/music-list/${id}?type=album`);
+    navigate(albumPath(id, props.item.platform));
   };
 
   return {

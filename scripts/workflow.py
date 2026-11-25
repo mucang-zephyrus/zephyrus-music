@@ -293,7 +293,8 @@ def main():
             item.add_argument('--notes')
             item.add_argument('--test-version')
     item = sub.add_parser('webtest')
-    item.add_argument('directory')
+    item.add_argument('directory', nargs='?')
+    item.add_argument('--web-only', action='store_true')
     sub.add_parser('doctor')
     sub.add_parser('test')
     item = sub.add_parser('publish')
@@ -314,7 +315,23 @@ def main():
     elif args.action == 'publish':
         publish(args)
     elif args.action == 'webtest':
-        run([sys.executable, ROOT / 'deploy_web.py', '--test-release', args.directory])
+        if args.web_only == bool(args.directory):
+            parser.error('webtest requires either --web-only or a signed release directory')
+        if args.web_only:
+            from urllib.request import urlopen
+
+            with urlopen(TEST_BASE_URL + '/latest.json', timeout=20) as response:
+                manifest = json.load(response)
+            version = manifest['tag_name'].removeprefix('v')
+            test_version(version)
+            code = manifest['version_code']
+            if type(code) is not int or code <= 0:
+                raise RuntimeError('Published test APK has an invalid versionCode')
+            npm('run', 'build:web', env={**os.environ, 'ZEPHYRUS_RELEASE_CHANNEL': 'test',
+                                        'ZEPHYRUS_TEST_VERSION': version, 'ZEPHYRUS_TEST_VERSION_CODE': str(code)})
+            run([sys.executable, ROOT / 'deploy_web.py', '--test-web'])
+        else:
+            run([sys.executable, ROOT / 'deploy_web.py', '--test-release', args.directory])
     else:
         if args.install:
             npm('ci')

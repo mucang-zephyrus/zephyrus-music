@@ -123,6 +123,7 @@ import { usePlayerStore } from '@/store/modules/player';
 import { useSearchStore } from '@/store/modules/search';
 import type { SongResult } from '@/types/music';
 import { getImgUrl } from '@/utils';
+import { platformAccountStorageKey } from '@/utils/appVersion';
 import {
   createSongSearchResults,
   type SearchSupplementSource,
@@ -594,15 +595,17 @@ const triggerUnlockSearch = async (kw: string, search: SongSearchResults) => {
 
 const triggerPlatformSearch = async (kw: string, search: SongSearchResults) => {
   const platforms = ['qq', 'kugou'] as const;
-  await Promise.all(platforms.map(async (platform) => {
-    if (!localStorage.getItem(`platform-cookie-${platform}`)) return;
-    try {
-      const songs = await searchPlatformMusic(platform, kw, 15);
-      mergeSupplement(search, platform, songs);
-    } catch (e) {
-      console.error(`[${platform} 搜索失败]:`, e);
-    }
-  }));
+  await Promise.all(
+    platforms.map(async (platform) => {
+      if (!localStorage.getItem(platformAccountStorageKey('cookie', platform))) return;
+      try {
+        const songs = await searchPlatformMusic(platform, kw, 15);
+        mergeSupplement(search, platform, songs);
+      } catch (e) {
+        console.error(`[${platform} 搜索失败]:`, e);
+      }
+    })
+  );
 };
 
 // 滚动加载更多

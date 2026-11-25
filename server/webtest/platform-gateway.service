@@ -1,0 +1,23 @@
+[Unit]
+Description=Zephyrus test-site platform login gateway
+After=network-online.target
+
+[Service]
+DynamicUser=yes
+WorkingDirectory=/opt/zephyrus-platform-webtest/current
+StateDirectory=zephyrus-platform-webtest
+ExecStart=/usr/bin/node server-platform-login.js
+Environment=HOST=127.0.0.1 PORT=3052 QQ_API_PORT=3211 NODE_ENV=production
+Environment=ALLOWED_ORIGINS=https://mucang.xyz
+Environment=QQ_AUTH_STATE_PATH=/var/lib/zephyrus-platform-webtest/qq-device.json
+Environment=QQ_AUTH_SESSION_PATH=/var/lib/zephyrus-platform-webtest/qq-session.enc
+EnvironmentFile=/etc/zephyrus-platform-webtest.env
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+NoNewPrivileges=yes
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

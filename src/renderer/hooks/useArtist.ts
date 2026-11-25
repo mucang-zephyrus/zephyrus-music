@@ -1,8 +1,8 @@
 import { beginPlaylistOpen } from '@/composables/usePlaylistOpenTransition';
-
 import { useOverlayNavigate } from '@/hooks/useOverlayNavigate';
-import { rememberFlightRect } from '@/utils/flightRectMemory';
 import { getImgUrl } from '@/utils';
+import { coverSampleUrl } from '@/utils/coverSample';
+import { rememberFlightRect } from '@/utils/flightRectMemory';
 
 /** 歌手页 hero 预填充档案：入口页尽量携带，歌手页首帧即时渲染（无全页骨架） */
 export interface ArtistPrefillProfile {
@@ -41,7 +41,8 @@ export const useArtist = () => {
    */
   const averageColorOf = (url: string): Promise<string | undefined> =>
     new Promise((resolve) => {
-      if (!url) {
+      const sample = coverSampleUrl(getImgUrl(url, '50y50'));
+      if (!sample) {
         resolve(undefined);
         return;
       }
@@ -70,7 +71,11 @@ export const useArtist = () => {
             b += data[i + 2];
           }
           const hex = `#${[r, g, b]
-            .map((sum) => Math.round(sum / count).toString(16).padStart(2, '0'))
+            .map((sum) =>
+              Math.round(sum / count)
+                .toString(16)
+                .padStart(2, '0')
+            )
             .join('')}`;
           resolve(hex);
         } catch {
@@ -78,7 +83,7 @@ export const useArtist = () => {
         }
       };
       img.onerror = () => resolve(undefined);
-      img.src = getImgUrl(url, '50y50');
+      img.src = sample;
     });
 
   /**
@@ -90,10 +95,7 @@ export const useArtist = () => {
   const navigateToArtist = async (id: number | string, profile?: ArtistPrefillProfile) => {
     try {
       if (profile && (profile.name || profile.avatar)) {
-        sessionStorage.setItem(
-          ARTIST_PREFILL_KEY,
-          JSON.stringify({ ...profile, id: String(id) })
-        );
+        sessionStorage.setItem(ARTIST_PREFILL_KEY, JSON.stringify({ ...profile, id: String(id) }));
       } else {
         sessionStorage.removeItem(ARTIST_PREFILL_KEY);
       }

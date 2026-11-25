@@ -37,6 +37,7 @@ import { useI18n } from 'vue-i18n';
 
 import PlatformLogo from '@/components/common/PlatformLogo.vue';
 import type { MusicPlatform } from '@/store/modules/platformAccounts';
+import { platformAccountStorageKey } from '@/utils/appVersion';
 
 const props = defineProps<{
   platform: MusicPlatform;
@@ -138,7 +139,7 @@ const handleLogin = async () => {
         throw new Error('哔哩哔哩 Cookie 缺少 SESSDATA');
       }
 
-      localStorage.setItem(`platform-cookie-${props.platform}`, cookie);
+      localStorage.setItem(platformAccountStorageKey('cookie', props.platform), cookie);
 
       message.success(`${props.platformName} Cookie 保存成功`);
       emit(
@@ -175,13 +176,9 @@ const handleLogin = async () => {
 
 // 监听 Cookie 接收（仅网易云）
 
-onMounted(() => {
+onMounted(() => {});
 
-});
-
-onBeforeUnmount(() => {
-
-});
+onBeforeUnmount(() => {});
 </script>
 
 <style lang="scss" scoped>

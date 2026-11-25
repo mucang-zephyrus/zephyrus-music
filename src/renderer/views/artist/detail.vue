@@ -597,6 +597,7 @@ import { usePlayerStore } from '@/store';
 import { IArtist } from '@/types/artist';
 import { type PosterSubject } from '@/types/share';
 import { calculateAnimationDelay, getImgUrl, isMobile } from '@/utils';
+import { loadCoverSample } from '@/utils/coverSample';
 
 defineOptions({
   name: 'ArtistDetail'
@@ -612,11 +613,14 @@ const openTransition = usePlaylistOpenTransition();
 let enteredViaOpenTransition = false;
 const message = useMessage();
 
+import { qqArtistMid } from '@/utils/qqDetailRoute';
+
 const artistId = computed(() => Number(route.params.id));
 // QQ 歌手：路由带 ?platform=qq&singerMID=xx&name=xx（QQ 歌手 mid 是字符串，不走网易云数字 id）
-const isQqArtist = computed(
-  () => route.query.platform === 'qq' && Boolean(String(route.query.singerMID || '').trim())
+const qqMid = computed(() =>
+  qqArtistMid(route.query.platform, route.query.singerMID, route.params.id)
 );
+const isQqArtist = computed(() => Boolean(qqMid.value));
 const activeTab = ref('songs');
 
 const scrollbarRef = ref<any>(null);
@@ -758,13 +762,7 @@ watch(avatarUrl, async (url) => {
     return;
   }
   try {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = getImgUrl(url, '50y50');
-    await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = reject;
-    });
+    const img = await loadCoverSample(getImgUrl(url, '50y50'));
     const canvas = document.createElement('canvas');
     canvas.width = 10;
     canvas.height = 10;
@@ -804,11 +802,11 @@ const openArtistList = (kind: 'songs' | 'albums') => {
   const query = isQqArtist.value
     ? {
         platform: 'qq',
-        singerMID: String(route.query.singerMID || ''),
+        singerMID: qqMid.value,
         name: String(route.query.name || '')
       }
     : undefined;
-  router.push({ path: `/artist/${kind}/${artistId.value}`, query });
+  router.push({ path: `/artist/${kind}/${qqMid.value || artistId.value}`, query });
 };
 
 const briefDesc = ref('');
@@ -914,6 +912,9 @@ let songsObserver: IntersectionObserver | null = null;
 let albumsObserver: IntersectionObserver | null = null;
 
 // 添加上一个ID的引用，用于比较
+const artistKey = computed(() =>
+  isQqArtist.value ? `qq:${qqMid.value}` : String(route.params.id)
+);
 const previousId = ref<string | null>(null);
 
 // 简化缓存机制
@@ -1022,11 +1023,13 @@ const loadArtistInfo = async () => {
 // QQ 歌手：走网关 qq/singer/songs（热门排序，归一化结果已是全量 SongResult，无需二次详情）
 const loadQqArtistInfo = async () => {
   // mid 优先取 query.singerMID，兼容直接把 mid 放进路径参数的入口
-  const mid = String(route.query.singerMID || route.params.id || '').trim();
+  const mid = qqMid.value;
   const fallbackName = String(route.query.name || '').trim();
   const cacheKey = `artist_qq_${mid}`;
   if (artistDataCache.has(cacheKey)) {
     const cachedData = artistDataCache.get(cacheKey);
+    loading.value = false;
+    albums.value = [];
     artistInfo.value = cachedData.artistInfo;
     songs.value = cachedData.songs;
     songPage.value = cachedData.songPage;
@@ -1038,6 +1041,7 @@ const loadQqArtistInfo = async () => {
       scrollbarRef.value?.scrollTo(0, 0);
     });
     const result = await fetchQqSingerHotSongs(mid, 50, 0);
+    if (mid !== qqMid.value) return;
     artistInfo.value = {
       id: 0,
       name: result.artist.name || fallbackName || '未知歌手',
@@ -1054,9 +1058,13 @@ const loadQqArtistInfo = async () => {
       songPage: { ...songPage.value }
     });
   } catch (error) {
+    if (mid !== qqMid.value) return;
+    songs.value = [];
+    artistInfo.value = undefined;
+    message.error(t('common.loadFailed'));
     console.error('加载 QQ 歌手信息失败:', error);
   } finally {
-    loading.value = false;
+    if (mid === qqMid.value) loading.value = false;
   }
 };
 
@@ -1204,10 +1212,10 @@ const openArtistSearch = () => {
   const query: Record<string, string> = { keyword: searchKeyword.value || '' };
   if (isQqArtist.value) {
     query.platform = 'qq';
-    query.singerMID = String(route.query.singerMID || '');
+    query.singerMID = qqMid.value;
     query.name = String(route.query.name || '');
   }
-  router.push({ path: `/artist/songs/${artistId.value}`, query });
+  router.push({ path: `/artist/songs/${qqMid.value || artistId.value}`, query });
 };
 
 const syncArtistTopbar = () => {
@@ -1438,15 +1446,23 @@ watch(searchKeyword, () => {
   });
 });
 
+watch(artistKey, (key) => {
+  if (route.name !== 'artistDetail' || previousId.value === key) return;
+  previousId.value = key;
+  prefillProfile.value = takeArtistPrefill(String(route.params.id));
+  activeTab.value = 'songs';
+  void loadArtistInfo();
+});
+
 onActivated(() => {
   // 确保当前路由是艺术家详情页
   if (route.name === 'artistDetail') {
     const currentId = route.params.id as string;
-    const sameArtist = previousId.value === currentId;
+    const sameArtist = previousId.value === artistKey.value;
 
     // 首次加载或ID变化时加载数据（换歌手时刷新预填充）
-    if (!previousId.value || previousId.value !== currentId) {
-      previousId.value = currentId;
+    if (!sameArtist) {
+      previousId.value = artistKey.value;
       activeTab.value = 'songs';
       prefillProfile.value = takeArtistPrefill(currentId);
       loadArtistInfo();
@@ -1478,7 +1494,7 @@ onMounted(() => {
   }
   // 首次挂载时加载数据
   if (route.params.id) {
-    previousId.value = route.params.id as string;
+    previousId.value = artistKey.value;
     loadArtistInfo();
     setupObservers();
     syncArtistTopbar();

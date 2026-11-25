@@ -90,7 +90,9 @@ export interface PlatformLoginFailure {
 }
 
 /** 把网关/上游失败映射为用户可读的错误分类（不再透传调试 body） */
-export function classifyPlatformLoginFailure(input: PlatformLoginFailureInput): PlatformLoginFailure {
+export function classifyPlatformLoginFailure(
+  input: PlatformLoginFailureInput
+): PlatformLoginFailure {
   const code = Number(input.upstreamCode);
   const reason = String(input.failureReason || '');
   const hint = String(input.failureHint || '').trim();
@@ -103,12 +105,15 @@ export function classifyPlatformLoginFailure(input: PlatformLoginFailureInput): 
         '该账号的登录设备数已达上限。请打开 QQ 音乐 App → 设置 → 设备管理，移除不用的设备后重新扫码。'
     };
   }
-  if (reason === 'qr-timeout' || /二维码已过期/.test(raw)) {
-    return { kind: 'qr-timeout', userMessage: '二维码已过期，正在刷新，请重新扫码。' };
+  if (reason === 'qr-timeout' || /二维码已过期|^QR code expired[.!]?$/i.test(raw.trim())) {
+    return { kind: 'qr-timeout', userMessage: '二维码已过期，请刷新后重新扫码。' };
   }
   if (input.retryAfterMs && input.retryAfterMs > 0) {
     const seconds = Math.ceil(input.retryAfterMs / 1000);
     return { kind: 'rate-limited', userMessage: `操作太频繁，请约 ${seconds} 秒后再试。` };
+  }
+  if (reason === 'session-busy') {
+    return { kind: 'rate-limited', userMessage: '已有 QQ 登录正在确认，请稍后重试。' };
   }
   if (Number(input.status) === 401 || /登录已失效|session.*expired/i.test(raw)) {
     return { kind: 'session-expired', userMessage: '登录状态已失效，请重新扫码。' };

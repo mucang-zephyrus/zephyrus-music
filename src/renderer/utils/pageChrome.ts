@@ -7,6 +7,7 @@
  * 注意取色对象是「打开的页面封面」，不是当前播放歌曲的封面（那是 useCoverColor 的职责）。
  */
 import { getImgUrl } from '@/utils';
+import { coverSampleUrl } from '@/utils/coverSample';
 import { getImageLinearBackground } from '@/utils/linearColor';
 import { pickEdgeDominantColor } from '@/utils/neutralColor';
 import {
@@ -119,7 +120,8 @@ export async function getPageChromeForCover(
   coverUrl: string | null | undefined,
   strategy: PageChromeStrategy = 'muted'
 ): Promise<PageChrome> {
-  const url = String(coverUrl || '');
+  const url = coverSampleUrl(getImgUrl(coverUrl || '', '100y100'));
+  if (!url) return fallbackPageChrome(strategy);
   const key = `${url}|${strategy}`;
   const cached = chromeCache.get(key);
   if (cached) return cached;
@@ -127,10 +129,10 @@ export async function getPageChromeForCover(
   let chrome = fallbackPageChrome(strategy);
   try {
     if (strategy === 'vivid') {
-      const edge = await extractEdgeDominantColor(getImgUrl(url, '100y100'));
+      const edge = await extractEdgeDominantColor(url);
       chrome = resolvePageChrome(edge || FALLBACK_PRIMARY, 'vivid');
     } else {
-      const { primaryColor } = await getImageLinearBackground(getImgUrl(url, '100y100'));
+      const { primaryColor } = await getImageLinearBackground(url);
       const primary = parseRepresentativeCssColor(primaryColor) || FALLBACK_PRIMARY;
       chrome = resolvePageChrome(primary, 'muted');
     }

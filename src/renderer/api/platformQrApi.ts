@@ -12,7 +12,11 @@
 import axios, { type AxiosError } from 'axios';
 
 import type { SongResult } from '@/types/music';
-
+import {
+  IS_WEB_TEST_SITE,
+  platformAccountStorageKey,
+  testGatewayForOrigin
+} from '@/utils/appVersion';
 import {
   classifyPlatformLoginFailure,
   parseQqChannels,
@@ -30,6 +34,7 @@ export type QqApiChannel = QqLoginProvider | 'qqmusic';
 export interface QrCreateResult {
   platform: LoginPlatform;
   provider: QqLoginProvider | 'qqmusic' | 'kugou' | 'bilibili';
+  transport: 'legacy' | 'qq-api' | 'kugou-api';
   qrUrl: string;
   key: string;
   expiredAt: number;
@@ -61,6 +66,8 @@ export interface PlatformAccountData {
   favorites: any[];
   albums: any[];
   history: any[];
+  playlistError?: string;
+  profileError?: string;
 }
 
 export interface PlatformPlaylistTracks {
@@ -81,6 +88,14 @@ const gatewayRequest = axios.create({
   baseURL: gatewayBaseURL,
   timeout: 15000
 });
+
+if (IS_WEB_TEST_SITE) {
+  const testGateway = testGatewayForOrigin(window.location.origin);
+  gatewayRequest.interceptors.request.use((config) => {
+    if (/^\/platform\/(?:qq|kugou)\//.test(config.url ?? '')) config.baseURL = testGateway;
+    return config;
+  });
+}
 
 function gatewayError(error: unknown, action: string): Error {
   const axiosError = error as AxiosError<{ msg?: string }>;
@@ -127,6 +142,7 @@ async function createQrViaServer(
     return {
       platform,
       provider: normalizePlatformQrProvider(platform, json.data.provider, provider),
+      transport: 'legacy',
       qrUrl: json.data.qrUrl || json.data.url,
       key: json.data.qrcodeKey || json.data.key,
       expiredAt: json.data.expiredAt || Date.now() + 180000
@@ -223,43 +239,63 @@ export async function probeQqLoginChannels(): Promise<QqLoginChannels | null> {
 }
 
 /** 新链 QQ 扫码创建：login/qr/key → login/qr/create（响应形态 data.unikey / data.qrimg） */
-async function createQqApiQr(provider: QqLoginProvider | 'qqmusic'): Promise<QrCreateResult> {
+async function createQqApiQr(provider: QqApiChannel): Promise<QrCreateResult> {
   try {
     const keyRes = await gatewayRequest.get('/platform/qq/api/login/qr/key', {
+      params: { channel: provider, noCache: Date.now() },
       timeout: 10000
     });
     const keyData = keyRes.data?.data;
-    // qq-music-api 的 key 字段是 unikey；channel 参数决定登录通道（默认 qqmusic 通用码）
+    // 上游在发放 key 时绑定扫码通道。
     const unikey = keyData?.unikey || keyData?.key;
     if (keyRes.data?.code !== 200 || !unikey) {
       throw new Error(keyRes.data?.message || 'qq-music-api 二维码 key 获取失败');
     }
     const qrRes = await gatewayRequest.get('/platform/qq/api/login/qr/create', {
-      params: { key: unikey },
+      params: { key: unikey, noCache: Date.now() },
       timeout: 10000
     });
     // 响应是 JSON：{code:200, data:{qrimg: dataURL}}（qrCreate.js 恒返回 base64 图）
     const qrUrl = qrRes.data?.data?.qrimg || '';
-    if (!qrUrl) {
+    if (qrRes.data?.code !== 200 || !qrUrl) {
       throw new Error(qrRes.data?.message || 'qq-music-api 二维码生成失败');
     }
     return {
       platform: 'qq',
-      provider: provider === 'qqmusic' ? 'qqmusic' : provider,
+      provider,
+      transport: 'qq-api',
       qrUrl,
       key: unikey,
       expiredAt: Date.now() + 180000
     };
   } catch (error) {
-    throw gatewayError(error, 'QQ 新链二维码创建');
+    const response = (error as AxiosError).response;
+    if (response) {
+      const failure = qqQrFailure(response.data, response.status);
+      if (response.status === 404 || failure.kind === 'qr-timeout') {
+        throw new Error('QQ 二维码会话已不可用，请刷新重试或切换扫码方式。');
+      }
+      throw new Error(failure.userMessage);
+    }
+    throw gatewayError(error, 'QQ 二维码创建');
   }
 }
 
-/** 新链 QQ 轮询：801=等待扫码 802=已扫待确认 803=确认成功（cookie 在 body 顶层）800=过期 */
-async function pollQqApiQr(
-  key: string,
-  provider: QqLoginProvider | 'qqmusic'
-): Promise<QrPollResult> {
+function qqQrFailure(raw: unknown, status?: number) {
+  type Failure = Parameters<typeof classifyPlatformLoginFailure>[0];
+  const body = raw as (Failure & { code?: number; msg?: string; data?: Failure }) | undefined;
+  return classifyPlatformLoginFailure({
+    status: status ?? body?.code,
+    upstreamCode: body?.upstreamCode ?? body?.data?.upstreamCode ?? body?.code,
+    failureReason: body?.failureReason ?? body?.data?.failureReason,
+    failureHint: body?.failureHint ?? body?.data?.failureHint,
+    retryAfterMs: body?.retryAfterMs ?? body?.data?.retryAfterMs,
+    message: body?.message ?? body?.msg ?? body?.data?.message
+  });
+}
+
+/** 800 既可能是过期，也可能是扫码后的登录交换失败。 */
+async function pollQqApiQr(key: string, provider: QqApiChannel): Promise<QrPollResult> {
   try {
     const response = await gatewayRequest.get('/platform/qq/api/login/qr/check', {
       params: { key, noCache: Date.now() },
@@ -268,30 +304,31 @@ async function pollQqApiQr(
     const json = response.data;
     const code = Number(json?.code);
     // qrService.js 语义：801/802/803/800；成功时 cookie 挂在 body 顶层（非 data 内）
-    const providerOut = provider === 'qqmusic' ? 'qqmusic' : provider;
     if (code === 803) {
+      const cookie = json?.cookie || json?.data?.cookie;
+      if (typeof cookie !== 'string' || !/(?:^|;\s*)qqmusic_session=[^;\s]+/.test(cookie)) {
+        return {
+          platform: 'qq',
+          provider,
+          code: 'error',
+          message: 'QQ 扫码已确认，但未收到登录凭据，请重试。'
+        };
+      }
+      const userInfo = await fetchQqApiProfile(cookie, 5000).catch(() => undefined);
       return {
         platform: 'qq',
-        provider: providerOut,
+        provider,
         code: 'success',
         message: '登录成功',
         // stored 模式下网关持有会话；qrCheck 成功时 body.cookie 为会话引用
-        cookie: json?.cookie || json?.data?.cookie || undefined,
-        userInfo: json?.data?.userInfo || undefined
-      };
-    }
-    if (code === 800) {
-      return {
-        platform: 'qq',
-        provider: providerOut,
-        code: 'expired',
-        message: '二维码已过期'
+        cookie,
+        userInfo
       };
     }
     if (code === 802) {
       return {
         platform: 'qq',
-        provider: providerOut,
+        provider,
         code: 'scanned',
         message: '请在手机上确认'
       };
@@ -299,34 +336,39 @@ async function pollQqApiQr(
     if (code === 801) {
       return {
         platform: 'qq',
-        provider: providerOut,
+        provider,
         code: 'waiting',
         message: ''
       };
     }
-    // 结构化失败（20279 设备超限等）交给 classifyPlatformLoginFailure
+    const failure = qqQrFailure(json);
     return {
       platform: 'qq',
-      provider: providerOut,
-      code: 'error',
-      message: classifyPlatformLoginFailure({
-        upstreamCode: json?.data?.upstreamCode ?? code,
-        failureReason: json?.data?.failureReason,
-        failureHint: json?.data?.failureHint,
-        retryAfterMs: json?.data?.retryAfterMs,
-        message: json?.message || json?.msg
-      }).userMessage
+      provider,
+      code: code === 800 && failure.kind === 'qr-timeout' ? 'expired' : 'error',
+      message: failure.userMessage
     };
   } catch (error) {
+    const response = (error as AxiosError).response;
+    if (response && response.status < 500) {
+      const failure = qqQrFailure(response.data, response.status);
+      return {
+        platform: 'qq',
+        provider,
+        code: failure.kind === 'qr-timeout' ? 'expired' : 'error',
+        message: failure.userMessage
+      };
+    }
     throw gatewayError(error, 'QQ 新链登录轮询');
   }
 }
 
 /** 新链酷狗扫码创建（KuGouMusicApi login/qr/key，返回内嵌二维码图） */
-async function createKugouApiQr(): Promise<QrCreateResult> {
+async function createKugouApiQr(): Promise<QrCreateResult | null> {
   try {
     const response = await gatewayRequest.get('/platform/kugou/api/login/qr/key', {
-      timeout: 10000
+      params: { noCache: Date.now() },
+      timeout: 20000
     });
     const json = response.data;
     if (json?.code !== 200 || !json?.data?.qrcode) {
@@ -335,11 +377,15 @@ async function createKugouApiQr(): Promise<QrCreateResult> {
     return {
       platform: 'kugou',
       provider: 'kugou',
-      qrUrl: json.data.qrcode_img || '',
+      transport: 'kugou-api',
+      qrUrl:
+        json.data.qrcode_img ||
+        `https://h5.kugou.com/apps/loginQRCode/html/index.html?qrcode=${encodeURIComponent(json.data.qrcode)}`,
       key: json.data.qrcode,
       expiredAt: Date.now() + 300000
     };
   } catch (error) {
+    if ((error as AxiosError).response?.status === 404) return null;
     throw gatewayError(error, '酷狗二维码创建');
   }
 }
@@ -459,9 +505,8 @@ export async function fetchPlatformPlayUrlViaApi(
 
 // ==================== 统一入口 ====================
 
-/** 新链可用性缓存：一次会话探测一次（qq channels / kugou key 探活） */
+/** QQ 新链能力缓存 */
 let qqApiChannels: QqLoginChannels | null | undefined;
-let kugouApiAvailable: boolean | undefined;
 
 /** qq 新链能力（含三通道列表）；探测失败缓存 null 走旧链 */
 export async function getQqApiChannels(force = false): Promise<QqLoginChannels | null> {
@@ -471,64 +516,41 @@ export async function getQqApiChannels(force = false): Promise<QqLoginChannels |
   return qqApiChannels;
 }
 
-/** 酷狗新链可用性（网关未升级时 false 走旧链） */
-export async function isKugouApiAvailable(force = false): Promise<boolean> {
-  if (kugouApiAvailable === undefined || force) {
-    try {
-      const response = await gatewayRequest.get('/platform/kugou/api/login/qr/key', {
-        timeout: 8000
-      });
-      kugouApiAvailable = response.data?.code === 200;
-    } catch {
-      kugouApiAvailable = false;
-    }
-  }
-  return kugouApiAvailable;
-}
-
 /**
  * 创建平台扫码二维码。
  * 新链优先（qq-music-api / KuGouMusicApi，Folia 移植），探测失败回退旧链：
  */
 export async function createPlatformQr(
   platform: LoginPlatform,
-  provider: QqLoginProvider = 'qq'
+  provider: QqApiChannel = 'qq'
 ): Promise<QrCreateResult> {
   if (platform === 'qq') {
     const channels = await getQqApiChannels();
-    if (channels && channels.configured) {
-      // qqmusic 通用码在后端支持时优先（三 App 都能扫），否则按所选通道
-      const useChannel: QqApiChannel = channels.channels.includes('qqmusic') ? 'qqmusic' : provider;
-      return createQqApiQr(useChannel);
+    if (channels?.configured && channels.channels.includes(provider)) {
+      return createQqApiQr(provider);
     }
+    if (provider === 'qqmusic') throw new Error('当前网关不支持 QQ 音乐通用码');
   }
-  if (platform === 'kugou' && (await isKugouApiAvailable())) {
-    return createKugouApiQr();
+  if (platform === 'kugou') {
+    const qr = await createKugouApiQr();
+    if (qr) return qr;
   }
 
-  return createQrViaServer(platform, provider);
+  return createQrViaServer(platform, provider === 'wechat' ? 'wechat' : 'qq');
 }
 
-/**
- * 轮询平台扫码状态。新链优先，失败回退旧链
- * （provider 值 'qqmusic' 只会出现在新链 key 上——新链创建的 key 走新链轮询）。
- */
-export async function pollPlatformQr(
-  platform: LoginPlatform,
-  key: string,
-  provider: QqLoginProvider = 'qq'
-): Promise<QrPollResult> {
-  if (platform === 'qq') {
-    const channels = await getQqApiChannels();
-    if (channels && channels.configured) {
-      return pollQqApiQr(key, 'qqmusic' as QqApiChannel);
-    }
+/** 只在签发二维码的链路上轮询，不重新探测或回退。 */
+export async function pollPlatformQr(qr: QrCreateResult): Promise<QrPollResult> {
+  const { platform, key, provider, transport } = qr;
+  if (
+    transport === 'qq-api' &&
+    (provider === 'qq' || provider === 'wechat' || provider === 'qqmusic')
+  ) {
+    return pollQqApiQr(key, provider);
   }
-  if (platform === 'kugou' && (await isKugouApiAvailable())) {
-    return pollKugouApiQr(key);
-  }
+  if (transport === 'kugou-api') return pollKugouApiQr(key);
 
-  return pollQrViaServer(platform, key, provider);
+  return pollQrViaServer(platform, key, provider === 'wechat' ? 'wechat' : 'qq');
 }
 
 /**
@@ -564,6 +586,9 @@ export async function fetchPlatformAccountData(
     }
     return {
       userInfo: json.data.userInfo,
+      playlistError:
+        typeof json.data.playlistError === 'string' ? json.data.playlistError : undefined,
+      profileError: typeof json.data.profileError === 'string' ? json.data.profileError : undefined,
       playlists: Array.isArray(json.data.playlists) ? json.data.playlists : [],
       favorites: Array.isArray(json.data.favorites) ? json.data.favorites : [],
       albums: Array.isArray(json.data.albums) ? json.data.albums : [],
@@ -574,45 +599,107 @@ export async function fetchPlatformAccountData(
   }
 }
 
-/**
- * QQ 新链账号数据：qq-music-api 的 /user/detail + /user/playlist
- * （token 经 X-Platform-Cookie 头透传，网关反代原样带到子进程——
- * 子进程从 cookie 串里认 qqmusic_session，sessionToken.js 语义）。
- */
+async function fetchQqApiProfile(cookie: string, timeout: number) {
+  const { data } = await gatewayRequest.get('/platform/qq/api/login/status', {
+    headers: { 'X-Platform-Cookie': cookie },
+    timeout
+  });
+  const profile = data?.data?.profile;
+  if (data?.code !== 200 || !profile || typeof profile !== 'object' || Array.isArray(profile)) {
+    throw new Error('QQ 音乐未能确认当前登录状态，请重新扫码');
+  }
+  const info = profile.info || {};
+  const vip = profile.vipType ?? profile.is_vip ?? info.is_vip;
+  const userInfo = {
+    userId:
+      [
+        profile.str_musicid,
+        profile.musicid,
+        profile.uin,
+        profile.id,
+        info.str_musicid,
+        info.musicid,
+        info.uin
+      ]
+        .map((id) => String(id ?? '').trim())
+        .find((id) => id && id !== '0') || '',
+    nickname:
+      profile.nickname ||
+      profile.nick ||
+      profile.name ||
+      profile.userName ||
+      info.nickname ||
+      info.nick ||
+      info.name ||
+      info.userName ||
+      '',
+    avatarUrl:
+      info.logo || profile.avatarUrl || info.avatarUrl || info.headpic || profile.headpic || '',
+    vip: vip == null ? undefined : Boolean(Number(vip) || vip === 'true')
+  };
+  if (!userInfo.userId && !userInfo.nickname && !userInfo.avatarUrl) {
+    throw new Error('QQ 音乐没有返回账号资料，请稍后重试');
+  }
+  return userInfo;
+}
+
+/** 登录状态以会话返回的 profile 为准；歌单读取失败不影响资料。 */
 async function fetchQqApiAccountData(cookie: string): Promise<PlatformAccountData> {
   const headers = { 'X-Platform-Cookie': cookie };
   try {
-    const [detailRes, playlistRes] = await Promise.all([
-      gatewayRequest.get('/platform/qq/api/user/detail', { headers, timeout: 15000 }),
+    // The session, not the displayed music ID, identifies the playlist owner.
+    const [profileResult, listResult] = await Promise.allSettled([
+      fetchQqApiProfile(cookie, 15000),
       gatewayRequest.get('/platform/qq/api/user/playlist', { headers, timeout: 20000 })
     ]);
-    const detail = detailRes.data?.data || detailRes.data || {};
-    const creator = detail.creator || detail.profile || detail;
-    const userInfo = {
-      userId: String(creator.uin ?? creator.creator_uin ?? detail.uin ?? ''),
-      nickname: creator.nick || creator.nickname || detail.nick || '',
-      avatarUrl: creator.headpic || creator.avatarUrl || '',
-      vip: Boolean(creator.is_vip ?? detail.is_vip)
-    };
-    const playlistsRaw =
-      playlistRes.data?.data?.list ||
-      playlistRes.data?.data?.playlists ||
-      playlistRes.data?.list ||
-      [];
-    const playlists = (Array.isArray(playlistsRaw) ? playlistsRaw : []).map(
-      (item: Record<string, any>, index: number) => ({
-        id: String(item.dissid ?? item.tid ?? item.id ?? index),
-        name: String(item.dissname ?? item.diss_name ?? item.title ?? item.name ?? ''),
-        coverImgUrl: item.logo ?? item.imgurl ?? item.picUrl ?? '',
-        trackCount: Number(item.song_cnt ?? item.songnum ?? item.total_song_num ?? 0),
+    const userInfo = profileResult.status === 'fulfilled' ? profileResult.value : undefined;
+    const profileError =
+      profileResult.status === 'rejected'
+        ? gatewayError(profileResult.reason, 'QQ 音乐账号资料加载').message
+        : undefined;
+    const playlistRes = listResult.status === 'fulfilled' ? listResult.value : undefined;
+    const playlistsRaw = playlistRes?.data?.playlist;
+    const playlistOk = playlistRes?.data?.code === 200 && Array.isArray(playlistsRaw);
+    const playlists = (playlistOk ? playlistsRaw : [])
+      .filter((item: unknown) => item && typeof item === 'object')
+      .map((item: Record<string, any>) => ({
+        id: String(
+          [item.tid, item.dissid, item.id].find((v) => v && String(v) !== '0') ||
+            (Number(item.dirId ?? item.dirid) > 0 ? `dir:${item.dirId ?? item.dirid}` : '')
+        ),
+        name: String(
+          item.dirName ||
+            item.dirname ||
+            item.dissname ||
+            item.diss_name ||
+            item.title ||
+            item.name ||
+            ''
+        ),
+        coverImgUrl: item.bigpicUrl || item.picUrl || item.picurl || item.logo || item.imgurl || '',
+        trackCount: Number(
+          item.songNum ?? item.song_cnt ?? item.songnum ?? item.total_song_num ?? 0
+        ),
         playCount: Number(item.listennum ?? item.accessnum ?? 0),
-        dirShow: Number(item.dirShow ?? 1)
-      })
-    );
+        dirShow: Number(item.dirShow ?? item.dir_show ?? 1),
+        isFavorite:
+          item.dirName == null &&
+          item.dirname == null &&
+          (item.orderTime != null || item.dirType != null)
+      }))
+      .filter((item: { id: string }) => item.id);
+    const playlistError =
+      !playlistOk || playlists.length !== playlistsRaw.length
+        ? 'QQ 音乐歌单未能完整加载，请稍后重试'
+        : undefined;
+    if (profileError && playlistError && !playlists.length)
+      throw new Error(`${profileError}；${playlistError}`);
     return {
       userInfo,
       playlists,
-      favorites: playlists.filter((p: { dirShow: number }) => p.dirShow === 2 || p.dirShow === 3),
+      profileError,
+      playlistError,
+      favorites: playlists.filter((p: { isFavorite: boolean }) => p.isFavorite),
       albums: [],
       history: []
     };
@@ -640,21 +727,39 @@ export async function fetchPlatformPlaylistTracks(
   }
 
   try {
-    const response = await gatewayRequest.get(`/platform/${platform}/playlist/tracks`, {
-      headers: {
-        'X-Platform-Cookie': cookie,
-        'Cache-Control': 'no-cache'
-      },
-      params: { id, noCache: Date.now() },
-      timeout: 20000
-    });
-    const json = response.data;
+    const loadPage = async (page: number) =>
+      gatewayRequest.get(`/platform/${platform}/playlist/tracks`, {
+        headers: {
+          'X-Platform-Cookie': cookie,
+          'Cache-Control': 'no-cache'
+        },
+        params: { id, page, noCache: Date.now() },
+        timeout: 20000
+      });
+    const json = (await loadPage(1)).data;
     if (json.code !== 200 || !json.data) {
       throw new Error(json.msg || `${platform} 歌单加载失败`);
     }
+    const songs = Array.isArray(json.data.songs) ? [...json.data.songs] : [];
+    let more = json.data.more === true;
+    for (let page = 2; more; page++) {
+      const next = (await loadPage(page)).data;
+      if (
+        next.code !== 200 ||
+        !Array.isArray(next.data?.songs) ||
+        page > 1000 ||
+        (next.data.more &&
+          (!next.data.songs.length ||
+            next.data.songs[0].id === songs[songs.length - (json.data.pageSize || 100)]?.id))
+      ) {
+        throw new Error(next.msg || '歌单分页加载失败');
+      }
+      songs.push(...next.data.songs);
+      more = next.data.more === true;
+    }
     return {
       playlist: json.data.playlist,
-      songs: Array.isArray(json.data.songs) ? json.data.songs : [],
+      songs,
       page: json.data.page,
       pageSize: json.data.pageSize
     };
@@ -663,39 +768,56 @@ export async function fetchPlatformPlaylistTracks(
   }
 }
 
-/** QQ 新链歌单曲目：/user/playlist-detail（qq-music-api，响应 songs[] 与旧链字段近似） */
+/** qq-music-api returns songs at the top level, at most 100 per request. */
 async function fetchQqApiPlaylistTracks(
   cookie: string,
   id: string
 ): Promise<PlatformPlaylistTracks> {
   try {
-    const response = await gatewayRequest.get('/platform/qq/api/user/playlist-detail', {
-      headers: { 'X-Platform-Cookie': cookie },
-      params: { disstid: id },
-      timeout: 20000
-    });
-    const json = response.data;
-    const cdlist = json?.response?.cdlist || json?.data?.cdlist || [];
-    const detail = Array.isArray(cdlist) ? cdlist[0] : undefined;
-    if (!detail || !detail.dissname) {
-      throw new Error(json?.message || 'QQ 歌单加载失败');
+    const key = id.startsWith('dir:') ? { dirid: id.slice(4) } : { tid: id };
+    const songs: PlatformPlaylistTracks['songs'] = [];
+    let previousPage = '';
+    for (let offset = 0; ; ) {
+      const { data } = await gatewayRequest.get('/platform/qq/api/user/playlist-detail', {
+        headers: { 'X-Platform-Cookie': cookie },
+        params: { ...key, offset, limit: 100 },
+        timeout: 20000
+      });
+      if (data?.code !== 200 || !Array.isArray(data.songs))
+        throw new Error(data?.message || 'QQ 歌单加载失败');
+      const pageKey = JSON.stringify(data.songs.map((s: any) => s.mid || s.songmid || s.id));
+      if (offset && pageKey === previousPage) throw new Error('QQ 歌单返回了重复的分页');
+      previousPage = pageKey;
+      for (const item of data.songs) {
+        const mid = String(item.mid || item.songmid || item.id || '');
+        if (!mid) continue;
+        const albumMid = item.album?.mid || item.albummid || '';
+        const picUrl = albumMid
+          ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg`
+          : '';
+        const album = { id: albumMid, name: item.album?.name || item.albumname || '', picUrl };
+        const artists = (item.singer || []).map((s: any) => ({ id: s.mid || s.id, name: s.name }));
+        const duration = Number(item.interval || 0) * 1000;
+        songs.push({
+          id: `qq:${mid}`,
+          name: item.name || item.songname,
+          platform: 'qq',
+          platformId: mid,
+          source: 'qq',
+          al: album,
+          album,
+          ar: artists,
+          artists,
+          dt: duration,
+          duration,
+          picUrl
+        });
+      }
+      if (!data.more) break;
+      offset += data.songs.length;
+      if (!data.songs.length || offset >= 100000) throw new Error('QQ 歌单分页加载失败');
     }
-    const songs = (Array.isArray(detail.songlist) ? detail.songlist : []).map(
-      (item: Record<string, any>, index: number) => ({
-        id: String(item.songmid ?? item.mid ?? item.id ?? index),
-        name: String(item.songname ?? item.name ?? ''),
-        singer: Array.isArray(item.singer)
-          ? item.singer.map((s: Record<string, any>) => s.name).join('/')
-          : '',
-        albumName: String(item.albumname ?? ''),
-        albumMid: String(item.albummid ?? ''),
-        duration: Number((item.interval ?? 0) * 1000),
-        picUrl: item.albummid
-          ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${item.albummid}.jpg`
-          : ''
-      })
-    );
-    return { playlist: { id, name: detail.dissname }, songs, page: 1, pageSize: songs.length };
+    return { playlist: { id }, songs, page: 1, pageSize: songs.length };
   } catch (error) {
     throw gatewayError(error, 'QQ 歌单加载');
   }
@@ -873,7 +995,7 @@ export async function searchPlatformMusic(
   limit = 20
 ): Promise<SongResult[]> {
   if (!keyword?.trim()) return [];
-  const cookie = localStorage.getItem(`platform-cookie-${platform}`) || '';
+  const cookie = localStorage.getItem(platformAccountStorageKey('cookie', platform)) || '';
   if (!cookie.trim()) return [];
 
   try {
@@ -899,7 +1021,7 @@ export async function searchPlatformMusic(
 export async function fetchQqLyric(mid: string): Promise<QqLyricPayload | null> {
   const songMid = String(mid || '').trim();
   if (!songMid) return null;
-  const cookie = localStorage.getItem('platform-cookie-qq') || '';
+  const cookie = localStorage.getItem(platformAccountStorageKey('cookie', 'qq')) || '';
 
   try {
     const response = await gatewayRequest.get('/platform/qq/lyric', {

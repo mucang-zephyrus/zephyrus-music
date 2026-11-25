@@ -10,6 +10,7 @@ import { ref, watch } from 'vue';
 import { playMusic } from '@/hooks/MusicHook';
 import { getImgUrl } from '@/utils';
 import { extractRepresentativeColorsFromPixels, resolveCoverPalette } from '@/utils/coverPalette';
+import { loadCoverSample } from '@/utils/coverSample';
 import { adjustForAccent, isNearGray } from '@/utils/neutralColor';
 
 // 当前提取的颜色
@@ -35,15 +36,16 @@ const DEFAULT_B = 136;
  */
 async function extractColorFromImage(
   picUrl: string
-): Promise<{ r: number; g: number; b: number; primary: { r: number; g: number; b: number }; grayRatio: number; palette: [string, string, string] } | null> {
+): Promise<{
+  r: number;
+  g: number;
+  b: number;
+  primary: { r: number; g: number; b: number };
+  grayRatio: number;
+  palette: [string, string, string];
+} | null> {
   try {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = getImgUrl(picUrl, '130y130');
-    await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = reject;
-    });
+    const img = await loadCoverSample(getImgUrl(picUrl, '130y130'));
 
     const SAMPLE = 32;
     const canvas = document.createElement('canvas');
@@ -55,7 +57,9 @@ async function extractColorFromImage(
     ctx.drawImage(img, 0, 0, SAMPLE, SAMPLE);
     const data = ctx.getImageData(0, 0, SAMPLE, SAMPLE).data;
 
-    let r = 0, g = 0, b = 0;
+    let r = 0,
+      g = 0,
+      b = 0;
     let grayPixels = 0;
     const pixelCount = data.length / 4;
     for (let i = 0; i < data.length; i += 4) {
@@ -69,7 +73,11 @@ async function extractColorFromImage(
     }
 
     const representativeColors = extractRepresentativeColorsFromPixels(data);
-    const palette = resolveCoverPalette(representativeColors, picUrl, grayPixels / pixelCount).colors;
+    const palette = resolveCoverPalette(
+      representativeColors,
+      picUrl,
+      grayPixels / pixelCount
+    ).colors;
     const primary = tinycolor(palette[0]).toRgb();
     return {
       r: Math.round(r / pixelCount),
@@ -116,7 +124,9 @@ function updateCSSVariables(r: number, g: number, b: number) {
   root.style.setProperty('--accent-color-dark', `rgb(${darker})`);
   root.style.setProperty('--accent-color-10', `rgba(${colorRgb}, 0.1)`);
   root.style.setProperty('--accent-color-20', `rgba(${colorRgb}, 0.2)`);
-  coverPalette.value.forEach((stop, index) => root.style.setProperty(`--cover-palette-${index + 1}`, stop));
+  coverPalette.value.forEach((stop, index) =>
+    root.style.setProperty(`--cover-palette-${index + 1}`, stop)
+  );
 
   // === 封面取色设计令牌 ===
   const coverTiny = tinycolor({ r, g, b });
@@ -214,24 +224,24 @@ export function initCoverColor() {
       }
 
       const extracted = await extractColorFromImage(picUrl);
-      if (extracted) {
-        if (playMusic.value?.picUrl !== picUrl) return;
-        grayRatio.value = extracted.grayRatio;
-        coverPalette.value = extracted.palette;
-        // 封面原始平均色（不做调整）
-        averageColor.value = `rgb(${extracted.r}, ${extracted.g}, ${extracted.b})`;
-        averageColorRgb.value = `${extracted.r}, ${extracted.g}, ${extracted.b}`;
+      if (playMusic.value?.picUrl !== picUrl) return;
+      if (!extracted) {
+        resetToDefault();
+        return;
+      }
+      grayRatio.value = extracted.grayRatio;
+      coverPalette.value = extracted.palette;
+      // 封面原始平均色（不做调整）
+      averageColor.value = `rgb(${extracted.r}, ${extracted.g}, ${extracted.b})`;
+      averageColorRgb.value = `${extracted.r}, ${extracted.g}, ${extracted.b}`;
 
-        const accent = extracted.grayRatio > 0.95
+      const accent =
+        extracted.grayRatio > 0.95
           ? adjustForAccent(extracted.r, extracted.g, extracted.b)
           : extracted.primary;
-        primaryColor.value = `rgb(${accent.r}, ${accent.g}, ${accent.b})`;
-        primaryColorRgb.value = `${accent.r}, ${accent.g}, ${accent.b}`;
-        updateCSSVariables(accent.r, accent.g, accent.b);
-
-        // 发送颜色到桌面歌词窗口
-
-      }
+      primaryColor.value = `rgb(${accent.r}, ${accent.g}, ${accent.b})`;
+      primaryColorRgb.value = `${accent.r}, ${accent.g}, ${accent.b}`;
+      updateCSSVariables(accent.r, accent.g, accent.b);
     },
     { immediate: true }
   );

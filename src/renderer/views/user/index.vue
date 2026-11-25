@@ -261,7 +261,11 @@ const loadPlatformAccountDataInternal = async (account: PlatformAccount) => {
   const cachedData = accountStore.activeAccountCache;
   recordList.value = (cachedData?.history || []) as any[];
 
-  if (!account.cookie) return;
+  if (!account.cookie) {
+    if (account.platform === 'qq' || account.platform === 'kugou')
+      message.warning('缺少登录凭据，请重新扫码');
+    return;
+  }
 
   // B 站：cookie 登录路径不落头像，借助 /bilibili/account/data 回填账号资料
   if (account.platform === 'bilibili') {
@@ -276,7 +280,10 @@ const loadPlatformAccountDataInternal = async (account: PlatformAccount) => {
       }
       const userInfo = data.userInfo || {};
       const nextAvatarUrl = userInfo.avatarUrl || account.avatarUrl;
-      if (nextAvatarUrl !== account.avatarUrl || String(userInfo.nickname || '') !== account.nickname) {
+      if (
+        nextAvatarUrl !== account.avatarUrl ||
+        String(userInfo.nickname || '') !== account.nickname
+      ) {
         accountStore.addOrUpdateAccount({
           accountId: account.accountId,
           platform: account.platform,
@@ -339,17 +346,27 @@ const loadPlatformAccountDataInternal = async (account: PlatformAccount) => {
       });
     }
 
-    accountStore.cacheAccountData(account.accountId, 'playlists', data.playlists);
-    accountStore.cacheAccountData(account.accountId, 'favorites', data.favorites);
+    if (!data.playlistError) {
+      accountStore.cacheAccountData(account.accountId, 'playlists', data.playlists);
+      accountStore.cacheAccountData(account.accountId, 'favorites', data.favorites);
+    } else {
+      console.warn(data.playlistError);
+      message.warning(data.playlistError);
+    }
+    if (data.profileError) {
+      console.warn(data.profileError);
+      message.warning(data.profileError);
+    }
     accountStore.cacheAccountData(account.accountId, 'albums', data.albums);
     accountStore.cacheAccountData(account.accountId, 'history', data.history);
     recordList.value = data.history;
   } catch (error: any) {
     console.error(`${account.platform} 账号数据加载失败:`, error);
-    const hasCachedData = Boolean(
-      cachedData?.playlists?.length || cachedData?.favorites?.length || cachedData?.history?.length
-    );
-    if (!hasCachedData && mounted.value && requestId === platformDataRequestId) {
+    if (
+      mounted.value &&
+      requestId === platformDataRequestId &&
+      activeAccountId.value === account.accountId
+    ) {
       message.error(error?.message || `${account.nickname} 的账号数据加载失败`);
     }
   }

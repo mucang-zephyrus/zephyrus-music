@@ -136,6 +136,7 @@ import { usePlayerStore } from '@/store/modules/player';
 import type { ILyricText } from '@/types/music';
 import { getImgUrl, isMobile } from '@/utils';
 import { AnimationSelector } from '@/utils/animationSelector';
+import { loadCoverSample } from '@/utils/coverSample';
 import { isNearGray } from '@/utils/neutralColor';
 // 舞台动画预设库
 import { normalAnimations, powerAnimations, softAnimations } from '@/utils/stageAnimations';
@@ -370,12 +371,7 @@ watch(
   async (picUrl) => {
     if (!picUrl) return;
     try {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.src = getImgUrl(picUrl, '50y50');
-      await new Promise((resolve) => {
-        img.onload = resolve;
-      });
+      const img = await loadCoverSample(getImgUrl(picUrl, '50y50'));
 
       const canvas = document.createElement('canvas');
       canvas.width = 10;

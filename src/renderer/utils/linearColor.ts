@@ -1,6 +1,8 @@
 import { useDebounceFn } from '@vueuse/core';
 import tinycolor from 'tinycolor2';
 
+import { coverSampleUrl } from '@/utils/coverSample';
+
 interface IColor {
   backgroundColor: string;
   primaryColor: string;
@@ -27,8 +29,10 @@ interface LyricSettings {
 }
 
 export const getImageLinearBackground = async (imageSrc: string): Promise<IColor> => {
+  const url = coverSampleUrl(imageSrc);
+  if (!url) return { backgroundColor: '', primaryColor: '' };
   try {
-    const primaryColor = await getImagePrimaryColor(imageSrc);
+    const primaryColor = await getImagePrimaryColor(url);
     return {
       backgroundColor: generateGradientBackground(primaryColor),
       primaryColor
@@ -43,6 +47,8 @@ export const getImageLinearBackground = async (imageSrc: string): Promise<IColor
 };
 
 export const getImageBackground = async (img: HTMLImageElement): Promise<IColor> => {
+  const src = img.currentSrc || img.src;
+  if (coverSampleUrl(src) !== src) return getImageLinearBackground(src);
   try {
     const primaryColor = await getImageColor(img);
     return {

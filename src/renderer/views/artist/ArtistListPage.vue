@@ -59,7 +59,9 @@
           <!-- 加载状态 -->
           <div ref="loadMoreRef" class="alp-load-more">
             <span v-if="listLoading" class="alp-loading-dot" />
-            <span v-else-if="!hasMore && list.length" class="alp-no-more">— {{ t('common.noMore') }} —</span>
+            <span v-else-if="!hasMore && list.length" class="alp-no-more"
+              >— {{ t('common.noMore') }} —</span
+            >
           </div>
         </template>
 
@@ -100,11 +102,13 @@ const playerStore = usePlayerStore();
 const message = useMessage();
 
 const kind = computed(() => (route.params.kind === 'albums' ? 'albums' : 'songs'));
-const isQqArtist = computed(
-  () => route.query.platform === 'qq' && Boolean(String(route.query.singerMID || '').trim())
+import { qqArtistMid } from '@/utils/qqDetailRoute';
+
+const qqMid = computed(() =>
+  qqArtistMid(route.query.platform, route.query.singerMID, route.params.id)
 );
+const isQqArtist = computed(() => Boolean(qqMid.value));
 const artistId = computed(() => Number(route.params.id));
-const qqMid = computed(() => String(route.query.singerMID || route.params.id || '').trim());
 
 const scrollbarRef = ref<any>(null);
 const loadMoreRef = ref<HTMLElement | null>(null);
@@ -124,9 +128,13 @@ const filteredSongs = computed(() => {
   if (!keyword) return songs.value;
   return songs.value.filter(
     (song) =>
-      String(song.name || '').toLowerCase().includes(keyword) ||
+      String(song.name || '')
+        .toLowerCase()
+        .includes(keyword) ||
       (song.ar || []).some((artist: any) =>
-        String(artist?.name || '').toLowerCase().includes(keyword)
+        String(artist?.name || '')
+          .toLowerCase()
+          .includes(keyword)
       )
   );
 });
@@ -134,9 +142,7 @@ const filteredSongs = computed(() => {
 let observer: IntersectionObserver | null = null;
 let requestId = 0;
 
-const title = computed(() =>
-  kind.value === 'songs' ? t('artist.allSongs') : t('artist.albums')
-);
+const title = computed(() => (kind.value === 'songs' ? t('artist.allSongs') : t('artist.albums')));
 
 const syncPresentation = () => {
   registerMobileTopbarPresentation({
@@ -148,18 +154,12 @@ const syncPresentation = () => {
 const resetAndLoad = async () => {
   const generation = ++requestId;
   loading.value = true;
+  listLoading.value = false;
   page.value = 1;
   hasMore.value = true;
   songs.value = [];
   albums.value = [];
   try {
-    if (kind.value === 'songs' && isQqArtist.value) {
-      const result = await fetchQqSingerHotSongs(qqMid.value, 50, 0);
-      if (generation !== requestId) return;
-      songs.value = result.songs || [];
-      hasMore.value = false;
-      return;
-    }
     await loadPage(generation);
   } catch (error) {
     console.error('[artistList] 加载失败:', error);
@@ -173,7 +173,16 @@ const loadPage = async (generation: number) => {
   if (listLoading.value || !hasMore.value) return;
   listLoading.value = true;
   try {
-    if (kind.value === 'songs') {
+    if (kind.value === 'songs' && isQqArtist.value) {
+      const result = await fetchQqSingerHotSongs(
+        qqMid.value,
+        pageSize,
+        (page.value - 1) * pageSize
+      );
+      if (generation !== requestId) return;
+      songs.value.push(...result.songs);
+      hasMore.value = Boolean(result.hasMore) && result.songs.length > 0;
+    } else if (kind.value === 'songs') {
       if (!artistId.value) {
         hasMore.value = false;
         return;

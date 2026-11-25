@@ -1,10 +1,8 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 
-import {
-  refreshKugouApiSession,
-  refreshQqApiSession
-} from '@/api/platformQrApi';
+import { refreshKugouApiSession, refreshQqApiSession } from '@/api/platformQrApi';
+import { musicAccountStorageKey, platformAccountStorageKey } from '@/utils/appVersion';
 import { resolveReplacementAccount } from '@/utils/platformAccountSelection';
 import { shouldRefreshSession } from '@/utils/platformLoginDiagnostics';
 
@@ -103,18 +101,21 @@ export const usePlatformAccountsStore = defineStore(
       accounts.value.filter((account) => account.platform === platform);
 
     const syncLegacyPlatformState = (account: PlatformAccount) => {
-      localStorage.setItem('active-music-account', account.accountId);
-      localStorage.setItem('active-music-platform', account.platform);
+      localStorage.setItem(musicAccountStorageKey('active-music-account'), account.accountId);
+      localStorage.setItem(musicAccountStorageKey('active-music-platform'), account.platform);
 
       // Spotify 使用独立的 OAuth 令牌管理，不走 cookie 体系
       if (account.platform === 'spotify') {
         return;
       }
 
-      localStorage.setItem(`platform-user-${account.platform}`, JSON.stringify(account));
+      localStorage.setItem(
+        platformAccountStorageKey('user', account.platform),
+        JSON.stringify(account)
+      );
 
       if (account.cookie) {
-        localStorage.setItem(`platform-cookie-${account.platform}`, account.cookie);
+        localStorage.setItem(platformAccountStorageKey('cookie', account.platform), account.cookie);
       }
 
       if (account.platform === 'netease') {
@@ -216,25 +217,28 @@ export const usePlatformAccountsStore = defineStore(
           setActiveAccount(replacement.accountId);
         } else {
           activeAccountId.value = null;
-          localStorage.removeItem('active-music-account');
-          localStorage.removeItem('active-music-platform');
+          localStorage.removeItem(musicAccountStorageKey('active-music-account'));
+          localStorage.removeItem(musicAccountStorageKey('active-music-platform'));
         }
       }
 
       const platformReplacement = accounts.value.find((item) => item.platform === account.platform);
       if (platformReplacement) {
         localStorage.setItem(
-          `platform-user-${account.platform}`,
+          platformAccountStorageKey('user', account.platform),
           JSON.stringify(platformReplacement)
         );
         if (platformReplacement.cookie) {
-          localStorage.setItem(`platform-cookie-${account.platform}`, platformReplacement.cookie);
+          localStorage.setItem(
+            platformAccountStorageKey('cookie', account.platform),
+            platformReplacement.cookie
+          );
         } else {
-          localStorage.removeItem(`platform-cookie-${account.platform}`);
+          localStorage.removeItem(platformAccountStorageKey('cookie', account.platform));
         }
       } else {
-        localStorage.removeItem(`platform-user-${account.platform}`);
-        localStorage.removeItem(`platform-cookie-${account.platform}`);
+        localStorage.removeItem(platformAccountStorageKey('user', account.platform));
+        localStorage.removeItem(platformAccountStorageKey('cookie', account.platform));
         if (account.platform === 'netease') {
           localStorage.removeItem('user');
           localStorage.removeItem('token');
@@ -272,7 +276,9 @@ export const usePlatformAccountsStore = defineStore(
       }
 
       if (accounts.value.length) {
-        const storedActiveAccountId = localStorage.getItem('active-music-account');
+        const storedActiveAccountId = localStorage.getItem(
+          musicAccountStorageKey('active-music-account')
+        );
         const activeAccountStillExists = accounts.value.some(
           (account) => account.accountId === activeAccountId.value
         );
@@ -303,10 +309,10 @@ export const usePlatformAccountsStore = defineStore(
       }
 
       for (const platform of MUSIC_PLATFORMS.filter((item) => item !== 'netease')) {
-        const cookie = localStorage.getItem(`platform-cookie-${platform}`) || '';
+        const cookie = localStorage.getItem(platformAccountStorageKey('cookie', platform)) || '';
         if (!cookie) continue;
         const legacyPlatformUser = parseStoredJson<Record<string, unknown> | null>(
-          `platform-user-${platform}`,
+          platformAccountStorageKey('user', platform),
           null
         );
         addOrUpdateAccount({
@@ -387,7 +393,7 @@ export const usePlatformAccountsStore = defineStore(
   },
   {
     persist: {
-      key: 'platform-accounts-store',
+      key: musicAccountStorageKey('platform-accounts-store'),
       storage: localStorage,
       pick: ['accounts', 'activeAccountId', 'accountCache']
     }

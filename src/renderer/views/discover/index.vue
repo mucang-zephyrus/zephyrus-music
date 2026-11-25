@@ -72,13 +72,11 @@ import { useRoute, useRouter } from 'vue-router';
 
 import { getHotSinger, getPersonalizedPlaylist, getTopAlbum } from '@/api/home';
 import { navigateToMusicList } from '@/components/common/MusicListNavigator';
-import {
-  beginPlaylistOpen,
-  beginReturnFlight
-} from '@/composables/usePlaylistOpenTransition';
+import { beginPlaylistOpen, beginReturnFlight } from '@/composables/usePlaylistOpenTransition';
 import { ARTIST_COVER_RETURN_KEY, useArtist } from '@/hooks/useArtist';
-import { takeFlightRect } from '@/utils/flightRectMemory';
 import { getImgUrl } from '@/utils';
+import { loadCoverSample } from '@/utils/coverSample';
+import { takeFlightRect } from '@/utils/flightRectMemory';
 
 type Shortcut = { key: string; label: string; icon: string; path?: string; target?: string };
 type MediaCard = {
@@ -202,13 +200,7 @@ const fallbackCardColor = (seed: string) => {
 
 const sampleCoverColor = async (card: MediaCard) => {
   try {
-    const image = new Image();
-    image.crossOrigin = 'anonymous';
-    image.src = getImgUrl(card.picUrl, '50y50');
-    await new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error('cover color failed'));
-    });
+    const image = await loadCoverSample(getImgUrl(card.picUrl, '50y50'));
     const canvas = document.createElement('canvas');
     canvas.width = 8;
     canvas.height = 8;

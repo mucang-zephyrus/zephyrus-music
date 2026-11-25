@@ -113,7 +113,6 @@
         </div>
         <button class="partial-error-retry pressable" @click="retryFailedSources()">重试</button>
       </div>
-
     </div>
   </div>
 </template>
@@ -175,7 +174,7 @@ interface AccountLoadState {
 }
 
 const accountLoadStates = ref<Record<string, AccountLoadState>>({});
-let loadSequence = 0;
+const pendingAccountLoads = new Map<string, symbol>();
 
 /** 不同失败形态给不同文案，而不是笼统的「加载失败」 */
 function describeLoadError(error: unknown): string {
@@ -273,10 +272,8 @@ const retryFailedSources = () => {
 async function ensureSourcesLoaded() {
   const source = playlistSourceFilter.value;
   if (source === 'local') return;
-  const sequence = ++loadSequence;
   const targets = relevantAccounts.value;
   if (!targets.length) {
-    accountLoadStates.value = {};
     return;
   }
 
@@ -285,8 +282,15 @@ async function ensureSourcesLoaded() {
       const existing = accountLoadStates.value[account.accountId];
       if (existing && (existing.status === 'ok' || existing.status === 'loading')) return;
 
+      const ticket = Symbol();
+      pendingAccountLoads.set(account.accountId, ticket);
+      const current = () =>
+        pendingAccountLoads.get(account.accountId) === ticket &&
+        accountStore.accounts.some(
+          (item) => item.accountId === account.accountId && item.cookie === account.cookie
+        );
       const settle = (state: AccountLoadState) => {
-        if (sequence !== loadSequence) return;
+        if (!current()) return;
         accountLoadStates.value = { ...accountLoadStates.value, [account.accountId]: state };
       };
 
@@ -304,7 +308,13 @@ async function ensureSourcesLoaded() {
           const cache = accountStore.accountCache[account.accountId];
           if (!cache?.playlists?.length) {
             const data = await fetchPlatformAccountData(account.platform, account.cookie || '');
+            if (!current()) return;
+            if (data.playlistError) {
+              settle({ status: 'error', message: data.playlistError });
+              return;
+            }
             accountStore.cacheAccountData(account.accountId, 'playlists', data.playlists);
+            accountStore.cacheAccountData(account.accountId, 'favorites', data.favorites);
             accountStore.cacheAccountData(account.accountId, 'albums', data.albums);
           }
         } else if (account.platform === 'bilibili') {
@@ -319,6 +329,9 @@ async function ensureSourcesLoaded() {
         settle({ status: 'ok' });
       } catch (error) {
         settle({ status: 'error', message: describeLoadError(error) });
+      } finally {
+        if (pendingAccountLoads.get(account.accountId) === ticket)
+          pendingAccountLoads.delete(account.accountId);
       }
     })
   );
@@ -410,9 +423,18 @@ onBeforeUnmount(() => {
   if (pendingMruTimer) clearTimeout(pendingMruTimer);
 });
 
+watch(playlistSourceFilter, () => {
+  void ensureSourcesLoaded();
+});
 watch(
-  [playlistSourceFilter, () => accountStore.accounts.map((account) => account.accountId).join(',')],
-  () => {
+  () => new Map(accountStore.accounts.map((account) => [account.accountId, account.cookie])),
+  (next, previous) => {
+    for (const id of previous.keys()) {
+      if (previous.get(id) !== next.get(id)) {
+        delete accountLoadStates.value[id];
+        pendingAccountLoads.delete(id);
+      }
+    }
     void ensureSourcesLoaded();
   }
 );
@@ -1022,7 +1044,6 @@ const handleItemClick = (item: any) => {
     font-size: 12px;
   }
 }
-
 
 .skeleton-shimmer {
   background: linear-gradient(

@@ -256,6 +256,7 @@ import {
   isSameMusicListSource,
   orderSongsByTrackIds
 } from '@/utils/playlistSource';
+import { qqArtistPath } from '@/utils/qqDetailRoute';
 
 defineOptions({
   name: 'MusicList'
@@ -266,7 +267,8 @@ const { confirmPlaylistReplace } = usePlaylistConfirm();
 const { t } = useI18n();
 const route = useRoute();
 const { navigate } = useOverlayNavigate();
-const navigateToArtist = (id: number) => navigate(`/artist/detail/${id}`);
+const navigateToArtist = (id: number | string, name: string) =>
+  navigate(route.query.platform === 'qq' ? qqArtistPath(id, name) : `/artist/detail/${id}`);
 const playerStore = usePlayerStore();
 const musicStore = useMusicStore();
 const recommendStore = useRecommendStore();
@@ -337,6 +339,27 @@ const fetchData = async () => {
     return;
   }
 
+  if (platform === 'qq' || platform === 'kugou') {
+    const info = musicStore.currentListInfo;
+    const sameList = routeSourceContext.value
+      ? isSameMusicListSource(info?._sourceContext, routeSourceContext.value)
+      : info?.platform === platform && info?.type === type && String(info.id) === String(id);
+    if (!sameList) {
+      const cache = account && accountStore.accountCache[account.accountId];
+      const entries = type === 'album' ? cache?.albums : cache?.playlists;
+      const entry = entries?.find((item: any) => String(item?.id) === String(id)) as
+        | { name?: string }
+        | undefined;
+      musicStore.setBasicListInfo(entry?.name || '', {
+        ...entry,
+        id: String(id),
+        platform,
+        type,
+        _sourceContext: routeSourceContext.value
+      });
+    }
+  }
+
   // 检查是否需要加载数据
   if (
     musicStore.currentListInfo?.id?.toString() === id.toString() &&
@@ -367,7 +390,7 @@ const fetchData = async () => {
         {
           ...currentInfo,
           ...result.album,
-          id: sourceId || String(id),
+          id: String(id),
           platform: 'qq',
           type: 'album',
           _sourceContext: routeSourceContext.value || currentInfo._sourceContext
@@ -404,11 +427,11 @@ const fetchData = async () => {
         const currentInfo = musicStore.currentListInfo || {};
         musicStore.setCurrentMusicList(
           result.songs,
-          String((result.playlist as any)?.name || currentInfo.name || name.value),
+          String((result.playlist as any)?.name || currentInfo.name || name.value || '平台歌单'),
           {
             ...currentInfo,
             ...(result.playlist || {}),
-            id: sourceId,
+            id: String(id),
             _sourceContext: routeSourceContext.value || currentInfo._sourceContext
           },
           false
@@ -687,7 +710,7 @@ const heroSubtitle = computed(() => {
 const onHeroSubtitleClick = () => {
   if (!isAlbum.value) return;
   const artistId = (listInfo.value as any)?.artist?.id;
-  if (artistId) navigateToArtist(artistId);
+  if (artistId) navigateToArtist(artistId, heroSubtitle.value);
 };
 
 /** hero 元信息行：风格 · 年份 · 音质；缺省回退「来源 · N 首」 */

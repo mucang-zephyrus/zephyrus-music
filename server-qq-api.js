@@ -36,7 +36,18 @@ function startQqApiChild() {
     'src',
     'app.js'
   );
-  child = spawn(process.execPath, [entry], {
+  // This SDK version does not pass HOST to Koa's listen(). Bind its child to loopback.
+  const bootstrap = `
+    const { createRequire } = require('node:module');
+    const entry = process.argv[1];
+    const Koa = createRequire(entry)('koa');
+    const listen = Koa.prototype.listen;
+    Koa.prototype.listen = function (port, callback) {
+      return listen.call(this, port, '127.0.0.1', callback);
+    };
+    require(entry);
+  `;
+  child = spawn(process.execPath, ['-e', bootstrap, entry], {
     env: {
       ...process.env,
       PORT: String(CHILD_PORT),
@@ -59,15 +70,25 @@ function startQqApiChild() {
 }
 
 function proxyToChild(req, res) {
+  const headers = { ...req.headers, host: `127.0.0.1:${CHILD_PORT}` };
+  // 客户端统一用 X-Platform-Cookie，上游只认 X-QQ-Session 或自己的 Cookie。
+  const session = String(headers['x-platform-cookie'] || '').match(
+    /(?:^|;\s*)qqmusic_session\s*=\s*([^;\s]+)/
+  )?.[1];
+  delete headers['x-platform-cookie'];
+  if (session) headers['x-qq-session'] = session;
   const options = {
     hostname: '127.0.0.1',
     port: CHILD_PORT,
     // Express 挂载 /platform/qq/api 后 req.url 已剥掉前缀（即子进程要的路径）
     path: req.url || '/',
     method: req.method,
-    headers: { ...req.headers, host: `127.0.0.1:${CHILD_PORT}` }
+    headers
   };
   const upstream = http.request(options, (upRes) => {
+    if (req.path.startsWith('/login/') || headers['x-qq-session']) {
+      upRes.headers['cache-control'] = 'private, no-store';
+    }
     res.writeHead(upRes.statusCode || 502, upRes.headers);
     upRes.pipe(res);
   });

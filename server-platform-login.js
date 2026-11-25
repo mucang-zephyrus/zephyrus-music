@@ -29,7 +29,14 @@ const {
 const { createBilibiliRouter } = require('./server-bilibili');
 // Folia 移植：qq-music-api（子进程+反代）/ KuGouMusicApi（进程内直调）
 const { createQqApiRouter } = require('./server-qq-api');
-const { createKugouApiRouter } = require('./server-kugou-api');
+const {
+  createKugouApiRouter,
+  parseCookieHeader: parseKugouCookie,
+  hasKugouCredentials,
+  readKugouAccount,
+  readKugouPlaylistIndex,
+  readKugouTracks
+} = require('./server-kugou-api');
 const { createShareLinkRouter } = require('./server-share-link');
 
 const router = express.Router();
@@ -311,6 +318,31 @@ function cleanupQqSessions() {
 
 const sessionCleanupTimer = setInterval(cleanupQqSessions, 5 * 60 * 1000);
 sessionCleanupTimer.unref?.();
+
+// Only fetch public QQ artwork. Client headers and redirects never reach the CDN.
+router.get('/qq/cover-sample', async (req, res) => {
+  const { type, mid } = req.query;
+  if (
+    !['T001', 'T002'].includes(type) ||
+    typeof mid !== 'string' ||
+    !/^[a-zA-Z0-9]{14}$/.test(mid)
+  ) {
+    return res.sendStatus(400);
+  }
+  try {
+    const url = `https://y.gtimg.cn/music/photo_new/${type}R150x150M000${mid}.jpg`;
+    const { data } = await axios.get(url, {
+      responseType: 'arraybuffer',
+      timeout: 5000,
+      maxRedirects: 0,
+      maxContentLength: 256 * 1024
+    });
+    if (data[0] !== 0xff || data[1] !== 0xd8 || data[2] !== 0xff) return res.sendStatus(502);
+    return res.set('Cache-Control', 'public, max-age=86400').type('jpeg').send(data);
+  } catch (error) {
+    return res.sendStatus(error.response?.status === 404 ? 404 : 502);
+  }
+});
 
 router.get('/health', (_req, res) => {
   res.json({
@@ -1316,8 +1348,6 @@ const KUGOU_SRC_APPID = 2919;
 const KUGOU_APPID = 3116;
 const KUGOU_CLIENTVER = 11436;
 const KUGOU_USER_AGENT = 'Android15-1070-11083-46-0-DiscoveryDRADProtocol-wifi';
-const KUGOU_LITE_PUBLIC_KEY =
-  '-----BEGIN PUBLIC KEY-----\nMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDECi0Np2UR87scwrvTr72L6oO01rBbbBPriSDFPxr3Z5syug0O24QyQO8bg27+0+4kBzTBTBOZ/WWU0WryL1JSXRTXLgFVxtzIY41Pe7lPOgsfTCn5kZcvKhYKJesKnnJDNr5/abvTGf+rHG3YRwsCHcQ08/q6ifSioBszvb3QiwIDAQAB\n-----END PUBLIC KEY-----';
 
 let kugouMid = generateMid();
 let kugouDfid = generateDfid();
@@ -1485,8 +1515,8 @@ function normalizeKugouPlaylists(payload, userid = '') {
       },
       platform: 'kugou',
       platformId: id,
-      globalCollectionId: firstOwnValue(item, ['global_collection_id', 'globalCollectionId']) || id,
-      listId: firstOwnValue(item, ['listid', 'list_id']) || id
+      globalCollectionId: firstOwnValue(item, ['global_collection_id', 'globalCollectionId']),
+      listId: firstOwnValue(item, ['listid', 'list_id'])
     };
 
     if (isFavorite) favorites.push(normalized);
@@ -1661,40 +1691,6 @@ function normalizeKugouSongs(payload, listInfo = {}) {
   return songs;
 }
 
-function rawKugouRsaEncrypt(value) {
-  const key = crypto.createPublicKey(KUGOU_LITE_PUBLIC_KEY);
-  const keySize = Math.ceil(key.asymmetricKeyDetails.modulusLength / 8);
-  const input = Buffer.alloc(keySize);
-  const source = Buffer.from(value, 'utf8');
-  if (source.length > keySize) throw new Error('酷狗用户信息请求参数过长');
-  source.copy(input);
-  return crypto
-    .publicEncrypt({ key, padding: crypto.constants.RSA_NO_PADDING }, input)
-    .toString('hex');
-}
-
-async function requestKugouUserInfo(cookie) {
-  const context = getKugouContext(cookie);
-  if (!context.userid || !context.token) return null;
-  const visitTime = Math.floor(Date.now() / 1000);
-  const p = rawKugouRsaEncrypt(JSON.stringify({ clienttime: visitTime, token: context.token }));
-  const response = await requestKugouApi(
-    cookie,
-    '/v3/get_my_info',
-    {
-      visit_time: visitTime,
-      userid: context.userid,
-      usertype: 1,
-      p
-    },
-    { plat: 1 },
-    { 'x-router': 'usercenter.kugou.com' },
-    visitTime
-  );
-  if (response.status < 200 || response.status >= 300) return null;
-  return response.data;
-}
-
 function normalizeKugouUserInfo(payload, cookie, fallback = {}) {
   const context = getKugouContext(cookie);
   const userId =
@@ -1718,6 +1714,8 @@ function normalizeKugouUserInfo(payload, cookie, fallback = {}) {
       'head_icon',
       'headicon',
       'headIcon',
+      'sizable_avatar',
+      'head_img',
       'headurl',
       'head_url',
       'avatar',
@@ -1732,7 +1730,10 @@ function normalizeKugouUserInfo(payload, cookie, fallback = {}) {
     userId: String(userId),
     nickname,
     avatarUrl,
-    vip: Boolean(Number(vipType) || vipType === 'true' || vipType === true)
+    vip:
+      vipType === ''
+        ? undefined
+        : Boolean(Number(vipType) || vipType === 'true' || vipType === true)
   };
 }
 
@@ -2269,12 +2270,13 @@ router.get('/qq/album', async (req, res) => {
     return res.status(400).json({ code: 400, msg: '缺少 QQ 专辑 ID' });
   }
   try {
-    const data = await qqMusicApi(
-      '',
-      'music.musichallAlbum.AlbumSongList',
-      'GetAlbumSongList',
-      { albumMid, albumID: 0, begin: 0, num: 200, order: 2 }
-    );
+    const data = await qqMusicApi('', 'music.musichallAlbum.AlbumSongList', 'GetAlbumSongList', {
+      albumMid,
+      albumID: 0,
+      begin: 0,
+      num: 200,
+      order: 2
+    });
     const songs = (data?.songList || [])
       .map((entry) => entry?.songInfo || entry)
       .map(normalizeQqSong)
@@ -2310,12 +2312,12 @@ router.get('/qq/singer/songs', async (req, res) => {
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 30));
   const offset = Math.max(0, Number(req.query.offset) || 0);
   try {
-    const data = await qqMusicApi(
-      '',
-      'music.web_singer_info_svr',
-      'get_singer_detail_info',
-      { sort: 5, singermid: singerMid, sin: offset, num: limit }
-    );
+    const data = await qqMusicApi('', 'music.web_singer_info_svr', 'get_singer_detail_info', {
+      sort: 5,
+      singermid: singerMid,
+      sin: offset,
+      num: limit
+    });
     const songs = (data?.songlist || []).map(normalizeQqSong).filter(Boolean);
     const singerInfo = data?.singer_info || {};
     return res.json({
@@ -2542,73 +2544,71 @@ router.get('/kugou/lyric', async (req, res) => {
 // GET /platform/kugou/account/data
 router.get('/kugou/account/data', async (req, res) => {
   const cookie = getPlatformCookieFromRequest(req);
-  const context = getKugouContext(cookie);
-  if (!context.userid || !context.token) {
-    return res.status(401).json({ code: 401, msg: '酷狗登录已失效，请重新扫码' });
+  const credentials = parseKugouCookie(cookie);
+  res.set('Cache-Control', 'private, no-store');
+  if (!hasKugouCredentials(credentials)) {
+    return res.status(401).json({ code: 401, msg: '酷狗登录凭据缺失，请重新扫码' });
   }
 
   try {
-    const [playlistResult, profileResult] = await Promise.allSettled([
-      requestKugouApi(
-        cookie,
-        '/v7/get_all_list',
-        {
-          token: context.token,
-          userid: context.userid,
-          total_ver: 979,
-          type: 2,
-          page: 1,
-          pagesize: 100
-        },
-        { plat: 1 },
-        { 'x-router': 'cloudlist.service.kugou.com' }
-      ),
-      requestKugouUserInfo(cookie)
-    ]);
-
-    if (playlistResult.status === 'rejected') {
-      throw playlistResult.reason;
+    const [profile, playlist] = await readKugouAccount(credentials);
+    const profileData = profile.body?.data;
+    const profileOk =
+      profile.status === 200 &&
+      Number(profile.body?.status) === 1 &&
+      profileData &&
+      typeof profileData === 'object' &&
+      !Array.isArray(profileData) &&
+      Object.keys(profileData).length > 0;
+    const playlistOk = playlist.status === 200 && Number(playlist.body?.status) === 1;
+    const suffix = (body) => {
+      const code = Number(body?.errcode ?? body?.error_code ?? body?.errorCode);
+      return Number.isSafeInteger(code) && code > 0 ? ` (${code})` : '';
+    };
+    const profileError = profileOk
+      ? undefined
+      : `酷狗账号资料暂时无法加载${suffix(profile.body)}，请稍后重试`;
+    const playlistError = playlistOk
+      ? undefined
+      : `酷狗歌单暂时无法加载${suffix(playlist.body)}，请稍后重试`;
+    if (!profileOk && !playlistOk) {
+      const code = suffix(profile.body) || suffix(playlist.body);
+      return res
+        .status(502)
+        .json({ code: 502, msg: `酷狗账号资料和歌单暂时无法加载${code}，请稍后重试` });
     }
-    const playlistResponse = playlistResult.value;
-    const playlistPayload = playlistResponse.data;
-    const apiStatus = Number(playlistPayload?.status);
-    if (playlistResponse.status < 200 || playlistResponse.status >= 300 || apiStatus !== 1) {
-      const errorCode = playlistPayload?.error_code || playlistPayload?.errorCode || 'unknown';
-      return res.status(401).json({
-        code: 401,
-        msg: `酷狗账号数据获取失败 (${errorCode})，请重新登录`
-      });
-    }
-
-    const normalizedLists = normalizeKugouPlaylists(playlistPayload, context.userid);
-    const profilePayload = profileResult.status === 'fulfilled' ? profileResult.value : null;
-    const userInfo = normalizeKugouUserInfo(profilePayload, cookie, {
-      userId: context.userid,
-      nickname: '酷狗用户'
-    });
 
     return res.json({
       code: 200,
       data: {
-        userInfo,
-        playlists: normalizedLists.playlists,
-        favorites: normalizedLists.favorites,
+        userInfo: profileOk
+          ? {
+              ...normalizeKugouUserInfo(
+                profileData.user_info ?? profileData.userinfo ?? profileData.profile ?? profileData,
+                cookie
+              ),
+              userId: credentials.userid
+            }
+          : undefined,
+        profileError,
+        ...(playlistOk
+          ? normalizeKugouPlaylists(playlist.body, credentials.userid)
+          : { playlists: [], favorites: [], playlistError }),
         albums: [],
         history: []
       }
     });
-  } catch (error) {
-    console.error('[platformLogin] Kugou account data error:', error.message);
+  } catch {
     return res.status(502).json({ code: 502, msg: '酷狗账号数据服务暂时不可用，请稍后重试' });
   }
 });
 
 // GET /platform/kugou/playlist/tracks?id=xxx
 router.get('/kugou/playlist/tracks', async (req, res) => {
-  const cookie = getPlatformCookieFromRequest(req);
-  const context = getKugouContext(cookie);
+  res.set('Cache-Control', 'private, no-store');
+  const credentials = parseKugouCookie(getPlatformCookieFromRequest(req));
   const listId = String(req.query.id || req.query.listId || '').trim();
-  if (!context.userid || !context.token) {
+  if (!hasKugouCredentials(credentials)) {
     return res.status(401).json({ code: 401, msg: '酷狗登录已失效，请重新扫码' });
   }
   if (!listId) {
@@ -2618,25 +2618,25 @@ router.get('/kugou/playlist/tracks', async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const pageSize = Math.min(200, Math.max(1, Number(req.query.pageSize) || 100));
   try {
-    const response = await requestKugouApi(
-      cookie,
-      '/v4/get_list_all_file',
-      {
-        listid: listId,
-        userid: context.userid,
-        area_code: 1,
-        show_relate_goods: 0,
-        pagesize: pageSize,
-        allplatform: 1,
-        show_cover: 1,
-        type: 0,
-        token: context.token,
-        page
-      },
-      {},
-      { 'x-router': 'cloudlist.service.kugou.com' }
-    );
-    const payload = response.data;
+    let response = await readKugouTracks(credentials, listId, page, pageSize);
+    if (Number(response.body?.error_code) === 20006) {
+      // Old links use an account-local listid. Resolve its actual global ID from this account.
+      const index = await readKugouPlaylistIndex(credentials);
+      if (index.status === 200 && Number(index.body?.status) === 1) {
+        const matches = collectKugouPlaylistItems(index.body).filter(
+          (item) =>
+            firstOwnValue(item, ['listid', 'list_id']) === listId ||
+            firstOwnValue(item, ['global_collection_id', 'globalCollectionId']) === listId
+        );
+        const ids = new Set(
+          matches.map((item) => firstOwnValue(item, ['global_collection_id', 'globalCollectionId']))
+        );
+        const [globalId] = ids;
+        if (ids.size === 1 && globalId)
+          response = await readKugouTracks(credentials, listId, page, pageSize, globalId);
+      }
+    }
+    const payload = response.body;
     const apiStatus = Number(payload?.status);
     if (response.status < 200 || response.status >= 300 || (apiStatus !== 1 && apiStatus !== 200)) {
       const errorCode = payload?.error_code || payload?.errorCode || 'unknown';
@@ -2648,6 +2648,9 @@ router.get('/kugou/playlist/tracks', async (req, res) => {
       code: 200,
       data: {
         playlist: { id: listId, platform: 'kugou', trackCount: songs.length },
+        more: Array.isArray(payload.data?.info)
+          ? payload.data.info.length === pageSize
+          : songs.length === pageSize,
         songs,
         page,
         pageSize

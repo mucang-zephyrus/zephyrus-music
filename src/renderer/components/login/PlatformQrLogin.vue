@@ -6,8 +6,9 @@
     </div>
 
     <div
-      v-if="platform === 'qq'"
+      v-if="platform === 'qq' && qqProviders.length > 1"
       class="qq-provider-switch"
+      :style="{ '--provider-count': qqProviders.length }"
       role="tablist"
       aria-label="QQ 音乐登录方式"
     >
@@ -17,6 +18,7 @@
         type="button"
         role="tab"
         :aria-selected="provider === item.key"
+        :disabled="isRefreshing"
         :class="{ active: provider === item.key }"
         @click="switchProvider(item.key)"
       >
@@ -89,9 +91,11 @@ import {
   createPlatformQr,
   getQqApiChannels,
   pollPlatformQr,
-  type QqLoginProvider
+  type QqApiChannel,
+  type QrCreateResult
 } from '@/api/platformQrApi';
 import PlatformLogo from '@/components/common/PlatformLogo.vue';
+import { platformAccountStorageKey } from '@/utils/appVersion';
 import type { QqLoginChannels } from '@/utils/platformLoginDiagnostics';
 
 type QrStatus = 'loading' | 'active' | 'expired' | 'scanned' | 'confirmed' | 'error';
@@ -110,7 +114,7 @@ const { t } = useI18n();
 const message = useMessage();
 
 const qrUrl = ref('');
-const qrKey = ref('');
+let activeQr: QrCreateResult | null = null;
 const qrStatus = ref<QrStatus>('loading');
 const isRefreshing = ref(false);
 const errorText = ref('');
@@ -118,33 +122,18 @@ const consecutivePollFailures = ref(0);
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
 let pollingStopped = false;
 let requestVersion = 0;
-const provider = ref<QqLoginProvider | 'qqmusic'>('qq');
-const qqProviders = computed<
-  Array<{ key: QqLoginProvider | 'qqmusic'; label: string; icon: string }>
->(() => {
-  // 新链（qq-music-api）可用时按 channels 渲染：qqmusic 通用码三 App 都能扫
-  if (qqChannels.value) {
-    const list: Array<{ key: QqLoginProvider | 'qqmusic'; label: string; icon: string }> = [];
-    if (qqChannels.value.channels.includes('qqmusic')) {
-      list.push({ key: 'qqmusic', label: '扫码登录', icon: 'ri-qr-code-line' });
-      return list; // 有通用码时只给一种（Folia 语义：后端 3.3.2+ 直接显示二维码）
-    }
-    if (qqChannels.value.channels.includes('qq')) {
-      list.push({ key: 'qq', label: 'QQ 扫码', icon: 'ri-qq-fill' });
-    }
-    if (qqChannels.value.channels.includes('wechat')) {
-      list.push({ key: 'wechat', label: '微信扫码', icon: 'ri-wechat-fill' });
-    }
-    return list.length ? list : legacyQqProviders;
-  }
-  return legacyQqProviders;
-});
-const legacyQqProviders: Array<{ key: QqLoginProvider; label: string; icon: string }> = [
+const provider = ref<QqApiChannel>('qq');
+const providerOptions: Array<{ key: QqApiChannel; label: string; icon: string }> = [
+  { key: 'qqmusic', label: '通用扫码', icon: 'ri-qr-code-line' },
   { key: 'qq', label: 'QQ 扫码', icon: 'ri-qq-fill' },
   { key: 'wechat', label: '微信扫码', icon: 'ri-wechat-fill' }
 ];
-/** 新链能力（null=旧网关回退旧链双 tab） */
 const qqChannels = ref<QqLoginChannels | null>(null);
+const qqProviders = computed(() =>
+  providerOptions.filter(({ key }) =>
+    qqChannels.value ? qqChannels.value.channels.includes(key) : key !== 'qqmusic'
+  )
+);
 
 const statusText = computed(() => {
   switch (qrStatus.value) {
@@ -184,16 +173,13 @@ const schedulePoll = (delay = 3000) => {
 };
 
 const pollOnce = async () => {
-  if (pollingStopped || !qrKey.value) return;
+  if (pollingStopped || !activeQr) return;
   const version = requestVersion;
-  const key = qrKey.value;
-  const activeProvider = provider.value;
+  const qr = activeQr;
 
   try {
-    const pollProviderArg: QqLoginProvider = activeProvider === 'qqmusic' ? 'qq' : activeProvider;
-    const result = await pollPlatformQr(props.platform, key, pollProviderArg);
-    if (version !== requestVersion || key !== qrKey.value || activeProvider !== provider.value)
-      return;
+    const result = await pollPlatformQr(qr);
+    if (version !== requestVersion) return;
     consecutivePollFailures.value = 0;
     switch (result.code) {
       case 'waiting':
@@ -209,13 +195,18 @@ const pollOnce = async () => {
         clearPollTimer();
         break;
       case 'success':
+        if (!result.cookie?.trim()) {
+          errorText.value = t('login.message.loginFailed');
+          qrStatus.value = 'error';
+          clearPollTimer();
+          emit('loginError', errorText.value);
+          break;
+        }
         qrStatus.value = 'confirmed';
         clearPollTimer();
-        if (result.cookie) {
-          localStorage.setItem(`platform-cookie-${props.platform}`, result.cookie);
-        }
+        localStorage.setItem(platformAccountStorageKey('cookie', props.platform), result.cookie);
         message.success(`${props.platformName} ${t('login.message.loginSuccess')}`);
-        emit('loginSuccess', result.userInfo || {}, result.cookie || '');
+        emit('loginSuccess', result.userInfo || {}, result.cookie);
         break;
       case 'error':
         errorText.value = result.message || t('login.message.loginFailed');
@@ -226,7 +217,7 @@ const pollOnce = async () => {
         break;
     }
   } catch (error: any) {
-    console.error(`${props.platformName} 轮询失败:`, error);
+    if (version !== requestVersion) return;
     consecutivePollFailures.value += 1;
     if (consecutivePollFailures.value >= 3) {
       errorText.value = error?.message || t('login.message.qrCheckFailed');
@@ -254,27 +245,29 @@ const normalizeQrUrl = async (sourceUrl: string) => {
 };
 
 const loadQr = async () => {
+  if (isRefreshing.value) return;
   const version = ++requestVersion;
   const activeProvider = provider.value;
   isRefreshing.value = true;
   qrStatus.value = 'loading';
   qrUrl.value = '';
-  qrKey.value = '';
+  activeQr = null;
   errorText.value = '';
   consecutivePollFailures.value = 0;
   pollingStopped = false;
   clearPollTimer();
 
   try {
-    const providerArg: QqLoginProvider = activeProvider === 'qqmusic' ? 'qq' : activeProvider;
-    const result = await createPlatformQr(props.platform, providerArg);
+    const result = await createPlatformQr(props.platform, activeProvider);
     if (version !== requestVersion || activeProvider !== provider.value) return;
     if (result.error || !result.key || !result.qrUrl) {
       throw new Error(result.error || t('login.message.qrCheckFailed'));
     }
 
-    qrKey.value = result.key;
-    qrUrl.value = await normalizeQrUrl(result.qrUrl);
+    const normalizedUrl = await normalizeQrUrl(result.qrUrl);
+    if (version !== requestVersion) return;
+    activeQr = result;
+    qrUrl.value = normalizedUrl;
     qrStatus.value = 'active';
     schedulePoll(1000);
   } catch (error: any) {
@@ -289,25 +282,23 @@ const loadQr = async () => {
   }
 };
 
-const switchProvider = (nextProvider: QqLoginProvider | 'qqmusic') => {
-  if (provider.value === nextProvider) return;
+const switchProvider = (nextProvider: QqApiChannel) => {
+  if (isRefreshing.value || provider.value === nextProvider) return;
   provider.value = nextProvider;
   void loadQr();
 };
 
 onMounted(async () => {
+  const version = requestVersion;
   if (props.platform === 'qq') {
-    try {
-      const channels = await getQqApiChannels();
-      if (channels?.configured) {
-        qqChannels.value = channels;
-        provider.value = channels.channels.includes('qqmusic')
-          ? 'qqmusic'
-          : (channels.channels[0] as QqLoginProvider);
-      }
-    } catch {
-      // 旧网关：保持旧双 tab
+    isRefreshing.value = true;
+    const channels = await getQqApiChannels();
+    if (version !== requestVersion) return;
+    if (channels?.configured) {
+      qqChannels.value = channels;
+      provider.value = qqProviders.value[0]?.key ?? 'qq';
     }
+    isRefreshing.value = false;
   }
   void loadQr();
 });
@@ -346,7 +337,7 @@ onUnmounted(() => {
 .qq-provider-switch {
   display: grid;
   width: min(300px, 78vw);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--provider-count), minmax(0, 1fr));
   gap: 4px;
   margin: 0 0 14px;
   padding: 3px;

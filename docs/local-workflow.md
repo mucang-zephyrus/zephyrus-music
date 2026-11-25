@@ -39,6 +39,10 @@ npm run workflow -- web --deploy
 
 ## 测试版
 
+每次修改验证后先发测试站。只更新网页时使用 `npm run workflow -- webtest --web-only`；该命令沿用线上测试 APK 的版本与下载链接，不更新 APK。涉及 QQ 音乐或酷狗时，先运行 `py deploy_platform_webtest.py` 更新测试网关，再发布网页。测试网关独立运行，复用服务器 `/opt/netease-api/node_modules` 中已安装的依赖。
+
+需要同步发测试 APK 时：
+
 ```bash
 npm run release:android -- --test-version 1.4.3-test2 --version-code 18
 npm run workflow -- webtest dist/releases/1.4.3-test2-18

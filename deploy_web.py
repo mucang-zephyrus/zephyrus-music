@@ -1,5 +1,6 @@
 """Deploy Zephyrus Player web build to mucang.xyz via SSH using paramiko."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -128,9 +129,31 @@ def deploy_test(ssh, sftp, dist, version, manifest, apk, info):
         sftp.rmdir(lock)
 
 
+def deploy_test_web(ssh, sftp, dist, build):
+    lock = APK_REMOTE + '/.publish-lock'
+    sftp.mkdir(lock)
+    try:
+        with sftp.open(TEST_REMOTE + '/latest.json') as source:
+            manifest = json.load(source)
+        if (manifest['tag_name'], manifest['version_code']) != (
+            f"v{build['version']}", build.get('versionCode')
+        ):
+            raise RuntimeError('Build the Web with the version and versionCode of the published test APK')
+        upload_dir(sftp, dist, TEST_REMOTE)
+        upload_file(sftp, dist / 'build-version.json', f'{TEST_REMOTE}/build-version.json')
+        upload_file(sftp, dist / 'index.html', f'{TEST_REMOTE}/index.html')
+        served = ssh_exec(ssh, 'curl -fsS --max-time 30 https://mucang.xyz/zephyrus/webtest/index.html | sha256sum')
+        if served.split()[0] != hashlib.sha256((dist / 'index.html').read_bytes()).hexdigest():
+            raise RuntimeError('Published test Web entry point could not be verified')
+    finally:
+        sftp.rmdir(lock)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--test-release', type=Path, help='Directory containing the signed test APK and latest.json')
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument('--test-release', type=Path, help='Directory containing the signed test APK and latest.json')
+    modes.add_argument('--test-web', action='store_true', help='Publish Web only, keeping the current test APK')
     args = parser.parse_args()
     dist = Path(LOCAL_DIST)
     build = json.loads((dist / 'build-version.json').read_text(encoding='utf-8'))
@@ -138,6 +161,8 @@ def main():
     if args.test_release:
         test_version(version)
         release = load_test_release(args.test_release, version, build.get('versionCode'))
+    elif args.test_web:
+        test_version(version)
     else:
         stable_version(version)
     if not PASSWORD:
@@ -151,6 +176,9 @@ def main():
         with ssh.open_sftp() as sftp:
             if args.test_release:
                 deploy_test(ssh, sftp, dist, version, *release)
+                url = 'https://mucang.xyz/zephyrus/webtest/'
+            elif args.test_web:
+                deploy_test_web(ssh, sftp, dist, build)
                 url = 'https://mucang.xyz/zephyrus/webtest/'
             else:
                 ssh_exec(ssh, f'mkdir -p {REMOTE_BASE}')
