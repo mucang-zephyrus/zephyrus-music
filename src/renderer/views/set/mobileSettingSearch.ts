@@ -53,6 +53,11 @@ export const MOBILE_SETTING_SEARCH_DEFINITIONS: readonly MobileSettingSearchDefi
   },
   {
     tabId: 'playback',
+    titleKey: 'settings.playback.neteasePlaybackReport',
+    descKey: 'settings.playback.neteasePlaybackReportDesc'
+  },
+  {
+    tabId: 'playback',
     title: '智能过渡',
     desc: '在歌曲尾部衔接下一首，减少切歌停顿'
   },

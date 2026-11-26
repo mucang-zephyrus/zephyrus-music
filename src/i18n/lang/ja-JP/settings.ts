@@ -117,6 +117,10 @@ export default {
     gdmusicInfo: 'GD音楽台は複数のプラットフォーム音源を自動解析し、最適な結果を自動選択できます',
     autoPlay: '自動再生',
     autoPlayDesc: 'アプリを再起動した際に自動的に再生を継続するかどうか',
+    neteasePlaybackReport: 'NetEase への再生履歴の送信',
+    neteasePlaybackReportDesc:
+      'NetEase の楽曲のみ対象です。30 秒聴くと、曲を切り替えたときや再生が終了したときに履歴を送信します。有効にする場合は自己責任でご利用ください。',
+    neteasePlaybackReportLogin: 'NetEase Music にログインし、そのアカウントに切り替えてください。',
     autoMatchNetease: 'QQ/酷狗の楽曲を NetEase 音源に自動マッチ',
     autoMatchNeteaseDesc:
       'QQ・酷狗の楽曲を再生する際、曲名とアーティストで NetEase 版をマッチしてその音源を使用します（失敗時は元のプラットフォームにフォールバック）',

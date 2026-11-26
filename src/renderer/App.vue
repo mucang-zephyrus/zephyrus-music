@@ -61,6 +61,7 @@ import { audioService } from './services/audioService';
 import { listenTogetherService } from './services/listenTogetherService';
 import { initLxMusicRunner } from './services/LxMusicSourceRunner';
 import { setupMediaSessionLyric } from './services/mediaSessionLyric';
+import { startNeteasePlaybackReporter } from './services/neteasePlaybackReporter';
 import { useStyleEngineStore } from './store/modules/styleEngine';
 import { isMobile } from './utils';
 import { setListenTogetherInviteRef, setSharedSongCardRef } from './utils/deepLink';
@@ -379,11 +380,14 @@ async function startApp() {
   setupMediaSessionLyric();
 }
 
+let stopNeteasePlaybackReporter: (() => void) | undefined;
 onMounted(() => {
+  stopNeteasePlaybackReporter = startNeteasePlaybackReporter();
   void startApp();
 });
 
 onBeforeUnmount(() => {
+  stopNeteasePlaybackReporter?.();
   window.removeEventListener('offline', openLocalMusic);
   styleEngine.dispose();
   focusTrapObserver?.disconnect();

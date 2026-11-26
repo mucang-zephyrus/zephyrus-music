@@ -41,6 +41,8 @@ npm run workflow -- web --deploy
 
 每次修改验证后先发测试站。只更新网页时使用 `npm run workflow -- webtest --web-only`；该命令沿用线上测试 APK 的版本与下载链接，不更新 APK。涉及 QQ 音乐或酷狗时，先运行 `py deploy_platform_webtest.py` 更新测试网关，再发布网页。测试网关独立运行，复用服务器 `/opt/netease-api/node_modules` 中已安装的依赖。
 
+网易云听歌上报首次上线或修改代理时，先运行 `py deploy_netease_gateway.py scrobble`。该命令仅更新上报路径的 Nginx 配置，关闭请求缓存和代理重试，再检查无登录凭据的请求是否返回 401。
+
 需要同步发测试 APK 时：
 
 ```bash

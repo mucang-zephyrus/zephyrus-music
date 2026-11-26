@@ -114,6 +114,10 @@ export default {
     gdmusicInfo: 'GD音乐台可自动解析多个平台音源，自动选择最佳结果',
     autoPlay: '自动播放',
     autoPlayDesc: '重新打开应用时是否自动继续播放',
+    neteasePlaybackReport: '网易云听歌上报',
+    neteasePlaybackReportDesc:
+      '仅上报网易云歌曲。听满 30 秒后，切歌或播完时提交播放记录。开启后风险由你自行承担。',
+    neteasePlaybackReportLogin: '请先登录并切换到网易云音乐账号。',
     autoMatchNetease: 'QQ/酷狗歌曲自动匹配网易云音源',
     autoMatchNeteaseDesc:
       '播放 QQ、酷狗歌曲时按歌名与歌手匹配网易云版本，使用网易云的播放地址（失败时回退原平台）',

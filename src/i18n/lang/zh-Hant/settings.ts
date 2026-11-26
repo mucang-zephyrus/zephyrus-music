@@ -114,6 +114,10 @@ export default {
     gdmusicInfo: 'GD音樂台可自動解析多個平台音源，自動選擇最佳結果',
     autoPlay: '自動播放',
     autoPlayDesc: '重新開啟應用程式時是否自動繼續播放',
+    neteasePlaybackReport: '網易雲聽歌回報',
+    neteasePlaybackReportDesc:
+      '僅回報網易雲歌曲。聽滿 30 秒後，切歌或播完時提交播放紀錄。開啟後風險由你自行承擔。',
+    neteasePlaybackReportLogin: '請先登入並切換到網易雲音樂帳號。',
     autoMatchNetease: 'QQ/酷狗歌曲自動匹配網易雲音源',
     autoMatchNeteaseDesc:
       '播放 QQ、酷狗歌曲時按歌名與歌手匹配網易雲版本，使用網易雲的播放位址（失敗時回退原平台）',

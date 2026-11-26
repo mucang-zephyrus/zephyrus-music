@@ -85,6 +85,50 @@ except Exception:
     run(ssh, "curl --fail --silent --show-error --max-time 20 https://www.mucang.xyz/zephyrus/api/netease-enhanced/health")
 
 
+def publish_scrobble_route(ssh):
+    snippet = (ROOT / "server" / "netease-enhanced" / "scrobble-location.conf").read_text(encoding="utf-8")
+    activate = r'''
+import json, pathlib, re, subprocess, tempfile, urllib.error, urllib.request
+nginx = pathlib.Path('/etc/nginx/sites-enabled/mucang').resolve()
+location = 'location = /zephyrus/api/netease-enhanced/scrobble/v1 {'
+old = nginx.read_text()
+if location in old and snippet.strip() not in old:
+    raise RuntimeError('An unmanaged scrobble location is already installed')
+changed = location not in old
+if changed:
+    anchors = list(re.finditer(r'(?m)^([ \t]*)location \^~ /zephyrus/api/netease-enhanced/ \{[ \t]*$', old))
+    if len(anchors) != 1:
+        raise RuntimeError('The Enhanced location anchor was not unique')
+    anchor = anchors[0]
+    base = pathlib.Path('/opt/zephyrus-deploy-backups')
+    base.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=base, prefix='scrobble-nginx-', delete=False) as backup:
+        backup.write(old.encode())
+    nginx.write_text(old[:anchor.start()] + snippet + '\n' + old[anchor.start():])
+try:
+    if changed:
+        subprocess.run(['nginx', '-t', '-q'], check=True)
+        subprocess.run(['systemctl', 'reload', 'nginx'], check=True)
+    request = urllib.request.Request(
+        'https://www.mucang.xyz/zephyrus/api/netease-enhanced/scrobble/v1',
+        data=b'{"id":1,"time":30,"total":60}', headers={'Content-Type': 'application/json'},
+    )
+    try:
+        urllib.request.urlopen(request, timeout=15).close()
+        raise RuntimeError('The unauthenticated report unexpectedly succeeded')
+    except urllib.error.HTTPError as response:
+        assert response.code == 401 and json.load(response).get('code') == 401
+        assert 'no-store' in response.headers.get('Cache-Control', '')
+    print('NetEase report route verified without an account.')
+except Exception:
+    if changed:
+        nginx.write_text(old)
+        subprocess.run(['systemctl', 'reload', 'nginx'], check=True)
+    raise
+'''
+    run(ssh, "flock -w 10 /opt/.zephyrus-scrobble-deploy.lock python3 -c " + shlex.quote(f"snippet = {snippet!r}\n" + activate))
+
+
 def publish_announcement(ssh):
     new = json.loads((ROOT / "server" / "announcements.json").read_text(encoding="utf-8"))[0]
     remote = "/var/www/mucang/server-music/announcements.json"
@@ -112,7 +156,7 @@ with urllib.request.urlopen('https://www.mucang.xyz/server-music/announcements.j
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=["gateway", "announcement"])
+    parser.add_argument("action", choices=["gateway", "announcement", "scrobble"])
     action = parser.parse_args().action
     password = os.environ.get("ZEPHYRUS_SSH_PASSWORD")
     if not password:
@@ -122,7 +166,7 @@ def main():
     ssh.connect(os.environ.get("ZEPHYRUS_SSH_HOST", "mucang.xyz"), username="root", password=password,
                 timeout=15, look_for_keys=False, allow_agent=False)
     try:
-        (upload_gateway if action == "gateway" else publish_announcement)(ssh)
+        {"gateway": upload_gateway, "announcement": publish_announcement, "scrobble": publish_scrobble_route}[action](ssh)
     finally:
         ssh.close()
 

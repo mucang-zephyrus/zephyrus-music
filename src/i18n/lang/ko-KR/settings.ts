@@ -117,6 +117,10 @@ export default {
     gdmusicInfo: 'GD 뮤직은 여러 플랫폼 음원을 자동으로 해석하고 최적의 결과를 자동 선택합니다',
     autoPlay: '자동 재생',
     autoPlayDesc: '앱을 다시 열 때 자동으로 재생을 계속할지 여부',
+    neteasePlaybackReport: 'NetEase 재생 기록 전송',
+    neteasePlaybackReportDesc:
+      'NetEase 곡만 전송합니다. 30초 이상 들으면 곡을 바꾸거나 재생이 끝날 때 기록을 전송합니다. 이 기능을 켜는 데 따른 위험은 본인이 부담합니다.',
+    neteasePlaybackReportLogin: 'NetEase Music에 로그인한 뒤 해당 계정으로 전환하세요.',
     autoMatchNetease: 'QQ/쿠고 곡을 NetEase 음원으로 자동 매칭',
     autoMatchNeteaseDesc:
       'QQ·쿠고 곡 재생 시 곡명과 아티스트로 NetEase 버전을 매칭하여 해당 음원을 사용합니다 (실패 시 원래 플랫폼으로 대체)',

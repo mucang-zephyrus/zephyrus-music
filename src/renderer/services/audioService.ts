@@ -339,6 +339,7 @@ class AudioService {
     const position = this.getCurrentPosition() ?? 0;
     const url = this.currentUrl;
     const track = this.currentTrack;
+    this.emit('playback-report-sample');
     console.warn(
       `audioService: 软恢复播放（${reason}）@${position.toFixed(1)}s，第 ${this.softRecoverCount}/2 次`
     );
@@ -1894,6 +1895,7 @@ class AudioService {
     // 在 setupSoundEvents 的守卫 (this.currentSound === sound) 检查时
     // 会因为 currentSound 已指向新曲而跳过，避免误发 pause 事件
     // 导致 MusicHook 将 play 状态设为 false 并清除进度 interval
+    this.emit('playback-report-sample');
     this.currentSound = nextSound;
     this.currentTrack = nextTrack;
     this.crossfadingSound = null;
@@ -2013,6 +2015,7 @@ class AudioService {
         // 置 'none' 会拆除 iOS/Safari 的媒体卡片绑定,后续歌曲的控制中心
         // 会卡在暂停态(需手动暂停/播放才重新绑定);保持卡片存活
         this.updateMediaSessionState(false);
+        this.emit('playback-report-end');
         this.emit('end');
       }
     });
@@ -2122,6 +2125,7 @@ class AudioService {
 
           // 非热切换模式下，先停止并清理现有的音频实例
           if (!isHotSwap && this.currentSound) {
+            this.emit('playback-report-sample');
             // 确保任何进行中的seek操作被取消
             if (this.seekLock && this.seekDebounceTimer) {
               clearTimeout(this.seekDebounceTimer);
@@ -2271,6 +2275,7 @@ class AudioService {
                   }
 
                   if (this.currentSound) {
+                    this.emit('playback-report-sample');
                     const oldSound = this.currentSound;
                     oldSound.stop();
                     oldSound.unload();
@@ -2416,6 +2421,7 @@ class AudioService {
         throw new Error('播放请求已取消');
       }
 
+      this.emit('playback-report-sample');
       const oldSound = this.currentSound;
       this.currentSound = nextSound;
       this.currentTrack = track;
@@ -2503,6 +2509,7 @@ class AudioService {
   }
 
   stop() {
+    this.emit('playback-report-sample');
     this.cancelSeekRecovery();
     // 取消正在进行的 crossfade
     this.cancelCrossfade();
@@ -2534,6 +2541,7 @@ class AudioService {
 
   /** Invalidate in-flight loads before a new track starts resolving metadata or its URL. */
   async cancelPendingPlayback(): Promise<void> {
+    this.emit('playback-report-sample');
     this.playbackGeneration += 1;
     this.cancelSeekRecovery();
     this.cancelCrossfade();
@@ -2766,6 +2774,7 @@ class AudioService {
 
   public setPlaybackRate(rate: number) {
     if (!this.currentSound) return;
+    this.emit('playback-report-sample');
     this.playbackRate = rate;
 
     this.currentSound.rate(rate);

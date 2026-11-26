@@ -118,6 +118,10 @@ export default {
       'GD Music Station intelligently resolves music from multiple platforms automatically',
     autoPlay: 'Auto Play',
     autoPlayDesc: 'Auto resume playback when reopening the app',
+    neteasePlaybackReport: 'Report plays to NetEase',
+    neteasePlaybackReportDesc:
+      'Reports only NetEase tracks. After 30 seconds of listening, the app reports the play when you switch tracks or the track ends. Enable at your own risk.',
+    neteasePlaybackReportLogin: 'Sign in and switch to your NetEase Music account.',
     autoMatchNetease: 'Auto match Netease source for QQ/Kugou songs',
     autoMatchNeteaseDesc:
       'When playing QQ/Kugou songs, match a Netease version by title and artist and use its stream (falls back to the original platform on failure)',
